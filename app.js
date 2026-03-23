@@ -3490,6 +3490,18 @@ function normalizeError(payload, response) {
   };
 }
 
+function isMissingRelationError(error) {
+  const code = String(error?.code || "").toUpperCase();
+  const message = String(error?.message || "").toLowerCase();
+  return code === "PGRST205"
+    || message.includes("could not find the table")
+    || message.includes("schema cache");
+}
+
+function logMissingRelation(tableName, error) {
+  console.warn(`[Golfers Nation] Supabase table ${tableName} is not ready yet. Continuing with local-safe state.`, error);
+}
+
 function normalizeSessionPayload(payload) {
   const source = payload?.session || payload || null;
   const user = payload?.user || source?.user || null;
@@ -3779,17 +3791,29 @@ function createSupabaseRestBridge({
       }),
     ]);
 
-    if (profileResult.error) {
+    if (profileResult.error && !isMissingRelationError(profileResult.error)) {
       return profileResult;
     }
 
-    if (workspaceResult.error) {
+    if (workspaceResult.error && !isMissingRelationError(workspaceResult.error)) {
       return workspaceResult;
     }
 
+    if (profileResult.error && isMissingRelationError(profileResult.error)) {
+      logMissingRelation("public.player_profiles", profileResult.error);
+    }
+
+    if (workspaceResult.error && isMissingRelationError(workspaceResult.error)) {
+      logMissingRelation("public.player_workspaces", workspaceResult.error);
+    }
+
     return {
-      profile: Array.isArray(profileResult.data) ? profileResult.data[0] || null : profileResult.data || null,
-      workspace: Array.isArray(workspaceResult.data) ? workspaceResult.data[0]?.workspace || null : workspaceResult.data?.workspace || null,
+      profile: profileResult.error
+        ? null
+        : Array.isArray(profileResult.data) ? profileResult.data[0] || null : profileResult.data || null,
+      workspace: workspaceResult.error
+        ? null
+        : Array.isArray(workspaceResult.data) ? workspaceResult.data[0]?.workspace || null : workspaceResult.data?.workspace || null,
       session: active.session,
     };
   }
@@ -3804,7 +3828,7 @@ function createSupabaseRestBridge({
       return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
     }
 
-    return request("/rest/v1/player_profiles?on_conflict=id", {
+    const result = await request("/rest/v1/player_profiles?on_conflict=id", {
       method: "POST",
       accessToken: active.session.access_token,
       headers: {
@@ -3812,6 +3836,13 @@ function createSupabaseRestBridge({
       },
       body: profileRecord,
     });
+
+    if (result?.error && isMissingRelationError(result.error)) {
+      logMissingRelation("public.player_profiles", result.error);
+      return { status: "skipped-missing-table", data: null };
+    }
+
+    return result;
   }
 
   async function upsertWorkspace(userId, workspace) {
@@ -3824,7 +3855,7 @@ function createSupabaseRestBridge({
       return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
     }
 
-    return request("/rest/v1/player_workspaces?on_conflict=user_id", {
+    const result = await request("/rest/v1/player_workspaces?on_conflict=user_id", {
       method: "POST",
       accessToken: active.session.access_token,
       headers: {
@@ -3836,6 +3867,13 @@ function createSupabaseRestBridge({
         updated_at: new Date().toISOString(),
       },
     });
+
+    if (result?.error && isMissingRelationError(result.error)) {
+      logMissingRelation("public.player_workspaces", result.error);
+      return { status: "skipped-missing-table", data: null };
+    }
+
+    return result;
   }
 
   async function submitTesterFeedback(feedbackRecord) {
@@ -5318,7 +5356,7 @@ function createLocalDataGateway() {
       return prepareStateForPersistence(state);
     },
     persist(snapshot) {
-      persistLocalState(snapshot);
+      persistState(snapshot);
       return snapshot;
     },
     saveWorkspace(draft, userId) {

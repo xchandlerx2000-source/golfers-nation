@@ -8,7 +8,7 @@ import {
 } from "./account-service.js";
 import { workspaceHasPendingRoundSync } from "../domain/round-sync.js";
 import { toBackendAccountRecord, toBackendWorkspaceSnapshot } from "./backend-models.js";
-import { loadStoredState, persistState as persistLocalState } from "./storage-service.js";
+import { loadStoredState, persistState } from "./storage-service.js";
 
 function getSnapshotUserId(snapshot) {
   return snapshot.auth?.activeUserId || snapshot.currentUser?.id || null;
@@ -25,7 +25,7 @@ export function createLocalDataGateway() {
       return prepareStateForPersistence(state);
     },
     persist(snapshot) {
-      persistLocalState(snapshot);
+      persistState(snapshot);
       return snapshot;
     },
     saveWorkspace(draft, userId) {
