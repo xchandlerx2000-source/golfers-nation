@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { createDefaultState } from "../src/state/default-state.js";
-import { buildCompetitivePreview, buildPlayerComparison, ensureProfilesForNames } from "../src/services/player-service.js";
+import {
+  buildCompetitivePreview,
+  buildFriendLeaderboard,
+  buildPlayerComparison,
+  ensureProfilesForNames,
+  requestFriendProfile,
+  toggleFollowProfile,
+} from "../src/services/player-service.js";
 
 describe("player service", () => {
   it("creates persistent profile descriptors for round participants", () => {
@@ -40,5 +47,30 @@ describe("player service", () => {
     expect(comparison.metricRows.map((row) => row.label)).toContain("Average score");
     expect(comparison.metricRows.map((row) => row.label)).toContain("Driving");
     expect(comparison.right.headToHeadLabel).toContain("shared rounds");
+  });
+
+  it("tracks follow and friend-request scaffolding on public player cards", () => {
+    const state = createDefaultState();
+    const [, reese] = ensureProfilesForNames(state, ["Avery Brooks", "Reese Hall"]);
+
+    const followResult = toggleFollowProfile(state, "profile-theo");
+    const friendResult = requestFriendProfile(state, reese.profileId);
+    const theoPreview = buildCompetitivePreview(state, "profile-theo", state.currentUser.profileId);
+    const reesePreview = buildCompetitivePreview(state, reese.profileId, state.currentUser.profileId);
+
+    expect(followResult.isFollowed).toBe(false);
+    expect(friendResult.status).toBe("requested");
+    expect(theoPreview?.isFollowed).toBe(false);
+    expect(reesePreview?.pendingFriendRequest).toBe(true);
+    expect(reesePreview?.relationshipLabel).toBe("Friend request sent");
+  });
+
+  it("builds a friend leaderboard from followed and friend golfers", () => {
+    const state = createDefaultState();
+    const leaderboard = buildFriendLeaderboard(state);
+
+    expect(leaderboard.length).toBeGreaterThan(0);
+    expect(leaderboard[0].relationshipLabel).toBe("Friend");
+    expect(leaderboard.some((entry) => entry.profileId === "profile-theo")).toBe(true);
   });
 });

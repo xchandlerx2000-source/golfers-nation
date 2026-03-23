@@ -1,6 +1,13 @@
 import { CONNECTION_COPY, GAME_MODES } from "../config.js";
 import { createGroup, createRound } from "../domain/factories.js";
-import { ensureProfilesForNames } from "./player-service.js";
+import {
+  ensureProfilesForNames,
+  getFollowedProfileIds,
+  getFriendProfileIds,
+  hasPendingFriendRequest,
+  isProfileFollowed,
+  isProfileFriend,
+} from "./player-service.js";
 
 const seededRooms = [
   {
@@ -11,7 +18,7 @@ const seededRooms = [
     mode: "stroke",
     players: [
       { displayName: "Reese Hall", username: "@reesehall", avatarLabel: "RH" },
-      { displayName: "Maya Chen", username: "@mayachen", avatarLabel: "MC" },
+      { profileId: "profile-maya", displayName: "Maya Chen", username: "@mayachen", avatarLabel: "MC" },
       { displayName: "Theo Grant", username: "@theogrant", avatarLabel: "TG" },
     ],
     distance: "2.8 mi",
@@ -23,7 +30,7 @@ const seededRooms = [
     weather: "Clear 70F",
     mode: "match",
     players: [
-      { displayName: "Jordan Wells", username: "@jordanwells", avatarLabel: "JW" },
+      { profileId: "profile-jordan", displayName: "Jordan Wells", username: "@jordanwells", avatarLabel: "JW" },
       { displayName: "Parker Cole", username: "@parkercole", avatarLabel: "PC" },
       { displayName: "Emery Shaw", username: "@emeryshaw", avatarLabel: "ES" },
       { displayName: "Drew Cain", username: "@drewcain", avatarLabel: "DC" },
@@ -39,7 +46,7 @@ const seededRooms = [
     players: [
       { displayName: "Cameron Vale", username: "@cameronvale", avatarLabel: "CV" },
       { displayName: "Skye Rivers", username: "@skyerivers", avatarLabel: "SR" },
-      { displayName: "Luca Gray", username: "@lucagray", avatarLabel: "LG" },
+      { profileId: "profile-theo", displayName: "Theo Grant", username: "@theogrant", avatarLabel: "TG" },
       { displayName: "Noah Kane", username: "@noahkane", avatarLabel: "NK" },
     ],
     distance: "9.4 mi",
@@ -173,12 +180,17 @@ export function joinByInviteCode({ code, state }) {
 }
 
 export function listNearbyGames(state) {
+  const followedIds = new Set(getFollowedProfileIds(state));
+  const friendIds = new Set(getFriendProfileIds(state));
   const localCards = state.groups
     .map((group) => {
       const round = state.rounds.find((item) => item.id === group.roundId);
       if (!round || round.status !== "active") {
         return null;
       }
+      const socialPlayers = (round.players || []).filter((player) =>
+        friendIds.has(player.profileId) || followedIds.has(player.profileId)
+      );
 
       return {
         inviteCode: group.inviteCode,
@@ -191,24 +203,49 @@ export function listNearbyGames(state) {
         playerCount: round.players.length,
         hostName: group.members[0]?.displayName || round.players[0]?.name || "Host golfer",
         statusLabel: `Hole ${round.currentHole} / ${round.players.length} golfers`,
+        availableToJoin: true,
+        joinActionLabel: socialPlayers.length ? "Join friends" : "Join now",
+        friendCount: socialPlayers.filter((player) => friendIds.has(player.profileId)).length,
+        socialCount: socialPlayers.length,
+        socialSummary: socialPlayers.length
+          ? `${socialPlayers.map((player) => player.displayName || player.name).slice(0, 2).join(", ")} in this round`
+          : "Open round nearby",
       };
     })
     .filter(Boolean);
 
-  const seededCards = seededRooms.map((room) => ({
-    inviteCode: room.inviteCode,
-    title: room.title,
-    courseName: room.courseName,
-    modeLabel: GAME_MODES[room.mode].label,
-    transport: CONNECTION_COPY.cloud,
-    distance: room.distance,
-    source: "seeded",
-    playerCount: room.players.length,
-    hostName: room.players[0]?.displayName || "Host golfer",
-    statusLabel: `${room.players.length} golfers nearby`,
-  }));
+  const seededCards = seededRooms.map((room) => {
+    const socialPlayers = (room.players || []).filter((player) =>
+      friendIds.has(player.profileId) || followedIds.has(player.profileId)
+    );
 
-  return [...localCards, ...seededCards];
+    return {
+      inviteCode: room.inviteCode,
+      title: room.title,
+      courseName: room.courseName,
+      modeLabel: GAME_MODES[room.mode].label,
+      transport: CONNECTION_COPY.cloud,
+      distance: room.distance,
+      source: "seeded",
+      playerCount: room.players.length,
+      hostName: room.players[0]?.displayName || "Host golfer",
+      statusLabel: `${room.players.length} golfers nearby`,
+      availableToJoin: true,
+      joinActionLabel: socialPlayers.length ? "Join friends" : "Join now",
+      friendCount: socialPlayers.filter((player) => friendIds.has(player.profileId)).length,
+      socialCount: socialPlayers.length,
+      socialSummary: socialPlayers.length
+        ? `${socialPlayers.map((player) => player.displayName || player.name).slice(0, 2).join(", ")} nearby`
+        : "Discoverable nearby round",
+    };
+  });
+
+  return [...localCards, ...seededCards].sort((left, right) =>
+    (right.friendCount || 0) - (left.friendCount || 0)
+    || (right.socialCount || 0) - (left.socialCount || 0)
+    || Number(right.source === "local") - Number(left.source === "local")
+    || left.title.localeCompare(right.title)
+  );
 }
 
 export function listNearbyPlayers(state) {
@@ -223,6 +260,9 @@ export function listNearbyPlayers(state) {
       const showHandicap = profile.privateProfile?.privacy?.showHandicap !== false;
       const roundsPlayed = profile.publicProfile?.roundsPlayed || 0;
       const averageScore = profile.publicProfile?.averageScore;
+      const isFriend = isProfileFriend(state, profile.id);
+      const isFollowed = isFriend || isProfileFollowed(state, profile.id);
+      const pendingFriendRequest = hasPendingFriendRequest(state, profile.id);
 
       return {
         profileId: profile.id,
@@ -245,11 +285,25 @@ export function listNearbyPlayers(state) {
           : profile.publicProfile.recentFormSummary || "Public profile ready",
         inviteCode: active?.group.inviteCode || active?.round.inviteCode || "",
         isLive: Boolean(active),
+        isFriend,
+        isFollowed,
+        pendingFriendRequest,
+        relationshipLabel: isFriend
+          ? "Friend"
+          : pendingFriendRequest
+            ? "Friend request sent"
+            : isFollowed
+              ? "Following"
+              : "Public player",
+        availableToJoin: Boolean(active?.group?.inviteCode || active?.round?.inviteCode),
+        joinActionLabel: active ? (isFriend ? "Join friend" : "Join round") : (pendingFriendRequest ? "View card" : "Send invite"),
         updatedAt: profile.updatedAt || 0,
       };
     })
     .sort((left, right) =>
-      Number(right.isLive) - Number(left.isLive)
+      Number(right.isFriend) - Number(left.isFriend)
+      || Number(right.isLive) - Number(left.isLive)
+      || Number(right.isFollowed) - Number(left.isFollowed)
       || (right.updatedAt || 0) - (left.updatedAt || 0)
       || right.displayName.localeCompare(left.displayName)
     );

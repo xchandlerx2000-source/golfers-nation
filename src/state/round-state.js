@@ -84,6 +84,100 @@ function createGroupMemberFromPlayer(player, index = 0) {
   };
 }
 
+function buildLiveGroupMember(member = {}, participantId = null) {
+  return {
+    id: member.id || `member-${member.userId || member.profileId || participantId || Date.now()}`,
+    playerId: participantId || member.playerId || null,
+    profileId: member.profileId || null,
+    userId: member.userId || null,
+    displayName: member.displayName || "Golfer",
+    username: member.username || "",
+    avatarLabel: member.avatarLabel || "GN",
+    role: member.role || "player",
+    connectionState: member.connectionState || "connected",
+  };
+}
+
+function createStrokeEntry(participantId) {
+  return {
+    participantId,
+    strokes: null,
+    putts: null,
+    penalties: 0,
+    fairwayHit: false,
+    gir: false,
+    upAndDown: false,
+    sandSave: false,
+    updatedAt: null,
+    lastEventId: null,
+  };
+}
+
+function ensureMemberOnRound(round, member) {
+  if (!round || !member) {
+    return { participantId: null, added: false };
+  }
+
+  let participant = (round.players || []).find((player) =>
+    player.id === member.playerId
+      || player.userId === member.userId
+      || player.profileId === member.profileId
+  ) || null;
+  let added = false;
+
+  if (!participant) {
+    participant = {
+      id: member.playerId || `player-${Date.now()}`,
+      profileId: member.profileId || null,
+      userId: member.userId || null,
+      name: member.displayName || "Golfer",
+      displayName: member.displayName || "Golfer",
+      username: member.username || "",
+      avatarLabel: member.avatarLabel || "GN",
+      role: member.role === "host" ? "owner" : "guest",
+    };
+    round.players = Array.isArray(round.players) ? round.players : [];
+    round.players.push(participant);
+    added = true;
+
+    if (round.mode === "stroke") {
+      round.holes.forEach((hole) => {
+        hole.entries = Array.isArray(hole.entries) ? hole.entries : [];
+        hole.entries.push(createStrokeEntry(participant.id));
+      });
+    } else if (Array.isArray(round.sides) && round.sides.length) {
+      const targetSide = [...round.sides].sort((left, right) => left.playerIds.length - right.playerIds.length)[0];
+      if (targetSide) {
+        targetSide.playerIds.push(participant.id);
+        targetSide.playerNames = targetSide.playerIds
+          .map((playerId) => round.players.find((player) => player.id === playerId)?.name || "")
+          .filter(Boolean);
+      }
+    }
+  }
+
+  participant.id = member.playerId || participant.id;
+  participant.profileId = member.profileId || participant.profileId || null;
+  participant.userId = member.userId || participant.userId || null;
+  participant.name = member.displayName || participant.name;
+  participant.displayName = member.displayName || participant.displayName || participant.name;
+  participant.username = member.username || participant.username;
+  participant.avatarLabel = member.avatarLabel || participant.avatarLabel || "GN";
+
+  if (Array.isArray(round.sides)) {
+    round.sides.forEach((side) => {
+      side.playerNames = side.playerIds
+        .map((playerId) => round.players.find((player) => player.id === playerId)?.name || "")
+        .filter(Boolean);
+    });
+  }
+
+  return {
+    participantId: participant.id,
+    added,
+  };
+}
+
 export function ensureLiveRoundGroupState(draft, round, {
   inviteCode = "",
   sessionId = null,
@@ -243,6 +337,73 @@ export function upsertLiveRoundSessionState(draft, incoming, {
     group: nextGroup,
     roundIndex,
     groupIndex,
+  };
+}
+
+export function mergeLiveSessionMember(draft, {
+  inviteCode = "",
+  roundId = null,
+  sessionId = null,
+  member = null,
+} = {}) {
+  if (!member) {
+    return {
+      round: null,
+      group: null,
+      participantId: null,
+      added: false,
+      createdGroup: false,
+    };
+  }
+
+  const resolved = resolveLiveRoundSessionEntities(draft, {
+    inviteCode,
+    roundId,
+    sessionId,
+    createGroupIfMissing: true,
+  });
+  const round = resolved.round;
+  const group = resolved.group;
+
+  if (!round) {
+    return {
+      round: null,
+      group,
+      participantId: null,
+      added: false,
+      createdGroup: resolved.createdGroup,
+    };
+  }
+
+  if (group) {
+    group.members = Array.isArray(group.members) ? group.members : [];
+  }
+
+  const ensuredMember = ensureMemberOnRound(round, member);
+  const nextMember = buildLiveGroupMember(member, ensuredMember.participantId);
+  const existingMember = group?.members?.find((entry) =>
+    entry.id === nextMember.id
+      || entry.playerId === nextMember.playerId
+      || entry.userId === nextMember.userId
+      || entry.profileId === nextMember.profileId
+  ) || null;
+
+  if (existingMember) {
+    Object.assign(existingMember, nextMember);
+  } else if (group) {
+    group.members.push(nextMember);
+  }
+
+  if (group) {
+    group.updatedAt = Date.now();
+  }
+
+  return {
+    round,
+    group,
+    participantId: ensuredMember.participantId,
+    added: ensuredMember.added,
+    createdGroup: resolved.createdGroup,
   };
 }
 

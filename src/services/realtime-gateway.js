@@ -5,7 +5,11 @@ import {
   ensureRoundSyncScaffold,
   getPendingRoundEvents,
 } from "../domain/round-sync.js";
-import { resolveLiveRoundSessionEntities, upsertLiveRoundSessionState } from "../state/round-state.js";
+import {
+  mergeLiveSessionMember,
+  resolveLiveRoundSessionEntities,
+  upsertLiveRoundSessionState,
+} from "../state/round-state.js";
 import { toBackendLiveRoundSessionRecord, fromBackendLiveRoundSessionRecord } from "./backend-models.js";
 import { createLiveSessionMeta, shouldApplyLiveSessionSnapshot } from "./realtime-session-service.js";
 import { createSyncService } from "./sync-service.js";
@@ -847,10 +851,12 @@ export function createSupabaseRealtimeGatewayFactory({
         });
 
         store.setState((draft) => {
+          const lookupRoundId = payload.roundId || currentSessionMeta?.roundId || null;
+          const lookupSessionId = payload.sessionId || currentSessionMeta?.sessionId || null;
           const resolved = resolveLiveRoundSessionEntities(draft, {
             inviteCode: resolvedInviteCode,
-            roundId: payload.roundId || currentSessionMeta?.roundId || null,
-            sessionId: payload.sessionId || currentSessionMeta?.sessionId || null,
+            roundId: lookupRoundId,
+            sessionId: lookupSessionId,
             createGroupIfMissing: true,
           });
           const group = resolved.group;
@@ -858,8 +864,8 @@ export function createSupabaseRealtimeGatewayFactory({
 
           console.info("[Golfers Nation] Host member-state lookup result.", {
             inviteCode: resolvedInviteCode,
-            lookupRoundId: payload.roundId || currentSessionMeta?.roundId || null,
-            lookupSessionId: payload.sessionId || currentSessionMeta?.sessionId || null,
+            lookupRoundId,
+            lookupSessionId,
             foundRound: Boolean(round),
             foundGroup: Boolean(group),
             createdGroup: resolved.createdGroup,
@@ -870,8 +876,8 @@ export function createSupabaseRealtimeGatewayFactory({
           if (!round) {
             console.warn("[Golfers Nation] Host member-state lookup missed the local round. Scheduling a forced reconcile.", {
               inviteCode: resolvedInviteCode,
-              lookupRoundId: payload.roundId || currentSessionMeta?.roundId || null,
-              lookupSessionId: payload.sessionId || currentSessionMeta?.sessionId || null,
+              lookupRoundId,
+              lookupSessionId,
             });
             void reconcileCurrentSession({
               force: true,
@@ -884,45 +890,12 @@ export function createSupabaseRealtimeGatewayFactory({
 
           const beforeMemberCount = group?.members?.length || 0;
           const beforePlayerCount = round?.players?.length || 0;
-
-          if (group) {
-            group.members = Array.isArray(group.members) ? group.members : [];
-          }
-          let member = group?.members?.find((entry) =>
-            entry.id === payload.member.id
-              || entry.playerId === payload.member.playerId
-              || entry.userId === payload.member.userId
-              || entry.profileId === payload.member.profileId
-          ) || null;
-
-          if (!member) {
-            member = {
-              id: payload.member.id || uid("member"),
-              playerId: payload.member.playerId || null,
-              profileId: payload.member.profileId || null,
-              userId: payload.member.userId || null,
-              displayName: payload.member.displayName || "Golfer",
-              username: payload.member.username || "",
-              avatarLabel: payload.member.avatarLabel || "GN",
-              role: payload.member.role || "player",
-              connectionState: payload.member.connectionState || "connected",
-            };
-            group?.members?.push(member);
-          } else {
-            Object.assign(member, payload.member);
-          }
-
-          if (group) {
-            group.updatedAt = now();
-          }
-
-          const ensuredMember = ensureMemberOnRound(round, {
-            ...payload.member,
-            playerId: payload.member.playerId || member?.playerId || null,
+          const merged = mergeLiveSessionMember(draft, {
+            inviteCode: resolvedInviteCode,
+            roundId: lookupRoundId,
+            sessionId: lookupSessionId,
+            member: payload.member,
           });
-          if (member && ensuredMember.participantId && member.playerId !== ensuredMember.participantId) {
-            member.playerId = ensuredMember.participantId;
-          }
 
           if (round) {
             markRoundConnected(round, {
@@ -934,9 +907,9 @@ export function createSupabaseRealtimeGatewayFactory({
           console.info("[Golfers Nation] Host participant merge after member-state.", {
             inviteCode: resolvedInviteCode,
             membersBefore: beforeMemberCount,
-            membersAfter: group?.members?.length || 0,
+            membersAfter: merged.group?.members?.length || group?.members?.length || 0,
             playersBefore: beforePlayerCount,
-            playersAfter: round?.players?.length || 0,
+            playersAfter: merged.round?.players?.length || round?.players?.length || 0,
           });
           return draft;
         }, { reason: "realtime-member-state" });
@@ -963,7 +936,13 @@ export function createSupabaseRealtimeGatewayFactory({
         });
 
         store.setState((draft) => {
-          const round = getRoundById(draft, payload.roundId);
+          const round = getRoundById(draft, payload.roundId)
+            || resolveLiveRoundSessionEntities(draft, {
+              inviteCode: payload.inviteCode || currentSessionMeta?.inviteCode || "",
+              roundId: payload.roundId,
+              sessionId: currentSessionMeta?.sessionId || null,
+              createGroupIfMissing: true,
+            }).round;
           if (!round) {
             if (payload?.inviteCode) {
               void reconcileCurrentSession({

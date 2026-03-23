@@ -693,6 +693,101 @@ function buildHeadToHeadSummary(round, leaderboard, localParticipant) {
   };
 }
 
+function getParticipantProfileIds(round, participantId) {
+  if (round.mode === "stroke") {
+    const player = round.players.find((entry) => entry.id === participantId);
+    return player?.profileId ? [player.profileId] : [];
+  }
+
+  const side = (round.sides || []).find((entry) => entry.id === participantId);
+  if (!side) {
+    return [];
+  }
+
+  return side.playerIds
+    .map((playerId) => round.players.find((player) => player.id === playerId)?.profileId || null)
+    .filter(Boolean);
+}
+
+function buildFriendLeaderboard(round, leaderboard, {
+  friendProfileIds = [],
+  followedProfileIds = [],
+} = {}) {
+  const friendSet = new Set(friendProfileIds.filter(Boolean));
+  const followedSet = new Set(followedProfileIds.filter(Boolean));
+
+  const entries = leaderboard
+    .map((entry) => {
+      const profileIds = getParticipantProfileIds(round, entry.id);
+      const isFriend = profileIds.some((profileId) => friendSet.has(profileId));
+      const isFollowed = isFriend || profileIds.some((profileId) => followedSet.has(profileId));
+
+      if (!isFriend && !isFollowed) {
+        return null;
+      }
+
+      return {
+        ...entry,
+        isFriend,
+        isFollowed,
+        relationshipLabel: isFriend ? "Friend" : "Following",
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) =>
+      Number(right.isFriend) - Number(left.isFriend)
+      || left.rank - right.rank
+      || left.name.localeCompare(right.name)
+    )
+    .slice(0, 3);
+
+  if (!entries.length) {
+    return null;
+  }
+
+  return {
+    title: entries.some((entry) => entry.isFriend) ? "Friends in this round" : "Followed golfers in this round",
+    entries,
+    leaderLabel: `${entries[0].name} leads your social view`,
+  };
+}
+
+function buildSideGameSummary(round, leaderboard, localParticipant, holeWinner) {
+  if (!localParticipant || leaderboard.length < 2) {
+    return null;
+  }
+
+  const leader = leaderboard[0];
+  const strokesBack = leader?.id === localParticipant.id
+    ? 0
+    : Math.max(0, (localParticipant.toPar || 0) - (leader?.toPar || 0));
+  const swingLabel = holeWinner?.tied
+    ? "Halved the latest hole"
+    : holeWinner?.winnerIds?.includes(localParticipant.id)
+      ? "Won the latest hole"
+      : "Lost the latest hole";
+
+  return {
+    title: round.mode === "match" ? "Side game pulse" : "Skins-style pulse",
+    swingLabel,
+    detail: leader?.id === localParticipant.id
+      ? "You control the side-game pace right now."
+      : `${strokesBack} ${strokesBack === 1 ? "stroke" : "strokes"} back from the side-game lead.`,
+    leaderName: leader?.name || "Waiting on scores",
+  };
+}
+
+function buildTournamentScaffold(round, leaderboard) {
+  if (!leaderboard.length) {
+    return null;
+  }
+
+  return {
+    title: "Tournament-ready scaffold",
+    detail: `${leaderboard[0].name} is leading the current card. This round summary is ready to feed a future event board.`,
+  };
+}
+
 function addRankMovement(round, currentUserId, leaderboard) {
   const lastScoredHole = getLastScoredHoleNumber(round);
   if (lastScoredHole <= 1) {
@@ -726,7 +821,9 @@ function addRankMovement(round, currentUserId, leaderboard) {
   });
 }
 
-export function getRoundSummary(round, currentUserId) {
+export function getRoundSummary(round, currentUserId, options = {}) {
+  const friendProfileIds = Array.isArray(options.friendProfileIds) ? options.friendProfileIds : [];
+  const followedProfileIds = Array.isArray(options.followedProfileIds) ? options.followedProfileIds : [];
   const leaderboard = addRankMovement(round, currentUserId, buildLeaderboard(round, currentUserId));
   const localParticipant = leaderboard.find((entry) => entry.isLocal) || leaderboard[0];
   const localTotals = localParticipant ? getParticipantTotals(round, localParticipant.id) : null;
@@ -734,6 +831,12 @@ export function getRoundSummary(round, currentUserId) {
   const holeWinner = buildHoleWinnerSummary(round);
   const momentum = buildMomentumSummary(localTotals);
   const headToHead = buildHeadToHeadSummary(round, leaderboard, localParticipant);
+  const friendLeaderboard = buildFriendLeaderboard(round, leaderboard, {
+    friendProfileIds,
+    followedProfileIds,
+  });
+  const sideGame = buildSideGameSummary(round, leaderboard, localParticipant, holeWinner);
+  const tournamentScaffold = buildTournamentScaffold(round, leaderboard);
 
   return {
     leaderboard,
@@ -748,6 +851,9 @@ export function getRoundSummary(round, currentUserId) {
     holeWinner,
     momentum,
     headToHead,
+    friendLeaderboard,
+    sideGame,
+    tournamentScaffold,
     roundLabel: GAME_MODES[round.mode].label,
     averagePutts: localTotals?.averagePutts ?? null,
     completed: round.status === "completed",

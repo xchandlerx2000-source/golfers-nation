@@ -4648,3 +4648,23 @@ button:disabled {
     display: grid;
   }
 }
+.nearby-player-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent, #2c6) 18%, transparent);
+  color: var(--text-strong, inherit);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.competition-layer-card .feature-row,
+.competition-layer-card .stack-list {
+  margin-top: 0.5rem;
+}
+
+.competition-layer-card .feature-row strong {
+  margin-right: 0.4rem;
+}

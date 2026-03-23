@@ -140,6 +140,13 @@ const HELP_SECTIONS = [
   },
 ];
 
+function getRoundSummaryForState(state, round) {
+  return getRoundSummary(round, state.currentUser.id, {
+    friendProfileIds: state.currentUser?.social?.friendProfileIds || [],
+    followedProfileIds: state.currentUser?.social?.followedProfileIds || [],
+  });
+}
+
 const SETTINGS_SECTIONS = [
   { id: "account", label: "Account" },
   { id: "golf-profile", label: "Golf Profile" },
@@ -976,7 +983,7 @@ function renderSummarySpotlight(state, summaryRound) {
     return "";
   }
 
-  const summary = getRoundSummary(summaryRound, state.currentUser.id);
+  const summary = getRoundSummaryForState(state, summaryRound);
   const premiumInsights = !getFeatureGate("round-insights", getSubscription(state)).locked
     ? summary.roundInsights.slice(0, 2)
     : [];
@@ -1172,6 +1179,30 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
   const advancedGate = getFeatureGate("advanced-stats", getSubscription(state));
   const comparisonGate = getFeatureGate("player-comparison", getSubscription(state));
   const isCurrentUser = profileId === state.currentUser.profileId;
+  const relationshipAction = !isCurrentUser
+    ? `
+      <button
+        class="button ${preview.isFollowed ? "secondary" : "primary"}"
+        type="button"
+        data-action="toggle-follow-profile"
+        data-profile-id="${escapeHtml(profileId)}"
+      >
+        ${preview.isFollowed ? "Following" : "Follow golfer"}
+      </button>
+      <button
+        class="button subtle"
+        type="button"
+        data-action="request-friend-profile"
+        data-profile-id="${escapeHtml(profileId)}"
+        ${preview.isFriend || preview.pendingFriendRequest ? "disabled" : ""}
+      >
+        ${preview.isFriend ? "Friends" : preview.pendingFriendRequest ? "Request sent" : "Add friend"}
+      </button>
+    `
+    : `
+      <button class="button subtle" type="button" data-action="share-profile-placeholder">Share profile</button>
+      <button class="button subtle" type="button" data-action="share-round-summary-placeholder">Round brag card</button>
+    `;
 
   if (comparison && !comparisonGate.locked) {
     return `
@@ -1181,7 +1212,7 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
             <p class="eyebrow">Player comparison</p>
             <h3>${escapeHtml(title)}</h3>
           </div>
-          <span class="status-pill">${escapeHtml(comparison.right.formLabel)}</span>
+          <span class="status-pill">${escapeHtml(isCurrentUser ? comparison.right.formLabel : preview.relationshipLabel)}</span>
         </div>
         <div class="comparison-grid comparison-player-grid">
           <article class="comparison-player-card">
@@ -1225,6 +1256,12 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
             <span>Home course</span>
             <strong>${escapeHtml(comparison.left.homeCourse || "Private")} / ${escapeHtml(comparison.right.homeCourse || "Private")}</strong>
           </article>
+          ${!isCurrentUser ? `
+            <article>
+              <span>Connection</span>
+              <strong>${escapeHtml(preview.relationshipLabel)}</strong>
+            </article>
+          ` : ""}
         </div>
         <div class="competitive-section-block">
           <p class="mini-label">Recent rounds</p>
@@ -1248,8 +1285,7 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
             </div>
           `}
         <div class="row-actions competitive-action-row">
-          <button class="button subtle" type="button" data-action="share-profile-placeholder">Share your card</button>
-          <button class="button subtle" type="button" data-action="share-round-summary-placeholder">Share round summary</button>
+          ${relationshipAction}
         </div>
       </article>
     `;
@@ -1269,6 +1305,10 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
           <strong>${escapeHtml(preview.displayName)}</strong>
           <p>${escapeHtml(preview.username)} / ${escapeHtml(preview.headToHeadLabel)}</p>
         </div>
+      </div>
+      <div class="competitive-public-strip">
+        <span>${escapeHtml(preview.relationshipLabel)}</span>
+        <span>${escapeHtml(preview.recentFormSummary)}</span>
       </div>
       <div class="summary-grid compact">
         <article>
@@ -1332,14 +1372,9 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
           ? preview.smartInsights.map((insight) => `<div class="feature-row">${escapeHtml(insight)}</div>`).join("")
           : ""}
       </div>
-      ${isCurrentUser
-        ? `
-          <div class="row-actions competitive-action-row">
-            <button class="button subtle" type="button" data-action="share-profile-placeholder">Share profile</button>
-            <button class="button subtle" type="button" data-action="share-round-summary-placeholder">Round brag card</button>
-          </div>
-        `
-        : ""}
+      <div class="row-actions competitive-action-row">
+        ${relationshipAction}
+      </div>
     </article>
   `;
 }
@@ -1357,12 +1392,14 @@ function renderNearbyRoundRows(nearbyGames, {
       <div>
         <strong>${escapeHtml(game.title)}</strong>
         <p>${escapeHtml(game.courseName)} / ${escapeHtml(game.modeLabel)} / ${escapeHtml(game.statusLabel || `${game.playerCount || 0} golfers`)}</p>
+        ${game.socialSummary ? `<p>${escapeHtml(game.socialSummary)}</p>` : ""}
       </div>
       <div class="list-metrics ${compact ? "" : "discovery-list-metrics"}">
         <span>${escapeHtml(game.distance)}</span>
         ${compact ? "" : `<span>${escapeHtml(game.transport)}</span>`}
         <span>${escapeHtml(game.inviteCode)}</span>
-        <button class="button subtle" type="button" data-action="quick-join-code" data-code="${game.inviteCode}">${escapeHtml(actionLabel)}</button>
+        ${game.friendCount ? `<span class="status-pill">${game.friendCount} ${game.friendCount === 1 ? "friend" : "friends"}</span>` : ""}
+        <button class="button subtle" type="button" data-action="quick-join-code" data-code="${game.inviteCode}">${escapeHtml(game.joinActionLabel || actionLabel)}</button>
       </div>
     </article>
   `).join("");
@@ -1388,6 +1425,7 @@ function renderNearbyPlayerRows(nearbyPlayers) {
         </div>
       </div>
       <div class="nearby-player-support">
+        <span class="nearby-player-badge">${escapeHtml(player.relationshipLabel)}</span>
         <span>${escapeHtml(player.detail)}</span>
         <span>${escapeHtml(player.statsSummary)}</span>
         ${player.homeCourse ? `<span>${escapeHtml(player.homeCourse)}</span>` : ""}
@@ -1395,7 +1433,10 @@ function renderNearbyPlayerRows(nearbyPlayers) {
       </div>
       <div class="row-actions nearby-player-actions">
         <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(player.profileId)}">${player.isLive ? "View live card" : "View card"}</button>
-        ${player.inviteCode ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${player.inviteCode}">Join round</button>` : ""}
+        ${player.inviteCode
+          ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${player.inviteCode}">${escapeHtml(player.joinActionLabel || "Join round")}</button>`
+          : `<button class="button secondary" type="button" data-action="request-round-invite" data-profile-id="${escapeHtml(player.profileId)}">${player.pendingFriendRequest ? "Invite pending" : "Join request"}</button>`}
+        <button class="button subtle" type="button" data-action="toggle-follow-profile" data-profile-id="${escapeHtml(player.profileId)}">${player.isFollowed ? "Following" : "Follow"}</button>
       </div>
     </article>
   `).join("");
@@ -2434,7 +2475,7 @@ function renderHomeView(state) {
               ${completedRounds
                 .slice(0, 2)
                 .map((round) => {
-                  const summary = getRoundSummary(round, state.currentUser.id);
+                  const summary = getRoundSummaryForState(state, round);
                   return `
                     <article class="list-row large">
                       <div>
@@ -2795,6 +2836,57 @@ function renderCompetitiveSpotlights(summary) {
   `;
 }
 
+function renderCompetitionLayerCard(summary) {
+  const friendRows = summary?.friendLeaderboard?.entries || [];
+  const sideGame = summary?.sideGame;
+  const tournamentScaffold = summary?.tournamentScaffold;
+
+  if (!friendRows.length && !sideGame && !tournamentScaffold) {
+    return "";
+  }
+
+  return `
+    <article class="card round-support-card competition-layer-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Competition layer</p>
+          <h3>Social pressure and side games</h3>
+        </div>
+      </div>
+      ${friendRows.length
+        ? `
+          <div class="stack-list compact-stack">
+            <p class="mini-label">${escapeHtml(summary.friendLeaderboard.title)}</p>
+            ${friendRows.map((entry) => `
+              <div class="feature-row">
+                <strong>${escapeHtml(entry.name)}</strong>
+                <span>${escapeHtml(entry.relationshipLabel)} / #${entry.rank} / ${escapeHtml(entry.displayStatus)}</span>
+              </div>
+            `).join("")}
+          </div>
+        `
+        : ""}
+      ${sideGame
+        ? `
+          <div class="stack-list compact-stack">
+            <p class="mini-label">${escapeHtml(sideGame.title)}</p>
+            <div class="feature-row">${escapeHtml(sideGame.swingLabel)}</div>
+            <div class="feature-row">${escapeHtml(sideGame.detail)}</div>
+          </div>
+        `
+        : ""}
+      ${tournamentScaffold
+        ? `
+          <div class="feature-row">
+            <strong>${escapeHtml(tournamentScaffold.title)}</strong>
+            <span>${escapeHtml(tournamentScaffold.detail)}</span>
+          </div>
+        `
+        : ""}
+    </article>
+  `;
+}
+
 function getCompetitiveFeedback(round, summary, participantId) {
   const leaderboard = summary?.leaderboard || [];
   const entry = leaderboard.find((item) => item.id === participantId);
@@ -2850,7 +2942,7 @@ function renderHoleEditor(state, round) {
   const selectedHole = state.session.selectedHole;
   const hole = round.holes.find((item) => item.number === selectedHole) || round.holes[0];
   const participants = getScoringParticipants(round);
-  const summary = getRoundSummary(round, state.currentUser.id);
+  const summary = getRoundSummaryForState(state, round);
   const progress = getRoundProgress(round);
   const roundSafety = getRoundSavePresentation(round);
   const localParticipantId = summary.localParticipant?.id;
@@ -3184,7 +3276,7 @@ function renderHoleEditor(state, round) {
 }
 
 function renderLeaderboardCard(state, round) {
-  const summary = getRoundSummary(round, state.currentUser.id);
+  const summary = getRoundSummaryForState(state, round);
   const leader = summary.leaderboard[0];
   const localEntry = summary.leaderboard.find((entry) => entry.isLocal);
 
@@ -3294,7 +3386,7 @@ function renderLiveStateCard(state, round, group) {
 
 function renderRoundControlCard(state, round) {
   const progress = getRoundProgress(round);
-  const summary = getRoundSummary(round, state.currentUser.id);
+  const summary = getRoundSummaryForState(state, round);
   const canFinish = progress.completedHoles > 0;
   const saveInProgress = state.session?.cloudSync?.status === "syncing"
     && state.session?.cloudSync?.scope === "round-finish"
@@ -3358,7 +3450,7 @@ function renderRoundView(state) {
   }
 
   const progress = getRoundProgress(activeRound);
-  const summary = getRoundSummary(activeRound, state.currentUser.id);
+  const summary = getRoundSummaryForState(state, activeRound);
 
   return `
     <section class="view-grid round-grid round-grid-live">
@@ -3391,6 +3483,7 @@ function renderRoundView(state) {
         <div class="round-support-stack">
           ${renderLiveStateCard(state, activeRound, activeGroup)}
           ${renderLeaderboardCard(state, activeRound)}
+          ${renderCompetitionLayerCard(summary)}
           ${renderRoundControlCard(state, activeRound)}
         </div>
         ${renderCompetitivePreviewCard(
@@ -3558,7 +3651,7 @@ function renderStatsView(state) {
   const partners = getFrequentPartners(state.rounds, state.currentUser.id);
   const completedRounds = getCompletedRounds(state);
   const summaryRound = getSummaryRound(state);
-  const selectedSummary = summaryRound ? getRoundSummary(summaryRound, state.currentUser.id) : null;
+  const selectedSummary = summaryRound ? getRoundSummaryForState(state, summaryRound) : null;
   const selectedProfileId = state.session.selectedProfileId || state.currentUser.profileId;
   const currentCompetitivePreview = buildCompetitivePreview(state, state.currentUser.profileId, state.currentUser.profileId);
   const showingOtherProfile = selectedProfileId && selectedProfileId !== state.currentUser.profileId;
@@ -3718,7 +3811,7 @@ function renderStatsView(state) {
             <div class="stack-list">
               ${completedRounds
                 .map((round) => {
-                  const summary = getRoundSummary(round, state.currentUser.id);
+                  const summary = getRoundSummaryForState(state, round);
                   return `
                     <article class="list-row large">
                       <div>
@@ -3849,6 +3942,7 @@ function renderCommunityView(state) {
         <div class="row-actions">
           <button class="button secondary" type="button" data-action="host-active-round" ${activeRound ? "" : "disabled"}>Host active round</button>
           ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Copy code</button>` : ""}
+          <button class="button subtle" type="button" data-action="invite-friends">Invite a golfer</button>
           <button class="button subtle" type="button" data-action="enable-nearby" ${activeRound ? "" : "disabled"}>Nearby sync</button>
           <button class="button subtle" type="button" data-action="enable-bluetooth" ${activeRound ? "" : "disabled"}>Bluetooth sync</button>
         </div>

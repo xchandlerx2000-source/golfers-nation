@@ -190,7 +190,21 @@ describe("scoring", () => {
       teeBox: "Gold",
       weather: "Clear 74F",
       mode: "stroke",
-      players: ["Avery Brooks", "Maya Chen", "Theo Grant"],
+      players: [
+        "Avery Brooks",
+        {
+          profileId: "profile-maya",
+          displayName: "Maya Chen",
+          username: "@mayachen",
+          avatarLabel: "MC",
+        },
+        {
+          profileId: "profile-theo",
+          displayName: "Theo Grant",
+          username: "@theogrant",
+          avatarLabel: "TG",
+        },
+      ],
     });
     const [avery, maya, theo] = round.players;
 
@@ -202,13 +216,19 @@ describe("scoring", () => {
     scoreHole(round, maya.id, 2, 4, 2, true, true);
     scoreHole(round, theo.id, 2, 5, 2, true, false);
 
-    const summary = getRoundSummary(round, currentUser.id);
+    const summary = getRoundSummary(round, currentUser.id, {
+      friendProfileIds: ["profile-maya"],
+      followedProfileIds: ["profile-theo"],
+    });
     const mayaEntry = summary.leaderboard.find((entry) => entry.name === "Maya Chen");
 
     expect(summary.holeWinner?.holeNumber).toBe(2);
     expect(summary.holeWinner?.winnerNames).toContain("Maya Chen");
     expect(summary.momentum?.label).toBeTruthy();
     expect(summary.headToHead?.rivalName).toBeTruthy();
+    expect(summary.friendLeaderboard?.entries[0].name).toBe("Maya Chen");
+    expect(summary.sideGame?.title).toBeTruthy();
+    expect(summary.tournamentScaffold?.detail).toContain("current card");
     expect(mayaEntry?.rankTrend).toBe("up");
   });
 

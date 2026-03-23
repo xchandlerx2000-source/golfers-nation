@@ -62,18 +62,30 @@ function createAppearanceSettings(overrides = {}) {
 
 function createSocialSettings(overrides = {}) {
   const next = cloneData(overrides || {});
+  const followedProfileIds = Array.isArray(next.followedProfileIds)
+    ? [...new Set(next.followedProfileIds.filter(Boolean))]
+    : [];
+  const friendProfileIds = Array.isArray(next.friendProfileIds)
+    ? [...new Set(next.friendProfileIds.filter(Boolean))]
+    : [];
+  const pendingFriendProfileIds = Array.isArray(next.pendingFriendProfileIds)
+    ? [...new Set(next.pendingFriendProfileIds.filter(Boolean))]
+    : [];
   return {
+    ...next,
     handles: {
       instagram: "",
       x: "",
       ghin: "",
       ...(next.handles || {}),
     },
-    allowFriendConnections: true,
-    allowProfileSharing: true,
-    allowRoundSharing: true,
-    inviteFriendsReady: true,
-    ...next,
+    followedProfileIds,
+    friendProfileIds,
+    pendingFriendProfileIds,
+    allowFriendConnections: next.allowFriendConnections !== false,
+    allowProfileSharing: next.allowProfileSharing !== false,
+    allowRoundSharing: next.allowRoundSharing !== false,
+    inviteFriendsReady: next.inviteFriendsReady !== false,
   };
 }
 
@@ -728,6 +740,11 @@ export function createDefaultAccountState() {
     bio: "Competitive weekend golfer building a better multi-state season.",
     seasonGoal: "Break 80 in three new states",
     createdAt: Date.now() - 1000 * 60 * 60 * 24 * 160,
+    social: {
+      followedProfileIds: ["profile-maya", "profile-theo"],
+      friendProfileIds: ["profile-maya"],
+      pendingFriendProfileIds: ["profile-jordan"],
+    },
   });
 
   const premiumDemo = createAccountRecord({
@@ -744,6 +761,10 @@ export function createDefaultAccountState() {
     bio: "Competitive player using premium analytics and live group tools.",
     seasonGoal: "Win three weekend events this season",
     createdAt: Date.now() - 1000 * 60 * 60 * 24 * 220,
+    social: {
+      followedProfileIds: ["profile-demo-free", "profile-theo"],
+      friendProfileIds: ["profile-demo-free"],
+    },
   });
 
   const googleDemo = createAccountRecord({

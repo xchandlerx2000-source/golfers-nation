@@ -1315,6 +1315,101 @@ function buildHeadToHeadSummary(round, leaderboard, localParticipant) {
   };
 }
 
+function getParticipantProfileIds(round, participantId) {
+  if (round.mode === "stroke") {
+    const player = round.players.find((entry) => entry.id === participantId);
+    return player?.profileId ? [player.profileId] : [];
+  }
+
+  const side = (round.sides || []).find((entry) => entry.id === participantId);
+  if (!side) {
+    return [];
+  }
+
+  return side.playerIds
+    .map((playerId) => round.players.find((player) => player.id === playerId)?.profileId || null)
+    .filter(Boolean);
+}
+
+function buildFriendLeaderboard(round, leaderboard, {
+  friendProfileIds = [],
+  followedProfileIds = [],
+} = {}) {
+  const friendSet = new Set(friendProfileIds.filter(Boolean));
+  const followedSet = new Set(followedProfileIds.filter(Boolean));
+
+  const entries = leaderboard
+    .map((entry) => {
+      const profileIds = getParticipantProfileIds(round, entry.id);
+      const isFriend = profileIds.some((profileId) => friendSet.has(profileId));
+      const isFollowed = isFriend || profileIds.some((profileId) => followedSet.has(profileId));
+
+      if (!isFriend && !isFollowed) {
+        return null;
+      }
+
+      return {
+        ...entry,
+        isFriend,
+        isFollowed,
+        relationshipLabel: isFriend ? "Friend" : "Following",
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) =>
+      Number(right.isFriend) - Number(left.isFriend)
+      || left.rank - right.rank
+      || left.name.localeCompare(right.name)
+    )
+    .slice(0, 3);
+
+  if (!entries.length) {
+    return null;
+  }
+
+  return {
+    title: entries.some((entry) => entry.isFriend) ? "Friends in this round" : "Followed golfers in this round",
+    entries,
+    leaderLabel: `${entries[0].name} leads your social view`,
+  };
+}
+
+function buildSideGameSummary(round, leaderboard, localParticipant, holeWinner) {
+  if (!localParticipant || leaderboard.length < 2) {
+    return null;
+  }
+
+  const leader = leaderboard[0];
+  const strokesBack = leader?.id === localParticipant.id
+    ? 0
+    : Math.max(0, (localParticipant.toPar || 0) - (leader?.toPar || 0));
+  const swingLabel = holeWinner?.tied
+    ? "Halved the latest hole"
+    : holeWinner?.winnerIds?.includes(localParticipant.id)
+      ? "Won the latest hole"
+      : "Lost the latest hole";
+
+  return {
+    title: round.mode === "match" ? "Side game pulse" : "Skins-style pulse",
+    swingLabel,
+    detail: leader?.id === localParticipant.id
+      ? "You control the side-game pace right now."
+      : `${strokesBack} ${strokesBack === 1 ? "stroke" : "strokes"} back from the side-game lead.`,
+    leaderName: leader?.name || "Waiting on scores",
+  };
+}
+
+function buildTournamentScaffold(round, leaderboard) {
+  if (!leaderboard.length) {
+    return null;
+  }
+
+  return {
+    title: "Tournament-ready scaffold",
+    detail: `${leaderboard[0].name} is leading the current card. This round summary is ready to feed a future event board.`,
+  };
+}
+
 function addRankMovement(round, currentUserId, leaderboard) {
   const lastScoredHole = getLastScoredHoleNumber(round);
   if (lastScoredHole <= 1) {
@@ -1347,7 +1442,9 @@ function addRankMovement(round, currentUserId, leaderboard) {
     };
   });
 }
-function getRoundSummary(round, currentUserId) {
+function getRoundSummary(round, currentUserId, options = {}) {
+  const friendProfileIds = Array.isArray(options.friendProfileIds) ? options.friendProfileIds : [];
+  const followedProfileIds = Array.isArray(options.followedProfileIds) ? options.followedProfileIds : [];
   const leaderboard = addRankMovement(round, currentUserId, buildLeaderboard(round, currentUserId));
   const localParticipant = leaderboard.find((entry) => entry.isLocal) || leaderboard[0];
   const localTotals = localParticipant ? getParticipantTotals(round, localParticipant.id) : null;
@@ -1355,6 +1452,12 @@ function getRoundSummary(round, currentUserId) {
   const holeWinner = buildHoleWinnerSummary(round);
   const momentum = buildMomentumSummary(localTotals);
   const headToHead = buildHeadToHeadSummary(round, leaderboard, localParticipant);
+  const friendLeaderboard = buildFriendLeaderboard(round, leaderboard, {
+    friendProfileIds,
+    followedProfileIds,
+  });
+  const sideGame = buildSideGameSummary(round, leaderboard, localParticipant, holeWinner);
+  const tournamentScaffold = buildTournamentScaffold(round, leaderboard);
 
   return {
     leaderboard,
@@ -1369,6 +1472,9 @@ function getRoundSummary(round, currentUserId) {
     holeWinner,
     momentum,
     headToHead,
+    friendLeaderboard,
+    sideGame,
+    tournamentScaffold,
     roundLabel: GAME_MODES[round.mode].label,
     averagePutts: localTotals?.averagePutts ?? null,
     completed: round.status === "completed",
@@ -2090,6 +2196,100 @@ function createGroupMemberFromPlayer(player, index = 0) {
     connectionState: index === 0 ? "ready" : "connected",
   };
 }
+
+function buildLiveGroupMember(member = {}, participantId = null) {
+  return {
+    id: member.id || `member-${member.userId || member.profileId || participantId || Date.now()}`,
+    playerId: participantId || member.playerId || null,
+    profileId: member.profileId || null,
+    userId: member.userId || null,
+    displayName: member.displayName || "Golfer",
+    username: member.username || "",
+    avatarLabel: member.avatarLabel || "GN",
+    role: member.role || "player",
+    connectionState: member.connectionState || "connected",
+  };
+}
+
+function createStrokeEntry(participantId) {
+  return {
+    participantId,
+    strokes: null,
+    putts: null,
+    penalties: 0,
+    fairwayHit: false,
+    gir: false,
+    upAndDown: false,
+    sandSave: false,
+    updatedAt: null,
+    lastEventId: null,
+  };
+}
+
+function ensureMemberOnRound(round, member) {
+  if (!round || !member) {
+    return { participantId: null, added: false };
+  }
+
+  let participant = (round.players || []).find((player) =>
+    player.id === member.playerId
+      || player.userId === member.userId
+      || player.profileId === member.profileId
+  ) || null;
+  let added = false;
+
+  if (!participant) {
+    participant = {
+      id: member.playerId || `player-${Date.now()}`,
+      profileId: member.profileId || null,
+      userId: member.userId || null,
+      name: member.displayName || "Golfer",
+      displayName: member.displayName || "Golfer",
+      username: member.username || "",
+      avatarLabel: member.avatarLabel || "GN",
+      role: member.role === "host" ? "owner" : "guest",
+    };
+    round.players = Array.isArray(round.players) ? round.players : [];
+    round.players.push(participant);
+    added = true;
+
+    if (round.mode === "stroke") {
+      round.holes.forEach((hole) => {
+        hole.entries = Array.isArray(hole.entries) ? hole.entries : [];
+        hole.entries.push(createStrokeEntry(participant.id));
+      });
+    } else if (Array.isArray(round.sides) && round.sides.length) {
+      const targetSide = [...round.sides].sort((left, right) => left.playerIds.length - right.playerIds.length)[0];
+      if (targetSide) {
+        targetSide.playerIds.push(participant.id);
+        targetSide.playerNames = targetSide.playerIds
+          .map((playerId) => round.players.find((player) => player.id === playerId)?.name || "")
+          .filter(Boolean);
+      }
+    }
+  }
+
+  participant.id = member.playerId || participant.id;
+  participant.profileId = member.profileId || participant.profileId || null;
+  participant.userId = member.userId || participant.userId || null;
+  participant.name = member.displayName || participant.name;
+  participant.displayName = member.displayName || participant.displayName || participant.name;
+  participant.username = member.username || participant.username;
+  participant.avatarLabel = member.avatarLabel || participant.avatarLabel || "GN";
+
+  if (Array.isArray(round.sides)) {
+    round.sides.forEach((side) => {
+      side.playerNames = side.playerIds
+        .map((playerId) => round.players.find((player) => player.id === playerId)?.name || "")
+        .filter(Boolean);
+    });
+  }
+
+  return {
+    participantId: participant.id,
+    added,
+  };
+}
 function ensureLiveRoundGroupState(draft, round, {
   inviteCode = "",
   sessionId = null,
@@ -2247,6 +2447,72 @@ function upsertLiveRoundSessionState(draft, incoming, {
     group: nextGroup,
     roundIndex,
     groupIndex,
+  };
+}
+function mergeLiveSessionMember(draft, {
+  inviteCode = "",
+  roundId = null,
+  sessionId = null,
+  member = null,
+} = {}) {
+  if (!member) {
+    return {
+      round: null,
+      group: null,
+      participantId: null,
+      added: false,
+      createdGroup: false,
+    };
+  }
+
+  const resolved = resolveLiveRoundSessionEntities(draft, {
+    inviteCode,
+    roundId,
+    sessionId,
+    createGroupIfMissing: true,
+  });
+  const round = resolved.round;
+  const group = resolved.group;
+
+  if (!round) {
+    return {
+      round: null,
+      group,
+      participantId: null,
+      added: false,
+      createdGroup: resolved.createdGroup,
+    };
+  }
+
+  if (group) {
+    group.members = Array.isArray(group.members) ? group.members : [];
+  }
+
+  const ensuredMember = ensureMemberOnRound(round, member);
+  const nextMember = buildLiveGroupMember(member, ensuredMember.participantId);
+  const existingMember = group?.members?.find((entry) =>
+    entry.id === nextMember.id
+      || entry.playerId === nextMember.playerId
+      || entry.userId === nextMember.userId
+      || entry.profileId === nextMember.profileId
+  ) || null;
+
+  if (existingMember) {
+    Object.assign(existingMember, nextMember);
+  } else if (group) {
+    group.members.push(nextMember);
+  }
+
+  if (group) {
+    group.updatedAt = Date.now();
+  }
+
+  return {
+    round,
+    group,
+    participantId: ensuredMember.participantId,
+    added: ensuredMember.added,
+    createdGroup: resolved.createdGroup,
   };
 }
 function getNextIncompleteHoleNumber(round, participantId, currentHoleNumber) {
@@ -2561,18 +2827,30 @@ function createAppearanceSettings(overrides = {}) {
 
 function createSocialSettings(overrides = {}) {
   const next = cloneData(overrides || {});
+  const followedProfileIds = Array.isArray(next.followedProfileIds)
+    ? [...new Set(next.followedProfileIds.filter(Boolean))]
+    : [];
+  const friendProfileIds = Array.isArray(next.friendProfileIds)
+    ? [...new Set(next.friendProfileIds.filter(Boolean))]
+    : [];
+  const pendingFriendProfileIds = Array.isArray(next.pendingFriendProfileIds)
+    ? [...new Set(next.pendingFriendProfileIds.filter(Boolean))]
+    : [];
   return {
+    ...next,
     handles: {
       instagram: "",
       x: "",
       ghin: "",
       ...(next.handles || {}),
     },
-    allowFriendConnections: true,
-    allowProfileSharing: true,
-    allowRoundSharing: true,
-    inviteFriendsReady: true,
-    ...next,
+    followedProfileIds,
+    friendProfileIds,
+    pendingFriendProfileIds,
+    allowFriendConnections: next.allowFriendConnections !== false,
+    allowProfileSharing: next.allowProfileSharing !== false,
+    allowRoundSharing: next.allowRoundSharing !== false,
+    inviteFriendsReady: next.inviteFriendsReady !== false,
   };
 }
 
@@ -3221,6 +3499,11 @@ function createDefaultAccountState() {
     bio: "Competitive weekend golfer building a better multi-state season.",
     seasonGoal: "Break 80 in three new states",
     createdAt: Date.now() - 1000 * 60 * 60 * 24 * 160,
+    social: {
+      followedProfileIds: ["profile-maya", "profile-theo"],
+      friendProfileIds: ["profile-maya"],
+      pendingFriendProfileIds: ["profile-jordan"],
+    },
   });
 
   const premiumDemo = createAccountRecord({
@@ -3237,6 +3520,10 @@ function createDefaultAccountState() {
     bio: "Competitive player using premium analytics and live group tools.",
     seasonGoal: "Win three weekend events this season",
     createdAt: Date.now() - 1000 * 60 * 60 * 24 * 220,
+    social: {
+      followedProfileIds: ["profile-demo-free", "profile-theo"],
+      friendProfileIds: ["profile-demo-free"],
+    },
   });
 
   const googleDemo = createAccountRecord({
@@ -5128,6 +5415,64 @@ function getCurrentProfile(state) {
 function getProfileForPlayer(state, player) {
   return player?.profileId ? getProfileById(state, player.profileId) : null;
 }
+
+function getCurrentSocialSettings(state) {
+  return state?.currentUser?.social || {};
+}
+
+function getUniqueSocialIds(value) {
+  return Array.isArray(value)
+    ? [...new Set(value.filter(Boolean))]
+    : [];
+}
+function getFollowedProfileIds(state) {
+  return getUniqueSocialIds(getCurrentSocialSettings(state).followedProfileIds);
+}
+function getFriendProfileIds(state) {
+  return getUniqueSocialIds(getCurrentSocialSettings(state).friendProfileIds);
+}
+function getPendingFriendProfileIds(state) {
+  return getUniqueSocialIds(getCurrentSocialSettings(state).pendingFriendProfileIds);
+}
+function isProfileFollowed(state, profileId) {
+  return Boolean(profileId) && getFollowedProfileIds(state).includes(profileId);
+}
+function isProfileFriend(state, profileId) {
+  return Boolean(profileId) && getFriendProfileIds(state).includes(profileId);
+}
+function hasPendingFriendRequest(state, profileId) {
+  return Boolean(profileId) && getPendingFriendProfileIds(state).includes(profileId);
+}
+
+function buildProfileRelationship(state, profileId) {
+  if (!profileId || profileId === state.currentUser?.profileId) {
+    return {
+      isCurrentUser: true,
+      isFollowed: false,
+      isFriend: false,
+      pendingFriendRequest: false,
+      label: "Your golfer profile",
+    };
+  }
+
+  const isFriend = isProfileFriend(state, profileId);
+  const pendingFriendRequest = hasPendingFriendRequest(state, profileId);
+  const isFollowed = isFriend || isProfileFollowed(state, profileId);
+
+  return {
+    isCurrentUser: false,
+    isFollowed,
+    isFriend,
+    pendingFriendRequest,
+    label: isFriend
+      ? "Friend"
+      : pendingFriendRequest
+        ? "Friend request sent"
+        : isFollowed
+          ? "Following"
+          : "Public golfer",
+  };
+}
 function buildProfileRoundStats(state, profileId) {
   const profile = getProfileById(state, profileId);
   const appearances = state.rounds
@@ -5174,6 +5519,7 @@ function buildCompetitivePreview(state, profileId, opponentProfileId = null) {
   }
 
   const stats = buildProfileRoundStats(state, profileId);
+  const relationship = buildProfileRelationship(state, profileId);
   const headToHeadRounds = opponentProfileId
     ? state.rounds.filter((round) => {
         const profileIds = new Set(round.players.map((player) => player.profileId));
@@ -5211,6 +5557,82 @@ function buildCompetitivePreview(state, profileId, opponentProfileId = null) {
     homeCourse: profile.privateProfile.privacy.showHomeCourse ? profile.publicProfile.homeCourse : "",
     handicap: profile.privateProfile.privacy.showHandicap ? profile.publicProfile.handicap : null,
     bio: profile.privateProfile.privacy.showBio ? profile.publicProfile.bio : "",
+    relationship,
+    isFollowed: relationship.isFollowed,
+    isFriend: relationship.isFriend,
+    pendingFriendRequest: relationship.pendingFriendRequest,
+    relationshipLabel: relationship.label,
+  };
+}
+function buildFriendLeaderboard(state) {
+  const candidateIds = [...new Set([
+    ...getFriendProfileIds(state),
+    ...getFollowedProfileIds(state),
+  ])];
+
+  return candidateIds
+    .map((profileId) => buildCompetitivePreview(state, profileId, state.currentUser.profileId))
+    .filter(Boolean)
+    .sort((left, right) =>
+      Number(right.isFriend) - Number(left.isFriend)
+      || Number(right.isFollowed) - Number(left.isFollowed)
+      || (left.averageScore ?? Number.POSITIVE_INFINITY) - (right.averageScore ?? Number.POSITIVE_INFINITY)
+      || right.roundsPlayed - left.roundsPlayed
+      || left.displayName.localeCompare(right.displayName)
+    );
+}
+function toggleFollowProfile(draft, profileId) {
+  if (!profileId || profileId === draft.currentUser?.profileId) {
+    return { changed: false, isFollowed: false };
+  }
+
+  const followed = new Set(getUniqueSocialIds(draft.currentUser?.social?.followedProfileIds));
+  const alreadyFollowed = followed.has(profileId);
+
+  if (alreadyFollowed) {
+    followed.delete(profileId);
+  } else {
+    followed.add(profileId);
+  }
+
+  draft.currentUser.social = {
+    ...(draft.currentUser.social || {}),
+    followedProfileIds: [...followed],
+  };
+
+  return {
+    changed: true,
+    isFollowed: !alreadyFollowed,
+  };
+}
+function requestFriendProfile(draft, profileId) {
+  if (!profileId || profileId === draft.currentUser?.profileId) {
+    return { changed: false, status: "invalid" };
+  }
+
+  const friendIds = new Set(getUniqueSocialIds(draft.currentUser?.social?.friendProfileIds));
+  if (friendIds.has(profileId)) {
+    return { changed: false, status: "already-friends" };
+  }
+
+  const pendingIds = new Set(getUniqueSocialIds(draft.currentUser?.social?.pendingFriendProfileIds));
+  if (pendingIds.has(profileId)) {
+    return { changed: false, status: "pending" };
+  }
+
+  const followedIds = new Set(getUniqueSocialIds(draft.currentUser?.social?.followedProfileIds));
+  followedIds.add(profileId);
+  pendingIds.add(profileId);
+
+  draft.currentUser.social = {
+    ...(draft.currentUser.social || {}),
+    followedProfileIds: [...followedIds],
+    pendingFriendProfileIds: [...pendingIds],
+  };
+
+  return {
+    changed: true,
+    status: "requested",
   };
 }
 function buildPlayerComparison(state, leftProfileId, rightProfileId) {
@@ -5438,7 +5860,7 @@ const seededRooms = [
     mode: "stroke",
     players: [
       { displayName: "Reese Hall", username: "@reesehall", avatarLabel: "RH" },
-      { displayName: "Maya Chen", username: "@mayachen", avatarLabel: "MC" },
+      { profileId: "profile-maya", displayName: "Maya Chen", username: "@mayachen", avatarLabel: "MC" },
       { displayName: "Theo Grant", username: "@theogrant", avatarLabel: "TG" },
     ],
     distance: "2.8 mi",
@@ -5450,7 +5872,7 @@ const seededRooms = [
     weather: "Clear 70F",
     mode: "match",
     players: [
-      { displayName: "Jordan Wells", username: "@jordanwells", avatarLabel: "JW" },
+      { profileId: "profile-jordan", displayName: "Jordan Wells", username: "@jordanwells", avatarLabel: "JW" },
       { displayName: "Parker Cole", username: "@parkercole", avatarLabel: "PC" },
       { displayName: "Emery Shaw", username: "@emeryshaw", avatarLabel: "ES" },
       { displayName: "Drew Cain", username: "@drewcain", avatarLabel: "DC" },
@@ -5466,7 +5888,7 @@ const seededRooms = [
     players: [
       { displayName: "Cameron Vale", username: "@cameronvale", avatarLabel: "CV" },
       { displayName: "Skye Rivers", username: "@skyerivers", avatarLabel: "SR" },
-      { displayName: "Luca Gray", username: "@lucagray", avatarLabel: "LG" },
+      { profileId: "profile-theo", displayName: "Theo Grant", username: "@theogrant", avatarLabel: "TG" },
       { displayName: "Noah Kane", username: "@noahkane", avatarLabel: "NK" },
     ],
     distance: "9.4 mi",
@@ -5597,12 +6019,17 @@ function joinByInviteCode({ code, state }) {
   };
 }
 function listNearbyGames(state) {
+  const followedIds = new Set(getFollowedProfileIds(state));
+  const friendIds = new Set(getFriendProfileIds(state));
   const localCards = state.groups
     .map((group) => {
       const round = state.rounds.find((item) => item.id === group.roundId);
       if (!round || round.status !== "active") {
         return null;
       }
+      const socialPlayers = (round.players || []).filter((player) =>
+        friendIds.has(player.profileId) || followedIds.has(player.profileId)
+      );
 
       return {
         inviteCode: group.inviteCode,
@@ -5615,24 +6042,49 @@ function listNearbyGames(state) {
         playerCount: round.players.length,
         hostName: group.members[0]?.displayName || round.players[0]?.name || "Host golfer",
         statusLabel: `Hole ${round.currentHole} / ${round.players.length} golfers`,
+        availableToJoin: true,
+        joinActionLabel: socialPlayers.length ? "Join friends" : "Join now",
+        friendCount: socialPlayers.filter((player) => friendIds.has(player.profileId)).length,
+        socialCount: socialPlayers.length,
+        socialSummary: socialPlayers.length
+          ? `${socialPlayers.map((player) => player.displayName || player.name).slice(0, 2).join(", ")} in this round`
+          : "Open round nearby",
       };
     })
     .filter(Boolean);
 
-  const seededCards = seededRooms.map((room) => ({
-    inviteCode: room.inviteCode,
-    title: room.title,
-    courseName: room.courseName,
-    modeLabel: GAME_MODES[room.mode].label,
-    transport: CONNECTION_COPY.cloud,
-    distance: room.distance,
-    source: "seeded",
-    playerCount: room.players.length,
-    hostName: room.players[0]?.displayName || "Host golfer",
-    statusLabel: `${room.players.length} golfers nearby`,
-  }));
+  const seededCards = seededRooms.map((room) => {
+    const socialPlayers = (room.players || []).filter((player) =>
+      friendIds.has(player.profileId) || followedIds.has(player.profileId)
+    );
 
-  return [...localCards, ...seededCards];
+    return {
+      inviteCode: room.inviteCode,
+      title: room.title,
+      courseName: room.courseName,
+      modeLabel: GAME_MODES[room.mode].label,
+      transport: CONNECTION_COPY.cloud,
+      distance: room.distance,
+      source: "seeded",
+      playerCount: room.players.length,
+      hostName: room.players[0]?.displayName || "Host golfer",
+      statusLabel: `${room.players.length} golfers nearby`,
+      availableToJoin: true,
+      joinActionLabel: socialPlayers.length ? "Join friends" : "Join now",
+      friendCount: socialPlayers.filter((player) => friendIds.has(player.profileId)).length,
+      socialCount: socialPlayers.length,
+      socialSummary: socialPlayers.length
+        ? `${socialPlayers.map((player) => player.displayName || player.name).slice(0, 2).join(", ")} nearby`
+        : "Discoverable nearby round",
+    };
+  });
+
+  return [...localCards, ...seededCards].sort((left, right) =>
+    (right.friendCount || 0) - (left.friendCount || 0)
+    || (right.socialCount || 0) - (left.socialCount || 0)
+    || Number(right.source === "local") - Number(left.source === "local")
+    || left.title.localeCompare(right.title)
+  );
 }
 function listNearbyPlayers(state) {
   const activeRoundMap = buildActiveRoundMap(state);
@@ -5646,6 +6098,9 @@ function listNearbyPlayers(state) {
       const showHandicap = profile.privateProfile?.privacy?.showHandicap !== false;
       const roundsPlayed = profile.publicProfile?.roundsPlayed || 0;
       const averageScore = profile.publicProfile?.averageScore;
+      const isFriend = isProfileFriend(state, profile.id);
+      const isFollowed = isFriend || isProfileFollowed(state, profile.id);
+      const pendingFriendRequest = hasPendingFriendRequest(state, profile.id);
 
       return {
         profileId: profile.id,
@@ -5668,11 +6123,25 @@ function listNearbyPlayers(state) {
           : profile.publicProfile.recentFormSummary || "Public profile ready",
         inviteCode: active?.group.inviteCode || active?.round.inviteCode || "",
         isLive: Boolean(active),
+        isFriend,
+        isFollowed,
+        pendingFriendRequest,
+        relationshipLabel: isFriend
+          ? "Friend"
+          : pendingFriendRequest
+            ? "Friend request sent"
+            : isFollowed
+              ? "Following"
+              : "Public player",
+        availableToJoin: Boolean(active?.group?.inviteCode || active?.round?.inviteCode),
+        joinActionLabel: active ? (isFriend ? "Join friend" : "Join round") : (pendingFriendRequest ? "View card" : "Send invite"),
         updatedAt: profile.updatedAt || 0,
       };
     })
     .sort((left, right) =>
-      Number(right.isLive) - Number(left.isLive)
+      Number(right.isFriend) - Number(left.isFriend)
+      || Number(right.isLive) - Number(left.isLive)
+      || Number(right.isFollowed) - Number(left.isFollowed)
       || (right.updatedAt || 0) - (left.updatedAt || 0)
       || right.displayName.localeCompare(left.displayName)
     );
@@ -7641,10 +8110,12 @@ function createSupabaseRealtimeGatewayFactory({
         });
 
         store.setState((draft) => {
+          const lookupRoundId = payload.roundId || currentSessionMeta?.roundId || null;
+          const lookupSessionId = payload.sessionId || currentSessionMeta?.sessionId || null;
           const resolved = resolveLiveRoundSessionEntities(draft, {
             inviteCode: resolvedInviteCode,
-            roundId: payload.roundId || currentSessionMeta?.roundId || null,
-            sessionId: payload.sessionId || currentSessionMeta?.sessionId || null,
+            roundId: lookupRoundId,
+            sessionId: lookupSessionId,
             createGroupIfMissing: true,
           });
           const group = resolved.group;
@@ -7652,8 +8123,8 @@ function createSupabaseRealtimeGatewayFactory({
 
           console.info("[Golfers Nation] Host member-state lookup result.", {
             inviteCode: resolvedInviteCode,
-            lookupRoundId: payload.roundId || currentSessionMeta?.roundId || null,
-            lookupSessionId: payload.sessionId || currentSessionMeta?.sessionId || null,
+            lookupRoundId,
+            lookupSessionId,
             foundRound: Boolean(round),
             foundGroup: Boolean(group),
             createdGroup: resolved.createdGroup,
@@ -7664,8 +8135,8 @@ function createSupabaseRealtimeGatewayFactory({
           if (!round) {
             console.warn("[Golfers Nation] Host member-state lookup missed the local round. Scheduling a forced reconcile.", {
               inviteCode: resolvedInviteCode,
-              lookupRoundId: payload.roundId || currentSessionMeta?.roundId || null,
-              lookupSessionId: payload.sessionId || currentSessionMeta?.sessionId || null,
+              lookupRoundId,
+              lookupSessionId,
             });
             void reconcileCurrentSession({
               force: true,
@@ -7678,45 +8149,12 @@ function createSupabaseRealtimeGatewayFactory({
 
           const beforeMemberCount = group?.members?.length || 0;
           const beforePlayerCount = round?.players?.length || 0;
-
-          if (group) {
-            group.members = Array.isArray(group.members) ? group.members : [];
-          }
-          let member = group?.members?.find((entry) =>
-            entry.id === payload.member.id
-              || entry.playerId === payload.member.playerId
-              || entry.userId === payload.member.userId
-              || entry.profileId === payload.member.profileId
-          ) || null;
-
-          if (!member) {
-            member = {
-              id: payload.member.id || uid("member"),
-              playerId: payload.member.playerId || null,
-              profileId: payload.member.profileId || null,
-              userId: payload.member.userId || null,
-              displayName: payload.member.displayName || "Golfer",
-              username: payload.member.username || "",
-              avatarLabel: payload.member.avatarLabel || "GN",
-              role: payload.member.role || "player",
-              connectionState: payload.member.connectionState || "connected",
-            };
-            group?.members?.push(member);
-          } else {
-            Object.assign(member, payload.member);
-          }
-
-          if (group) {
-            group.updatedAt = now();
-          }
-
-          const ensuredMember = ensureMemberOnRound(round, {
-            ...payload.member,
-            playerId: payload.member.playerId || member?.playerId || null,
+          const merged = mergeLiveSessionMember(draft, {
+            inviteCode: resolvedInviteCode,
+            roundId: lookupRoundId,
+            sessionId: lookupSessionId,
+            member: payload.member,
           });
-          if (member && ensuredMember.participantId && member.playerId !== ensuredMember.participantId) {
-            member.playerId = ensuredMember.participantId;
-          }
 
           if (round) {
             markRoundConnected(round, {
@@ -7728,9 +8166,9 @@ function createSupabaseRealtimeGatewayFactory({
           console.info("[Golfers Nation] Host participant merge after member-state.", {
             inviteCode: resolvedInviteCode,
             membersBefore: beforeMemberCount,
-            membersAfter: group?.members?.length || 0,
+            membersAfter: merged.group?.members?.length || group?.members?.length || 0,
             playersBefore: beforePlayerCount,
-            playersAfter: round?.players?.length || 0,
+            playersAfter: merged.round?.players?.length || round?.players?.length || 0,
           });
           return draft;
         }, { reason: "realtime-member-state" });
@@ -7757,7 +8195,13 @@ function createSupabaseRealtimeGatewayFactory({
         });
 
         store.setState((draft) => {
-          const round = getRoundById(draft, payload.roundId);
+          const round = getRoundById(draft, payload.roundId)
+            || resolveLiveRoundSessionEntities(draft, {
+              inviteCode: payload.inviteCode || currentSessionMeta?.inviteCode || "",
+              roundId: payload.roundId,
+              sessionId: currentSessionMeta?.sessionId || null,
+              createGroupIfMissing: true,
+            }).round;
           if (!round) {
             if (payload?.inviteCode) {
               void reconcileCurrentSession({
@@ -8680,6 +9124,13 @@ const HELP_SECTIONS = [
   },
 ];
 
+function getRoundSummaryForState(state, round) {
+  return getRoundSummary(round, state.currentUser.id, {
+    friendProfileIds: state.currentUser?.social?.friendProfileIds || [],
+    followedProfileIds: state.currentUser?.social?.followedProfileIds || [],
+  });
+}
+
 const SETTINGS_SECTIONS = [
   { id: "account", label: "Account" },
   { id: "golf-profile", label: "Golf Profile" },
@@ -9512,7 +9963,7 @@ function renderSummarySpotlight(state, summaryRound) {
     return "";
   }
 
-  const summary = getRoundSummary(summaryRound, state.currentUser.id);
+  const summary = getRoundSummaryForState(state, summaryRound);
   const premiumInsights = !getFeatureGate("round-insights", getSubscription(state)).locked
     ? summary.roundInsights.slice(0, 2)
     : [];
@@ -9708,6 +10159,30 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
   const advancedGate = getFeatureGate("advanced-stats", getSubscription(state));
   const comparisonGate = getFeatureGate("player-comparison", getSubscription(state));
   const isCurrentUser = profileId === state.currentUser.profileId;
+  const relationshipAction = !isCurrentUser
+    ? `
+      <button
+        class="button ${preview.isFollowed ? "secondary" : "primary"}"
+        type="button"
+        data-action="toggle-follow-profile"
+        data-profile-id="${escapeHtml(profileId)}"
+      >
+        ${preview.isFollowed ? "Following" : "Follow golfer"}
+      </button>
+      <button
+        class="button subtle"
+        type="button"
+        data-action="request-friend-profile"
+        data-profile-id="${escapeHtml(profileId)}"
+        ${preview.isFriend || preview.pendingFriendRequest ? "disabled" : ""}
+      >
+        ${preview.isFriend ? "Friends" : preview.pendingFriendRequest ? "Request sent" : "Add friend"}
+      </button>
+    `
+    : `
+      <button class="button subtle" type="button" data-action="share-profile-placeholder">Share profile</button>
+      <button class="button subtle" type="button" data-action="share-round-summary-placeholder">Round brag card</button>
+    `;
 
   if (comparison && !comparisonGate.locked) {
     return `
@@ -9717,7 +10192,7 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
             <p class="eyebrow">Player comparison</p>
             <h3>${escapeHtml(title)}</h3>
           </div>
-          <span class="status-pill">${escapeHtml(comparison.right.formLabel)}</span>
+          <span class="status-pill">${escapeHtml(isCurrentUser ? comparison.right.formLabel : preview.relationshipLabel)}</span>
         </div>
         <div class="comparison-grid comparison-player-grid">
           <article class="comparison-player-card">
@@ -9761,6 +10236,12 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
             <span>Home course</span>
             <strong>${escapeHtml(comparison.left.homeCourse || "Private")} / ${escapeHtml(comparison.right.homeCourse || "Private")}</strong>
           </article>
+          ${!isCurrentUser ? `
+            <article>
+              <span>Connection</span>
+              <strong>${escapeHtml(preview.relationshipLabel)}</strong>
+            </article>
+          ` : ""}
         </div>
         <div class="competitive-section-block">
           <p class="mini-label">Recent rounds</p>
@@ -9784,8 +10265,7 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
             </div>
           `}
         <div class="row-actions competitive-action-row">
-          <button class="button subtle" type="button" data-action="share-profile-placeholder">Share your card</button>
-          <button class="button subtle" type="button" data-action="share-round-summary-placeholder">Share round summary</button>
+          ${relationshipAction}
         </div>
       </article>
     `;
@@ -9805,6 +10285,10 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
           <strong>${escapeHtml(preview.displayName)}</strong>
           <p>${escapeHtml(preview.username)} / ${escapeHtml(preview.headToHeadLabel)}</p>
         </div>
+      </div>
+      <div class="competitive-public-strip">
+        <span>${escapeHtml(preview.relationshipLabel)}</span>
+        <span>${escapeHtml(preview.recentFormSummary)}</span>
       </div>
       <div class="summary-grid compact">
         <article>
@@ -9868,14 +10352,9 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
           ? preview.smartInsights.map((insight) => `<div class="feature-row">${escapeHtml(insight)}</div>`).join("")
           : ""}
       </div>
-      ${isCurrentUser
-        ? `
-          <div class="row-actions competitive-action-row">
-            <button class="button subtle" type="button" data-action="share-profile-placeholder">Share profile</button>
-            <button class="button subtle" type="button" data-action="share-round-summary-placeholder">Round brag card</button>
-          </div>
-        `
-        : ""}
+      <div class="row-actions competitive-action-row">
+        ${relationshipAction}
+      </div>
     </article>
   `;
 }
@@ -9893,12 +10372,14 @@ function renderNearbyRoundRows(nearbyGames, {
       <div>
         <strong>${escapeHtml(game.title)}</strong>
         <p>${escapeHtml(game.courseName)} / ${escapeHtml(game.modeLabel)} / ${escapeHtml(game.statusLabel || `${game.playerCount || 0} golfers`)}</p>
+        ${game.socialSummary ? `<p>${escapeHtml(game.socialSummary)}</p>` : ""}
       </div>
       <div class="list-metrics ${compact ? "" : "discovery-list-metrics"}">
         <span>${escapeHtml(game.distance)}</span>
         ${compact ? "" : `<span>${escapeHtml(game.transport)}</span>`}
         <span>${escapeHtml(game.inviteCode)}</span>
-        <button class="button subtle" type="button" data-action="quick-join-code" data-code="${game.inviteCode}">${escapeHtml(actionLabel)}</button>
+        ${game.friendCount ? `<span class="status-pill">${game.friendCount} ${game.friendCount === 1 ? "friend" : "friends"}</span>` : ""}
+        <button class="button subtle" type="button" data-action="quick-join-code" data-code="${game.inviteCode}">${escapeHtml(game.joinActionLabel || actionLabel)}</button>
       </div>
     </article>
   `).join("");
@@ -9924,6 +10405,7 @@ function renderNearbyPlayerRows(nearbyPlayers) {
         </div>
       </div>
       <div class="nearby-player-support">
+        <span class="nearby-player-badge">${escapeHtml(player.relationshipLabel)}</span>
         <span>${escapeHtml(player.detail)}</span>
         <span>${escapeHtml(player.statsSummary)}</span>
         ${player.homeCourse ? `<span>${escapeHtml(player.homeCourse)}</span>` : ""}
@@ -9931,7 +10413,10 @@ function renderNearbyPlayerRows(nearbyPlayers) {
       </div>
       <div class="row-actions nearby-player-actions">
         <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(player.profileId)}">${player.isLive ? "View live card" : "View card"}</button>
-        ${player.inviteCode ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${player.inviteCode}">Join round</button>` : ""}
+        ${player.inviteCode
+          ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${player.inviteCode}">${escapeHtml(player.joinActionLabel || "Join round")}</button>`
+          : `<button class="button secondary" type="button" data-action="request-round-invite" data-profile-id="${escapeHtml(player.profileId)}">${player.pendingFriendRequest ? "Invite pending" : "Join request"}</button>`}
+        <button class="button subtle" type="button" data-action="toggle-follow-profile" data-profile-id="${escapeHtml(player.profileId)}">${player.isFollowed ? "Following" : "Follow"}</button>
       </div>
     </article>
   `).join("");
@@ -10970,7 +11455,7 @@ function renderHomeView(state) {
               ${completedRounds
                 .slice(0, 2)
                 .map((round) => {
-                  const summary = getRoundSummary(round, state.currentUser.id);
+                  const summary = getRoundSummaryForState(state, round);
                   return `
                     <article class="list-row large">
                       <div>
@@ -11331,6 +11816,57 @@ function renderCompetitiveSpotlights(summary) {
   `;
 }
 
+function renderCompetitionLayerCard(summary) {
+  const friendRows = summary?.friendLeaderboard?.entries || [];
+  const sideGame = summary?.sideGame;
+  const tournamentScaffold = summary?.tournamentScaffold;
+
+  if (!friendRows.length && !sideGame && !tournamentScaffold) {
+    return "";
+  }
+
+  return `
+    <article class="card round-support-card competition-layer-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Competition layer</p>
+          <h3>Social pressure and side games</h3>
+        </div>
+      </div>
+      ${friendRows.length
+        ? `
+          <div class="stack-list compact-stack">
+            <p class="mini-label">${escapeHtml(summary.friendLeaderboard.title)}</p>
+            ${friendRows.map((entry) => `
+              <div class="feature-row">
+                <strong>${escapeHtml(entry.name)}</strong>
+                <span>${escapeHtml(entry.relationshipLabel)} / #${entry.rank} / ${escapeHtml(entry.displayStatus)}</span>
+              </div>
+            `).join("")}
+          </div>
+        `
+        : ""}
+      ${sideGame
+        ? `
+          <div class="stack-list compact-stack">
+            <p class="mini-label">${escapeHtml(sideGame.title)}</p>
+            <div class="feature-row">${escapeHtml(sideGame.swingLabel)}</div>
+            <div class="feature-row">${escapeHtml(sideGame.detail)}</div>
+          </div>
+        `
+        : ""}
+      ${tournamentScaffold
+        ? `
+          <div class="feature-row">
+            <strong>${escapeHtml(tournamentScaffold.title)}</strong>
+            <span>${escapeHtml(tournamentScaffold.detail)}</span>
+          </div>
+        `
+        : ""}
+    </article>
+  `;
+}
+
 function getCompetitiveFeedback(round, summary, participantId) {
   const leaderboard = summary?.leaderboard || [];
   const entry = leaderboard.find((item) => item.id === participantId);
@@ -11386,7 +11922,7 @@ function renderHoleEditor(state, round) {
   const selectedHole = state.session.selectedHole;
   const hole = round.holes.find((item) => item.number === selectedHole) || round.holes[0];
   const participants = getScoringParticipants(round);
-  const summary = getRoundSummary(round, state.currentUser.id);
+  const summary = getRoundSummaryForState(state, round);
   const progress = getRoundProgress(round);
   const roundSafety = getRoundSavePresentation(round);
   const localParticipantId = summary.localParticipant?.id;
@@ -11720,7 +12256,7 @@ function renderHoleEditor(state, round) {
 }
 
 function renderLeaderboardCard(state, round) {
-  const summary = getRoundSummary(round, state.currentUser.id);
+  const summary = getRoundSummaryForState(state, round);
   const leader = summary.leaderboard[0];
   const localEntry = summary.leaderboard.find((entry) => entry.isLocal);
 
@@ -11830,7 +12366,7 @@ function renderLiveStateCard(state, round, group) {
 
 function renderRoundControlCard(state, round) {
   const progress = getRoundProgress(round);
-  const summary = getRoundSummary(round, state.currentUser.id);
+  const summary = getRoundSummaryForState(state, round);
   const canFinish = progress.completedHoles > 0;
   const saveInProgress = state.session?.cloudSync?.status === "syncing"
     && state.session?.cloudSync?.scope === "round-finish"
@@ -11894,7 +12430,7 @@ function renderRoundView(state) {
   }
 
   const progress = getRoundProgress(activeRound);
-  const summary = getRoundSummary(activeRound, state.currentUser.id);
+  const summary = getRoundSummaryForState(state, activeRound);
 
   return `
     <section class="view-grid round-grid round-grid-live">
@@ -11927,6 +12463,7 @@ function renderRoundView(state) {
         <div class="round-support-stack">
           ${renderLiveStateCard(state, activeRound, activeGroup)}
           ${renderLeaderboardCard(state, activeRound)}
+          ${renderCompetitionLayerCard(summary)}
           ${renderRoundControlCard(state, activeRound)}
         </div>
         ${renderCompetitivePreviewCard(
@@ -12094,7 +12631,7 @@ function renderStatsView(state) {
   const partners = getFrequentPartners(state.rounds, state.currentUser.id);
   const completedRounds = getCompletedRounds(state);
   const summaryRound = getSummaryRound(state);
-  const selectedSummary = summaryRound ? getRoundSummary(summaryRound, state.currentUser.id) : null;
+  const selectedSummary = summaryRound ? getRoundSummaryForState(state, summaryRound) : null;
   const selectedProfileId = state.session.selectedProfileId || state.currentUser.profileId;
   const currentCompetitivePreview = buildCompetitivePreview(state, state.currentUser.profileId, state.currentUser.profileId);
   const showingOtherProfile = selectedProfileId && selectedProfileId !== state.currentUser.profileId;
@@ -12254,7 +12791,7 @@ function renderStatsView(state) {
             <div class="stack-list">
               ${completedRounds
                 .map((round) => {
-                  const summary = getRoundSummary(round, state.currentUser.id);
+                  const summary = getRoundSummaryForState(state, round);
                   return `
                     <article class="list-row large">
                       <div>
@@ -12385,6 +12922,7 @@ function renderCommunityView(state) {
         <div class="row-actions">
           <button class="button secondary" type="button" data-action="host-active-round" ${activeRound ? "" : "disabled"}>Host active round</button>
           ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Copy code</button>` : ""}
+          <button class="button subtle" type="button" data-action="invite-friends">Invite a golfer</button>
           <button class="button subtle" type="button" data-action="enable-nearby" ${activeRound ? "" : "disabled"}>Nearby sync</button>
           <button class="button subtle" type="button" data-action="enable-bluetooth" ${activeRound ? "" : "disabled"}>Bluetooth sync</button>
         </div>
@@ -14743,6 +15281,78 @@ function bootstrapApp({
       return;
     }
 
+    if (action === "toggle-follow-profile") {
+      store.setState((draft) => {
+        const profileId = actionElement.dataset.profileId || "";
+        const profile = draft.profiles.find((entry) => entry.id === profileId);
+        const result = toggleFollowProfile(draft, profileId);
+        if (!result.changed) {
+          return draft;
+        }
+
+        appendActivity(
+          draft,
+          `${draft.currentUser.displayName} ${result.isFollowed ? "followed" : "unfollowed"} ${profile?.publicProfile?.displayName || "a golfer"}.`,
+          "profile"
+        );
+        setFeedback(
+          draft,
+          "success",
+          result.isFollowed ? "Following golfer" : "Follow removed",
+          result.isFollowed
+            ? `${profile?.publicProfile?.displayName || "This golfer"} will stay easier to find in nearby discovery and comparison cards.`
+            : `${profile?.publicProfile?.displayName || "This golfer"} was removed from your followed list.`
+        );
+        return draft;
+      }, { reason: "toggle-follow-profile" });
+      return;
+    }
+
+    if (action === "request-friend-profile") {
+      store.setState((draft) => {
+        const profileId = actionElement.dataset.profileId || "";
+        const profile = draft.profiles.find((entry) => entry.id === profileId);
+        const result = requestFriendProfile(draft, profileId);
+        if (!result.changed) {
+          setFeedback(
+            draft,
+            "info",
+            result.status === "already-friends" ? "Already friends" : "Friend request already sent",
+            result.status === "already-friends"
+              ? `${profile?.publicProfile?.displayName || "This golfer"} is already in your friend layer.`
+              : `${profile?.publicProfile?.displayName || "This golfer"} already has a pending friend request scaffold.`
+          );
+          return draft;
+        }
+
+        appendActivity(draft, `${draft.currentUser.displayName} sent a friend request to ${profile?.publicProfile?.displayName || "a golfer"}.`, "profile");
+        setFeedback(
+          draft,
+          "success",
+          "Friend request sent",
+          `${profile?.publicProfile?.displayName || "This golfer"} is now on your follow list and ready for future friend acceptance flows.`
+        );
+        return draft;
+      }, { reason: "request-friend-profile" });
+      return;
+    }
+
+    if (action === "request-round-invite") {
+      store.setState((draft) => {
+        const profileId = actionElement.dataset.profileId || "";
+        const profile = draft.profiles.find((entry) => entry.id === profileId);
+        appendActivity(draft, `${draft.currentUser.displayName} requested a round invite from ${profile?.publicProfile?.displayName || "a nearby golfer"}.`, "sync");
+        setFeedback(
+          draft,
+          "success",
+          "Join request ready",
+          `${profile?.publicProfile?.displayName || "That golfer"} can be invited through a future direct friend flow. For now, nearby join and invite codes stay as the live path.`
+        );
+        return draft;
+      }, { reason: "request-round-invite" });
+      return;
+    }
+
     if (action === "open-current-profile") {
       store.setState((draft) => {
         draft.session.selectedProfileId = draft.currentUser.profileId;
@@ -14895,11 +15505,15 @@ function bootstrapApp({
 
     if (action === "invite-friends") {
       store.setState((draft) => {
+        const activeRound = draft.rounds.find((round) => round.id === draft.session.activeRoundId) || null;
+        const inviteCode = activeRound?.inviteCode || draft.groups.find((group) => group.roundId === activeRound?.id)?.inviteCode || "";
         setFeedback(
           draft,
           "success",
-          "Invite flow ready",
-          "Invite-code rounds are the current friend path. Start or host a round, then share the code with your group."
+          "Invite golfers",
+          inviteCode
+            ? `Invite code ${inviteCode} is the fastest live path right now. Nearby discovery and direct friend requests are scaffolded on top of that flow.`
+            : "Start or host a round first, then use the invite code or nearby discovery flow to bring golfers into the same card."
         );
         return draft;
       }, { reason: "invite-friends" });

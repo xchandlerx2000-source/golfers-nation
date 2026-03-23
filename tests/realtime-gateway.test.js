@@ -329,6 +329,80 @@ describe("supabase realtime gateway", () => {
     expect(nextState.rounds[0].players.some((player) => player.userId === "joiner-user-4")).toBe(true);
   });
 
+  it("still applies a joiner member-state when the host must resolve by round and session ids", async () => {
+    FakeRealtimeSocket.instances.length = 0;
+    const state = createDefaultState();
+    const store = createStore(state);
+
+    store.setState((draft) => {
+      const round = createRound({
+        currentUser: draft.currentUser,
+        courseName: "The Country Club at Golden Nugget",
+        teeBox: "Gold",
+        mode: "stroke",
+        players: [draft.currentUser.displayName],
+        syncTransport: "invite",
+      });
+      const hosted = hostRoundGroup({ state: draft, round });
+      round.inviteCode = hosted.inviteCode;
+      round.groupId = hosted.group.id;
+      draft.rounds.unshift(round);
+      draft.groups.unshift(hosted.group);
+      draft.session.activeRoundId = round.id;
+      return draft;
+    });
+
+    const bridge = createBridge();
+    const gateway = createSupabaseRealtimeGatewayFactory({
+      bridge,
+      WebSocketFactory: FakeRealtimeSocket,
+      windowRef: null,
+    });
+    const session = gateway.createSession({ store });
+    const hostedRound = store.getState().rounds[0];
+    const hostedGroup = store.getState().groups[0];
+
+    await session.hostRoundSession(hostedRound.id);
+
+    store.setState((draft) => {
+      draft.rounds[0].inviteCode = "";
+      draft.groups[0].inviteCode = "";
+      return draft;
+    }, { reason: "test-clear-invite-links" });
+
+    const socket = FakeRealtimeSocket.instances[0];
+    socket.emit("message", {
+      data: JSON.stringify({
+        topic: `realtime:gn-live-round:${hostedRound.inviteCode}`,
+        event: "broadcast",
+        payload: {
+          type: "broadcast",
+          event: "member-state",
+          payload: {
+            inviteCode: hostedRound.inviteCode,
+            roundId: hostedRound.id,
+            sessionId: hostedGroup.id,
+            member: {
+              id: "member-joiner-5",
+              playerId: "player-joiner-5",
+              profileId: "profile-joiner-5",
+              userId: "joiner-user-5",
+              displayName: "Lookup Joiner",
+              username: "@lookupjoiner",
+              avatarLabel: "LJ",
+              role: "player",
+              connectionState: "connected",
+            },
+          },
+        },
+      }),
+    });
+
+    const nextState = store.getState();
+    expect(nextState.groups[0].members.some((member) => member.userId === "joiner-user-5")).toBe(true);
+    expect(nextState.rounds[0].players.some((player) => player.userId === "joiner-user-5")).toBe(true);
+  });
+
   it("reconciles the live room from Supabase when a join snapshot is persisted but a broadcast is missed", async () => {
     FakeRealtimeSocket.instances.length = 0;
     const intervals = [];

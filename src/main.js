@@ -30,7 +30,13 @@ import {
   stepSpotifyQueue,
   toggleSpotifyPlayback,
 } from "./integrations/spotify-service.js";
-import { ensureProfilesForNames, refreshProfileSnapshots, syncCurrentUserProfile } from "./services/player-service.js";
+import {
+  ensureProfilesForNames,
+  refreshProfileSnapshots,
+  requestFriendProfile,
+  syncCurrentUserProfile,
+  toggleFollowProfile,
+} from "./services/player-service.js";
 import { createProductPlatform } from "./services/product-platform.js";
 import { createManualCourseSelection, createRoundCourseSelection } from "./services/course-library.js";
 import { describeLiveRoomFailure, hostLiveRoundSession, joinLiveRoundSession, publishLiveRoundUpdate } from "./services/realtime-session-service.js";
@@ -1628,6 +1634,78 @@ export function bootstrapApp({
       return;
     }
 
+    if (action === "toggle-follow-profile") {
+      store.setState((draft) => {
+        const profileId = actionElement.dataset.profileId || "";
+        const profile = draft.profiles.find((entry) => entry.id === profileId);
+        const result = toggleFollowProfile(draft, profileId);
+        if (!result.changed) {
+          return draft;
+        }
+
+        appendActivity(
+          draft,
+          `${draft.currentUser.displayName} ${result.isFollowed ? "followed" : "unfollowed"} ${profile?.publicProfile?.displayName || "a golfer"}.`,
+          "profile"
+        );
+        setFeedback(
+          draft,
+          "success",
+          result.isFollowed ? "Following golfer" : "Follow removed",
+          result.isFollowed
+            ? `${profile?.publicProfile?.displayName || "This golfer"} will stay easier to find in nearby discovery and comparison cards.`
+            : `${profile?.publicProfile?.displayName || "This golfer"} was removed from your followed list.`
+        );
+        return draft;
+      }, { reason: "toggle-follow-profile" });
+      return;
+    }
+
+    if (action === "request-friend-profile") {
+      store.setState((draft) => {
+        const profileId = actionElement.dataset.profileId || "";
+        const profile = draft.profiles.find((entry) => entry.id === profileId);
+        const result = requestFriendProfile(draft, profileId);
+        if (!result.changed) {
+          setFeedback(
+            draft,
+            "info",
+            result.status === "already-friends" ? "Already friends" : "Friend request already sent",
+            result.status === "already-friends"
+              ? `${profile?.publicProfile?.displayName || "This golfer"} is already in your friend layer.`
+              : `${profile?.publicProfile?.displayName || "This golfer"} already has a pending friend request scaffold.`
+          );
+          return draft;
+        }
+
+        appendActivity(draft, `${draft.currentUser.displayName} sent a friend request to ${profile?.publicProfile?.displayName || "a golfer"}.`, "profile");
+        setFeedback(
+          draft,
+          "success",
+          "Friend request sent",
+          `${profile?.publicProfile?.displayName || "This golfer"} is now on your follow list and ready for future friend acceptance flows.`
+        );
+        return draft;
+      }, { reason: "request-friend-profile" });
+      return;
+    }
+
+    if (action === "request-round-invite") {
+      store.setState((draft) => {
+        const profileId = actionElement.dataset.profileId || "";
+        const profile = draft.profiles.find((entry) => entry.id === profileId);
+        appendActivity(draft, `${draft.currentUser.displayName} requested a round invite from ${profile?.publicProfile?.displayName || "a nearby golfer"}.`, "sync");
+        setFeedback(
+          draft,
+          "success",
+          "Join request ready",
+          `${profile?.publicProfile?.displayName || "That golfer"} can be invited through a future direct friend flow. For now, nearby join and invite codes stay as the live path.`
+        );
+        return draft;
+      }, { reason: "request-round-invite" });
+      return;
+    }
+
     if (action === "open-current-profile") {
       store.setState((draft) => {
         draft.session.selectedProfileId = draft.currentUser.profileId;
@@ -1780,11 +1858,15 @@ export function bootstrapApp({
 
     if (action === "invite-friends") {
       store.setState((draft) => {
+        const activeRound = draft.rounds.find((round) => round.id === draft.session.activeRoundId) || null;
+        const inviteCode = activeRound?.inviteCode || draft.groups.find((group) => group.roundId === activeRound?.id)?.inviteCode || "";
         setFeedback(
           draft,
           "success",
-          "Invite flow ready",
-          "Invite-code rounds are the current friend path. Start or host a round, then share the code with your group."
+          "Invite golfers",
+          inviteCode
+            ? `Invite code ${inviteCode} is the fastest live path right now. Nearby discovery and direct friend requests are scaffolded on top of that flow.`
+            : "Start or host a round first, then use the invite code or nearby discovery flow to bring golfers into the same card."
         );
         return draft;
       }, { reason: "invite-friends" });

@@ -282,6 +282,70 @@ export function getProfileForPlayer(state, player) {
   return player?.profileId ? getProfileById(state, player.profileId) : null;
 }
 
+function getCurrentSocialSettings(state) {
+  return state?.currentUser?.social || {};
+}
+
+function getUniqueSocialIds(value) {
+  return Array.isArray(value)
+    ? [...new Set(value.filter(Boolean))]
+    : [];
+}
+
+export function getFollowedProfileIds(state) {
+  return getUniqueSocialIds(getCurrentSocialSettings(state).followedProfileIds);
+}
+
+export function getFriendProfileIds(state) {
+  return getUniqueSocialIds(getCurrentSocialSettings(state).friendProfileIds);
+}
+
+export function getPendingFriendProfileIds(state) {
+  return getUniqueSocialIds(getCurrentSocialSettings(state).pendingFriendProfileIds);
+}
+
+export function isProfileFollowed(state, profileId) {
+  return Boolean(profileId) && getFollowedProfileIds(state).includes(profileId);
+}
+
+export function isProfileFriend(state, profileId) {
+  return Boolean(profileId) && getFriendProfileIds(state).includes(profileId);
+}
+
+export function hasPendingFriendRequest(state, profileId) {
+  return Boolean(profileId) && getPendingFriendProfileIds(state).includes(profileId);
+}
+
+function buildProfileRelationship(state, profileId) {
+  if (!profileId || profileId === state.currentUser?.profileId) {
+    return {
+      isCurrentUser: true,
+      isFollowed: false,
+      isFriend: false,
+      pendingFriendRequest: false,
+      label: "Your golfer profile",
+    };
+  }
+
+  const isFriend = isProfileFriend(state, profileId);
+  const pendingFriendRequest = hasPendingFriendRequest(state, profileId);
+  const isFollowed = isFriend || isProfileFollowed(state, profileId);
+
+  return {
+    isCurrentUser: false,
+    isFollowed,
+    isFriend,
+    pendingFriendRequest,
+    label: isFriend
+      ? "Friend"
+      : pendingFriendRequest
+        ? "Friend request sent"
+        : isFollowed
+          ? "Following"
+          : "Public golfer",
+  };
+}
+
 export function buildProfileRoundStats(state, profileId) {
   const profile = getProfileById(state, profileId);
   const appearances = state.rounds
@@ -329,6 +393,7 @@ export function buildCompetitivePreview(state, profileId, opponentProfileId = nu
   }
 
   const stats = buildProfileRoundStats(state, profileId);
+  const relationship = buildProfileRelationship(state, profileId);
   const headToHeadRounds = opponentProfileId
     ? state.rounds.filter((round) => {
         const profileIds = new Set(round.players.map((player) => player.profileId));
@@ -366,6 +431,85 @@ export function buildCompetitivePreview(state, profileId, opponentProfileId = nu
     homeCourse: profile.privateProfile.privacy.showHomeCourse ? profile.publicProfile.homeCourse : "",
     handicap: profile.privateProfile.privacy.showHandicap ? profile.publicProfile.handicap : null,
     bio: profile.privateProfile.privacy.showBio ? profile.publicProfile.bio : "",
+    relationship,
+    isFollowed: relationship.isFollowed,
+    isFriend: relationship.isFriend,
+    pendingFriendRequest: relationship.pendingFriendRequest,
+    relationshipLabel: relationship.label,
+  };
+}
+
+export function buildFriendLeaderboard(state) {
+  const candidateIds = [...new Set([
+    ...getFriendProfileIds(state),
+    ...getFollowedProfileIds(state),
+  ])];
+
+  return candidateIds
+    .map((profileId) => buildCompetitivePreview(state, profileId, state.currentUser.profileId))
+    .filter(Boolean)
+    .sort((left, right) =>
+      Number(right.isFriend) - Number(left.isFriend)
+      || Number(right.isFollowed) - Number(left.isFollowed)
+      || (left.averageScore ?? Number.POSITIVE_INFINITY) - (right.averageScore ?? Number.POSITIVE_INFINITY)
+      || right.roundsPlayed - left.roundsPlayed
+      || left.displayName.localeCompare(right.displayName)
+    );
+}
+
+export function toggleFollowProfile(draft, profileId) {
+  if (!profileId || profileId === draft.currentUser?.profileId) {
+    return { changed: false, isFollowed: false };
+  }
+
+  const followed = new Set(getUniqueSocialIds(draft.currentUser?.social?.followedProfileIds));
+  const alreadyFollowed = followed.has(profileId);
+
+  if (alreadyFollowed) {
+    followed.delete(profileId);
+  } else {
+    followed.add(profileId);
+  }
+
+  draft.currentUser.social = {
+    ...(draft.currentUser.social || {}),
+    followedProfileIds: [...followed],
+  };
+
+  return {
+    changed: true,
+    isFollowed: !alreadyFollowed,
+  };
+}
+
+export function requestFriendProfile(draft, profileId) {
+  if (!profileId || profileId === draft.currentUser?.profileId) {
+    return { changed: false, status: "invalid" };
+  }
+
+  const friendIds = new Set(getUniqueSocialIds(draft.currentUser?.social?.friendProfileIds));
+  if (friendIds.has(profileId)) {
+    return { changed: false, status: "already-friends" };
+  }
+
+  const pendingIds = new Set(getUniqueSocialIds(draft.currentUser?.social?.pendingFriendProfileIds));
+  if (pendingIds.has(profileId)) {
+    return { changed: false, status: "pending" };
+  }
+
+  const followedIds = new Set(getUniqueSocialIds(draft.currentUser?.social?.followedProfileIds));
+  followedIds.add(profileId);
+  pendingIds.add(profileId);
+
+  draft.currentUser.social = {
+    ...(draft.currentUser.social || {}),
+    followedProfileIds: [...followedIds],
+    pendingFriendProfileIds: [...pendingIds],
+  };
+
+  return {
+    changed: true,
+    status: "requested",
   };
 }
 

@@ -42,13 +42,16 @@ describe("mock api discovery scaffolding", () => {
 
     expect(nearbyGames[0]).toEqual(expect.objectContaining({
       inviteCode: "GLD123",
+      joinActionLabel: "Join friends",
       playerCount: 2,
       statusLabel: "Hole 4 / 2 golfers",
     }));
     expect(maya).toEqual(expect.objectContaining({
       displayName: "Maya Chen",
       inviteCode: "GLD123",
+      isFriend: true,
       isLive: true,
+      relationshipLabel: "Friend",
       statusLabel: "In a live nearby round",
     }));
   });
@@ -62,5 +65,15 @@ describe("mock api discovery scaffolding", () => {
     const nearbyPlayers = listNearbyPlayers(state);
 
     expect(nearbyPlayers.some((player) => player.profileId === "profile-jordan")).toBe(false);
+  });
+
+  it("sorts nearby players with friend and follow context first", () => {
+    const state = createDefaultState();
+
+    const nearbyPlayers = listNearbyPlayers(state);
+
+    expect(nearbyPlayers[0].profileId).toBe("profile-maya");
+    expect(nearbyPlayers[0].relationshipLabel).toBe("Friend");
+    expect(nearbyPlayers.some((player) => player.profileId === "profile-theo" && player.isFollowed)).toBe(true);
   });
 });
