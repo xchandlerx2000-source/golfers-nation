@@ -1142,11 +1142,17 @@ export function bootstrapApp({
     }, { reason: "host-live-round-fallback" });
   };
 
-  store.subscribe((state) => {
+  store.subscribe((state, meta = {}) => {
     try {
       platform.data.persist(platform.data.prepareForPersistence(state));
     } catch (error) {
       console.error("[Golfers Nation] Failed to persist app state.", error);
+    }
+    if (["realtime-member-state", "realtime-round-event", "realtime-round-snapshot"].includes(meta.reason)) {
+      console.info("[Golfers Nation] Rerender triggered after live sync update.", {
+        reason: meta.reason,
+        activeRoundId: state.session?.activeRoundId || null,
+      });
     }
     safeRender(state, "state-render");
     applyAppearanceToDocument(state);

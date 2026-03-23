@@ -108,6 +108,83 @@ function createPlayerRecord(currentUser) {
   };
 }
 
+function ensureMemberOnRound(round, member) {
+  if (!round || !member) {
+    return { participantId: null, added: false };
+  }
+
+  const normalizedName = normalizeComparable(member.displayName);
+  const normalizedUsername = normalizeComparable(member.username);
+  let participant = (round.players || []).find((player) =>
+    player.id === member.playerId
+      || player.userId === member.userId
+      || player.profileId === member.profileId
+  ) || null;
+
+  if (!participant) {
+    participant = (round.players || []).find((player) => {
+      const playerName = normalizeComparable(player.displayName || player.name);
+      const playerUsername = normalizeComparable(player.username);
+      return (!player.userId && !player.profileId)
+        && (playerName === normalizedName || (normalizedUsername && playerUsername === normalizedUsername));
+    }) || null;
+  }
+
+  let added = false;
+
+  if (!participant) {
+    participant = {
+      id: member.playerId || uid("player"),
+      profileId: member.profileId || null,
+      userId: member.userId || null,
+      name: member.displayName || "Golfer",
+      displayName: member.displayName || "Golfer",
+      username: member.username || normalizeComparable(member.displayName || "golfer"),
+      avatarLabel: member.avatarLabel || "GN",
+      role: member.role === "host" ? "owner" : "guest",
+    };
+    round.players = Array.isArray(round.players) ? round.players : [];
+    round.players.push(participant);
+    added = true;
+
+    if (round.mode === "stroke") {
+      round.holes.forEach((hole) => {
+        hole.entries = Array.isArray(hole.entries) ? hole.entries : [];
+        hole.entries.push(createStrokeEntry(participant.id));
+      });
+    } else if (Array.isArray(round.sides) && round.sides.length) {
+      const targetSide = [...round.sides].sort((left, right) => left.playerIds.length - right.playerIds.length)[0];
+      if (targetSide) {
+        targetSide.playerIds.push(participant.id);
+        targetSide.playerNames = targetSide.playerIds
+          .map((playerId) => round.players.find((player) => player.id === playerId)?.name || "")
+          .filter(Boolean);
+      }
+    }
+  }
+
+  participant.id = member.playerId || participant.id;
+  participant.profileId = member.profileId || participant.profileId || null;
+  participant.userId = member.userId || participant.userId || null;
+  participant.name = member.displayName || participant.name;
+  participant.displayName = member.displayName || participant.displayName || participant.name;
+  participant.username = member.username || participant.username;
+  participant.avatarLabel = member.avatarLabel || participant.avatarLabel || "GN";
+
+  if (Array.isArray(round.sides)) {
+    round.sides.forEach((side) => {
+      side.playerNames = side.playerIds
+        .map((playerId) => round.players.find((player) => player.id === playerId)?.name || "")
+        .filter(Boolean);
+    });
+  }
+
+  return {
+    participantId: participant.id,
+    added,
+  };
+}
+
 function ensureCurrentUserOnRound(round, group, currentUser) {
   if (!round || !currentUser?.id) {
     return { round, group, participantId: null, added: false };
@@ -624,12 +701,20 @@ export function createSupabaseRealtimeGatewayFactory({
 
         store.setState((draft) => {
           const group = (draft.groups || []).find((entry) => entry.inviteCode === payload.inviteCode);
-          if (!group) {
+          const round = (draft.rounds || []).find((entry) =>
+            entry.inviteCode === payload.inviteCode || (group && entry.id === group.roundId)
+          );
+          if (!group && !round) {
             return draft;
           }
 
-          group.members = Array.isArray(group.members) ? group.members : [];
-          let member = group.members.find((entry) =>
+          const beforeMemberCount = group?.members?.length || 0;
+          const beforePlayerCount = round?.players?.length || 0;
+
+          if (group) {
+            group.members = Array.isArray(group.members) ? group.members : [];
+          }
+          let member = group?.members?.find((entry) =>
             entry.userId === payload.member.userId || entry.profileId === payload.member.profileId
           ) || null;
 
@@ -645,12 +730,33 @@ export function createSupabaseRealtimeGatewayFactory({
               role: payload.member.role || "player",
               connectionState: payload.member.connectionState || "connected",
             };
-            group.members.push(member);
+            group?.members?.push(member);
           } else {
             Object.assign(member, payload.member);
           }
 
-          group.updatedAt = now();
+          if (group) {
+            group.updatedAt = now();
+          }
+
+          if (round) {
+            ensureMemberOnRound(round, {
+              ...payload.member,
+              playerId: payload.member.playerId || member?.playerId || null,
+            });
+            markRoundConnected(round, {
+              at: now(),
+              note: `${payload.member.displayName || "A golfer"} joined the live round.`,
+            });
+          }
+
+          console.info("[Golfers Nation] Host participant merge after member-state.", {
+            inviteCode: payload.inviteCode,
+            membersBefore: beforeMemberCount,
+            membersAfter: group?.members?.length || 0,
+            playersBefore: beforePlayerCount,
+            playersAfter: round?.players?.length || 0,
+          });
           return draft;
         }, { reason: "realtime-member-state" });
       }
@@ -1015,6 +1121,23 @@ export function createSupabaseRealtimeGatewayFactory({
         }
 
         if (ensuredIdentity.added) {
+          const joiningMember = group?.members?.find((member) => member.userId === store.getState().currentUser.id)
+            || {
+              id: uid("member"),
+              playerId: ensuredIdentity.participantId,
+              profileId: store.getState().currentUser.profileId,
+              userId: store.getState().currentUser.id,
+              displayName: store.getState().currentUser.displayName || store.getState().currentUser.name,
+              username: store.getState().currentUser.username,
+              avatarLabel: store.getState().currentUser.avatarLabel,
+              role: "player",
+              connectionState: "connected",
+            };
+          const topic = createRealtimeTopic(liveSession.inviteCode);
+          await bridge.broadcastRealtimeMessage(topic, "member-state", {
+            inviteCode: liveSession.inviteCode,
+            member: joiningMember,
+          });
           await upsertLiveSessionFromRound(round, group, {
             broadcast: true,
           });

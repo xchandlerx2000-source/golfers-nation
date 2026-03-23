@@ -9,6 +9,7 @@ import { createStore } from "../src/state/store.js";
 
 class FakeRealtimeSocket {
   constructor() {
+    FakeRealtimeSocket.instances.push(this);
     this.readyState = 0;
     this.listeners = {
       open: [],
@@ -56,6 +57,7 @@ class FakeRealtimeSocket {
     this.listeners[type].forEach((listener) => listener(payload));
   }
 }
+FakeRealtimeSocket.instances = [];
 
 function createBridge(overrides = {}) {
   return {
@@ -183,5 +185,71 @@ describe("supabase realtime gateway", () => {
         }),
       })
     );
+  });
+
+  it("updates the host round player list immediately when a member-state event arrives", async () => {
+    FakeRealtimeSocket.instances.length = 0;
+    const state = createDefaultState();
+    const store = createStore(state);
+
+    store.setState((draft) => {
+      const round = createRound({
+        currentUser: draft.currentUser,
+        courseName: "The Country Club at Golden Nugget",
+        teeBox: "Gold",
+        mode: "stroke",
+        players: [draft.currentUser.displayName],
+        syncTransport: "invite",
+      });
+      const hosted = hostRoundGroup({ state: draft, round });
+      round.inviteCode = hosted.inviteCode;
+      round.groupId = hosted.group.id;
+      draft.rounds.unshift(round);
+      draft.groups.unshift(hosted.group);
+      draft.session.activeRoundId = round.id;
+      return draft;
+    });
+
+    const bridge = createBridge();
+    const gateway = createSupabaseRealtimeGatewayFactory({
+      bridge,
+      WebSocketFactory: FakeRealtimeSocket,
+      windowRef: null,
+    });
+    const session = gateway.createSession({ store });
+    const hostedRound = store.getState().rounds[0];
+
+    await session.hostRoundSession(hostedRound.id);
+
+    const socket = FakeRealtimeSocket.instances[0];
+    socket.emit("message", {
+      data: JSON.stringify({
+        topic: `realtime:gn-live-round:${hostedRound.inviteCode}`,
+        event: "broadcast",
+        payload: {
+          type: "broadcast",
+          event: "member-state",
+          payload: {
+            inviteCode: hostedRound.inviteCode,
+            member: {
+              id: "member-joiner-1",
+              playerId: "player-joiner-1",
+              profileId: "profile-joiner-1",
+              userId: "joiner-user-1",
+              displayName: "Joiner Golfer",
+              username: "@joiner",
+              avatarLabel: "JG",
+              role: "player",
+              connectionState: "connected",
+            },
+          },
+        },
+      }),
+    });
+
+    const nextState = store.getState();
+    expect(nextState.groups[0].members.some((member) => member.userId === "joiner-user-1")).toBe(true);
+    expect(nextState.rounds[0].players.some((player) => player.userId === "joiner-user-1")).toBe(true);
+    expect(nextState.rounds[0].holes[0].entries.some((entry) => entry.participantId === "player-joiner-1")).toBe(true);
   });
 });
