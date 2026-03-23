@@ -159,6 +159,23 @@ with check (auth.role() = 'authenticated');
 - Live score changes then move through Supabase Realtime channels keyed by the invite code.
 - This policy set is intentionally tester-friendly so any authenticated golfer with the code can join the shared round.
 - Before public launch, tighten these policies so only invited participants can read and update a live round session.
+- If Supabase Realtime public access is disabled in your project, also add authenticated Realtime policies:
+
+```sql
+create policy "authenticated can receive realtime broadcasts"
+on "realtime"."messages"
+for select
+to authenticated
+using (true);
+
+create policy "authenticated can send realtime broadcasts"
+on "realtime"."messages"
+for insert
+to authenticated
+with check (true);
+```
+
+- If you prefer public tester channels, keep Supabase Realtime "Allow public access" enabled.
 
 ## What is real now
 

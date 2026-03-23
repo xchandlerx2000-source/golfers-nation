@@ -6014,6 +6014,19 @@ function createSupabaseRealtimeGatewayFactory({
       const publishedEventIds = new Set();
       const localDeviceId = `realtime-device-${now()}`;
 
+      async function getRealtimeAccessToken() {
+        if (typeof bridge?.getActiveSession !== "function") {
+          return "";
+        }
+
+        try {
+          const active = await bridge.getActiveSession();
+          return active?.session?.access_token || "";
+        } catch (error) {
+          return "";
+        }
+      }
+
       function nextRef() {
         refCounter += 1;
         return String(refCounter);
@@ -6188,38 +6201,58 @@ function createSupabaseRealtimeGatewayFactory({
           leaveCurrentChannel();
         }
 
-        const joinRef = nextRef();
+        const accessToken = await getRealtimeAccessToken();
+        const attemptJoin = async (isPrivate) => {
+          const joinRef = nextRef();
 
-        const joined = new Promise((resolve, reject) => {
-          registerReply(joinRef, resolve, reject);
-        });
+          const joined = new Promise((resolve, reject) => {
+            registerReply(joinRef, resolve, reject);
+          });
 
-        sendSocketMessage({
-          topic: nextChannel,
-          event: "phx_join",
-          payload: {
-            config: {
-              broadcast: {
-                ack: false,
-                self: true,
+          sendSocketMessage({
+            topic: nextChannel,
+            event: "phx_join",
+            payload: {
+              config: {
+                broadcast: {
+                  ack: false,
+                  self: true,
+                },
+                presence: {
+                  enabled: false,
+                },
+                private: isPrivate,
               },
-              presence: {
-                enabled: false,
-              },
-              private: false,
+              ...(accessToken ? { access_token: accessToken } : {}),
             },
-          },
-          ref: joinRef,
-          join_ref: joinRef,
-        });
+            ref: joinRef,
+            join_ref: joinRef,
+          });
 
-        await joined;
-        currentChannel = nextChannel;
-        currentJoinRef = joinRef;
-        return {
-          channel: currentChannel,
-          joinRef,
+          await joined;
+          currentChannel = nextChannel;
+          currentJoinRef = joinRef;
+          return {
+            channel: currentChannel,
+            joinRef,
+          };
         };
+
+        try {
+          return await attemptJoin(false);
+        } catch (publicError) {
+          if (!accessToken) {
+            throw publicError;
+          }
+
+          try {
+            return await attemptJoin(true);
+          } catch (privateError) {
+            throw new Error(
+              "Realtime channel join failed. Check Supabase Realtime public access or add authenticated policies on realtime.messages."
+            );
+          }
+        }
       }
 
       async function ensureChannel(meta) {
@@ -6519,15 +6552,32 @@ function createSupabaseRealtimeGatewayFactory({
         const ensured = await syncRoundSessionSnapshot(roundId, {
           broadcast: false,
         });
-        if (ensured?.error || ensured?.status === "skipped-missing-table") {
+        if (ensured?.status === "skipped-missing-table") {
+          return {
+            error: {
+              code: "missing_live_round_sessions_table",
+              message: "Supabase table public.live_round_sessions is missing. Run the multiplayer SQL setup first.",
+            },
+          };
+        }
+        if (ensured?.error) {
           return ensured;
         }
 
-        await ensureChannel({
-          sessionId: ensured.session?.id || round.groupId || null,
-          inviteCode: round.inviteCode,
-          roundId: round.id,
-        });
+        try {
+          await ensureChannel({
+            sessionId: ensured.session?.id || round.groupId || null,
+            inviteCode: round.inviteCode,
+            roundId: round.id,
+          });
+        } catch (error) {
+          return {
+            error: {
+              code: "realtime_channel_join_failed",
+              message: error?.message || "Realtime channel join failed.",
+            },
+          };
+        }
 
         await syncRoundSessionSnapshot(roundId, {
           broadcast: true,
@@ -6549,6 +6599,15 @@ function createSupabaseRealtimeGatewayFactory({
         const response = await bridge.fetchLiveRoundSessionByInviteCode(normalizedCode);
         if (response?.error) {
           return response;
+        }
+
+        if (response?.missingTable) {
+          return {
+            error: {
+              code: "missing_live_round_sessions_table",
+              message: "Supabase table public.live_round_sessions is missing. Run the multiplayer SQL setup first.",
+            },
+          };
         }
 
         if (!response?.session) {
@@ -6574,7 +6633,16 @@ function createSupabaseRealtimeGatewayFactory({
           roundId: round.id,
         };
 
-        await ensureChannel(currentSessionMeta);
+        try {
+          await ensureChannel(currentSessionMeta);
+        } catch (error) {
+          return {
+            error: {
+              code: "realtime_channel_join_failed",
+              message: error?.message || "Realtime channel join failed.",
+            },
+          };
+        }
 
         if (ensuredIdentity.added) {
           await syncRoundSessionSnapshot(round.id, {
@@ -10852,6 +10920,21 @@ function upsertJoinedRoundIntoState(draft, joined) {
   }
 }
 
+function getLiveRoomFailureMessage(result) {
+  const code = String(result?.error?.code || result?.code || "");
+  const message = String(result?.error?.message || result?.message || "");
+
+  if (code === "missing_live_round_sessions_table") {
+    return "Live rooms are not ready in Supabase yet. Create the public.live_round_sessions table first.";
+  }
+
+  if (code === "realtime_channel_join_failed") {
+    return "Supabase Realtime rejected the room connection. Check Realtime public access or add authenticated realtime.messages policies.";
+  }
+
+  return message || "The live sync connection is not ready yet.";
+}
+
 function getRoundEventSyncCopy(round, pendingCount = getPendingRoundEvents(round).length) {
   const courseName = round?.courseName || "This round";
   const baseSubject = pendingCount === 1 ? "1 live change" : `${pendingCount} live changes`;
@@ -11903,6 +11986,8 @@ function bootstrapApp({
       return;
     }
 
+    console.warn("[Golfers Nation] Live room host setup fell back to local-only mode.", result);
+
     store.setState((draft) => {
       const round = findRound(draft, roundId);
       if (round) {
@@ -11916,7 +12001,7 @@ function bootstrapApp({
         draft,
         "warning",
         "Live room unavailable",
-        "The round is still safe on this phone, but cross-device joining is unavailable until the live sync connection is ready."
+        getLiveRoomFailureMessage(result)
       );
       return draft;
     }, { reason: "host-live-round-fallback" });
@@ -12978,7 +13063,7 @@ function bootstrapApp({
             liveJoinResult?.error ? "warning" : "error",
             liveJoinResult?.error ? "Live join unavailable" : "Code not found",
             liveJoinResult?.error
-              ? "The live join service could not connect right now. Scoring still works on this device."
+              ? getLiveRoomFailureMessage(liveJoinResult)
               : `Invite code ${code} did not match an active round.`
           );
           return draft;
@@ -13801,7 +13886,7 @@ function bootstrapApp({
             liveJoinResult?.error ? "warning" : "error",
             liveJoinResult?.error ? "Live join unavailable" : "Couldn't join round",
             liveJoinResult?.error
-              ? "The live join service could not connect right now. You can still use single-device rounds on this phone."
+              ? getLiveRoomFailureMessage(liveJoinResult)
               : "Check the invite code and try again."
           );
           return draft;
