@@ -23,6 +23,37 @@ function findRound(state, roundId) {
   return state.rounds.find((round) => round.id === roundId);
 }
 
+function upsertJoinedRoundIntoState(draft, joined) {
+  if (!joined?.round) {
+    return;
+  }
+
+  const roundIndex = draft.rounds.findIndex((round) =>
+    round.id === joined.round.id
+      || (joined.round.inviteCode && round.inviteCode === joined.round.inviteCode)
+  );
+
+  if (roundIndex >= 0) {
+    draft.rounds[roundIndex] = joined.round;
+  } else {
+    draft.rounds.unshift(joined.round);
+  }
+
+  if (joined.group) {
+    const groupIndex = draft.groups.findIndex((group) =>
+      group.id === joined.group.id
+        || group.roundId === joined.round.id
+        || (joined.group.inviteCode && group.inviteCode === joined.group.inviteCode)
+    );
+
+    if (groupIndex >= 0) {
+      draft.groups[groupIndex] = joined.group;
+    } else {
+      draft.groups.unshift(joined.group);
+    }
+  }
+}
+
 function getRoundEventSyncCopy(round, pendingCount = getPendingRoundEvents(round).length) {
   const courseName = round?.courseName || "This round";
   const baseSubject = pendingCount === 1 ? "1 live change" : `${pendingCount} live changes`;
@@ -571,12 +602,20 @@ function createNoopRealtimeSession() {
   return {
     connect() {},
     disconnect() {},
-    publishRoundUpdate() {},
+    publishRoundUpdate() {
+      return Promise.resolve();
+    },
     enableNearbySync() {},
     enableBluetoothSync() {
       return Promise.resolve();
     },
     updateTransport() {},
+    hostRoundSession() {
+      return Promise.resolve({ status: "local-only" });
+    },
+    joinRoundSession() {
+      return Promise.resolve(null);
+    },
   };
 }
 
@@ -1034,6 +1073,56 @@ export function bootstrapApp({
       ? "Scores are safe on this device first. If the original host leaves, any joined golfer can keep scoring on their copy."
       : round.sync.note;
     return event;
+  };
+
+  const requestRealtimeRoundUpdate = (roundId) => {
+    if (!roundId) {
+      return;
+    }
+
+    Promise.resolve(realtimeSession.publishRoundUpdate(roundId))
+      .catch((error) => {
+        console.warn("[Golfers Nation] Live round publish failed. Continuing with local-safe state.", error);
+      });
+  };
+
+  const finalizeHostedRoundSession = async (roundId) => {
+    if (!roundId || typeof realtimeSession.hostRoundSession !== "function") {
+      return;
+    }
+
+    let result = null;
+    try {
+      result = await realtimeSession.hostRoundSession(roundId);
+    } catch (error) {
+      console.warn("[Golfers Nation] Live host setup failed. Keeping the round on this device only.", error);
+      result = {
+        error: {
+          message: "Live hosting is unavailable right now.",
+        },
+      };
+    }
+    if (!result?.error && result?.status !== "skipped-missing-table") {
+      return;
+    }
+
+    store.setState((draft) => {
+      const round = findRound(draft, roundId);
+      if (round) {
+        round.sync.transport = "local";
+        round.sync.label = "Local only";
+        round.sync.state = "local";
+        round.sync.note = "Live hosting could not reach the shared backend, so this phone stayed in local-safe mode.";
+      }
+
+      setFeedback(
+        draft,
+        "warning",
+        "Live room unavailable",
+        "The round is still safe on this phone, but cross-device joining is unavailable until the live sync connection is ready."
+      );
+      return draft;
+    }, { reason: "host-live-round-fallback" });
   };
 
   store.subscribe((state) => {
@@ -1865,7 +1954,7 @@ export function bootstrapApp({
         return draft;
       }, { reason: "quick-score" });
       pulseScoreFeedback(pulseParticipantId, pulseHoleNumber);
-      realtimeSession.publishRoundUpdate(store.getState().session.activeRoundId);
+      requestRealtimeRoundUpdate(store.getState().session.activeRoundId);
       void runPendingRoundSync({ successFeedback: false });
       return;
     }
@@ -1897,7 +1986,7 @@ export function bootstrapApp({
         appendActivity(draft, `${round.courseName} updated hole ${holeNumber}.`, "round");
         return draft;
       }, { reason: "toggle-flag" });
-      realtimeSession.publishRoundUpdate(store.getState().session.activeRoundId);
+      requestRealtimeRoundUpdate(store.getState().session.activeRoundId);
       void runPendingRoundSync({ successFeedback: false });
       return;
     }
@@ -1970,6 +2059,7 @@ export function bootstrapApp({
     }
 
     if (action === "host-active-round") {
+      let hostedRoundId = null;
       store.setState((draft) => {
         const round = findRound(draft, draft.session.activeRoundId);
         if (!round) {
@@ -1987,6 +2077,7 @@ export function bootstrapApp({
           round.sync.note = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
           appendActivity(draft, `${round.courseName} is already live with code ${existing.inviteCode}.`, "sync");
           setFeedback(draft, "info", "Invite code ready", `This round is already hosted. Share code ${existing.inviteCode} with the group.`);
+          hostedRoundId = round.id;
           return draft;
         }
 
@@ -2001,8 +2092,10 @@ export function bootstrapApp({
         draft.groups.unshift(hosted.group);
         appendActivity(draft, `${round.courseName} is now hosted with invite code ${hosted.inviteCode}.`, "sync");
         setFeedback(draft, "success", "Round hosted", `Invite code ${hosted.inviteCode} is ready to share.`);
+        hostedRoundId = round.id;
         return draft;
       }, { reason: "host-active-round" });
+      await finalizeHostedRoundSession(hostedRoundId);
       return;
     }
 
@@ -2064,23 +2157,42 @@ export function bootstrapApp({
 
     if (action === "quick-join-code") {
       const code = actionElement.dataset.code;
+      let liveJoinResult = null;
+      if (typeof realtimeSession.joinRoundSession === "function") {
+        try {
+          liveJoinResult = await realtimeSession.joinRoundSession(code);
+        } catch (error) {
+          console.warn("[Golfers Nation] Live join failed. Checking local-safe fallbacks.", error);
+          liveJoinResult = {
+            error: {
+              message: "Live join is unavailable right now.",
+            },
+          };
+        }
+      }
       store.setState((draft) => {
-        const joined = joinByInviteCode({ code, state: draft });
+        const joined = liveJoinResult?.round
+          ? liveJoinResult
+          : joinByInviteCode({ code, state: draft });
         if (!joined) {
           appendActivity(draft, `Invite code ${code} was not found.`, "sync");
-          setFeedback(draft, "error", "Code not found", `Invite code ${code} did not match an active round.`);
+          setFeedback(
+            draft,
+            liveJoinResult?.error ? "warning" : "error",
+            liveJoinResult?.error ? "Live join unavailable" : "Code not found",
+            liveJoinResult?.error
+              ? "The live join service could not connect right now. Scoring still works on this device."
+              : `Invite code ${code} did not match an active round.`
+          );
           return draft;
         }
 
-        if (joined.source === "seeded") {
-          draft.rounds.unshift(joined.round);
-          draft.groups.unshift(joined.group);
-        }
+        upsertJoinedRoundIntoState(draft, joined);
 
         joined.round.sync.lastEventAt = Date.now();
         joined.round.sync.state = "connected";
         joined.round.sync.transport = joined.source === "local" ? "invite" : "cloud";
-        joined.round.sync.label = joined.source === "local" ? "Invite code" : "Mock cloud sync";
+        joined.round.sync.label = joined.source === "local" ? "Invite code" : "Live cloud sync";
         joined.round.sync.note = "This device now carries its own safe copy of the live round, even if the original host leaves.";
         draft.session.activeRoundId = joined.round.id;
         draft.session.selectedProfileId = draft.currentUser.profileId;
@@ -2439,7 +2551,7 @@ export function bootstrapApp({
       return draft;
     }, { reason: "score-change" });
     pulseScoreFeedback(participantId, holeNumber);
-    realtimeSession.publishRoundUpdate(store.getState().session.activeRoundId);
+    requestRealtimeRoundUpdate(store.getState().session.activeRoundId);
     void runPendingRoundSync({ successFeedback: false });
   });
 
@@ -2760,6 +2872,7 @@ export function bootstrapApp({
     if (formName === "create-round") {
       const submitter = event.submitter;
       const intent = submitter?.value || "local";
+      let hostedRoundId = null;
 
       store.setState((draft) => {
         const roundSetup = getRoundSetupState(draft);
@@ -2843,6 +2956,7 @@ export function bootstrapApp({
             "Round hosted",
             `Invite code ${hosted.inviteCode} is ready to share from the round screen.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
           );
+          hostedRoundId = round.id;
         }
 
         if (playerSetup.note) {
@@ -2853,30 +2967,55 @@ export function bootstrapApp({
         refreshProfileSnapshots(draft);
         return draft;
       }, { reason: "create-round" });
+      if (intent === "host") {
+        await finalizeHostedRoundSession(hostedRoundId);
+      }
       return;
     }
 
     if (formName === "join-code") {
       const code = String(data.get("inviteCode") || "").trim().toUpperCase();
+      let liveJoinResult = null;
+      if (code && typeof realtimeSession.joinRoundSession === "function") {
+        try {
+          liveJoinResult = await realtimeSession.joinRoundSession(code);
+        } catch (error) {
+          console.warn("[Golfers Nation] Live join failed. Keeping the join flow in local-safe mode.", error);
+          liveJoinResult = {
+            error: {
+              message: "Live join is unavailable right now.",
+            },
+          };
+        }
+      }
       store.setState((draft) => {
         if (!code) {
           setFeedback(draft, "info", "Enter an invite code", "Ask the host for the round code, then enter it here to join the same live card.");
           return draft;
         }
 
-        const joined = joinByInviteCode({ code, state: draft });
+        const joined = liveJoinResult?.round
+          ? liveJoinResult
+          : joinByInviteCode({ code, state: draft });
         if (!joined) {
           appendActivity(draft, `Invite code ${code || "blank"} did not match a game.`, "sync");
-          setFeedback(draft, "error", "Couldn't join round", "Check the invite code and try again.");
+          setFeedback(
+            draft,
+            liveJoinResult?.error ? "warning" : "error",
+            liveJoinResult?.error ? "Live join unavailable" : "Couldn't join round",
+            liveJoinResult?.error
+              ? "The live join service could not connect right now. You can still use single-device rounds on this phone."
+              : "Check the invite code and try again."
+          );
           return draft;
         }
 
-        if (joined.source === "seeded") {
-          draft.rounds.unshift(joined.round);
-          draft.groups.unshift(joined.group);
-        }
+        upsertJoinedRoundIntoState(draft, joined);
 
         joined.round.sync.lastEventAt = Date.now();
+        joined.round.sync.state = "connected";
+        joined.round.sync.transport = joined.source === "local" ? "invite" : "cloud";
+        joined.round.sync.label = joined.source === "local" ? "Invite code" : "Live cloud sync";
         joined.round.sync.note = "This device now carries its own safe copy of the live round, even if the original host leaves.";
         draft.session.activeRoundId = joined.round.id;
         draft.session.selectedHole = 1;

@@ -4,6 +4,7 @@ export const SUPABASE_SESSION_STORAGE_KEY = "golfers-nation-supabase-session-v1"
 export const RUNTIME_CONFIG_GLOBAL = "__GN_RUNTIME_CONFIG__";
 export const FEATURED_COURSE_ID = "golden-nugget-lake-charles";
 export const TESTER_DEFAULT_SUBSCRIPTION_TIER = "premium";
+export const LIVE_ROUND_SESSIONS_TABLE = "live_round_sessions";
 
 export const AUTH_PROVIDER_OPTIONS = [
   {
@@ -78,7 +79,7 @@ export const CONNECTION_COPY = {
   invite: "Invite code",
   nearby: "Nearby sync",
   bluetooth: "Bluetooth sync",
-  cloud: "Mock cloud sync",
+  cloud: "Live cloud sync",
 };
 
 export const TOURNAMENT_STATUSES = ["planning", "open", "live", "completed"];

@@ -1,4 +1,4 @@
-import { SUPABASE_SESSION_STORAGE_KEY, TESTER_FEEDBACK_TABLE } from "../config.js";
+import { LIVE_ROUND_SESSIONS_TABLE, SUPABASE_SESSION_STORAGE_KEY, TESTER_FEEDBACK_TABLE } from "../config.js";
 
 function getBrowserStorage(storageOverride = null) {
   if (storageOverride) {
@@ -448,6 +448,87 @@ export function createSupabaseRestBridge({
     });
   }
 
+  async function fetchLiveRoundSessionByInviteCode(inviteCode) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    const result = await request(`/rest/v1/${LIVE_ROUND_SESSIONS_TABLE}?invite_code=eq.${encodeURIComponent(String(inviteCode || "").trim().toUpperCase())}&select=*`, {
+      accessToken: active.session.access_token,
+    });
+
+    if (result?.error && isMissingRelationError(result.error)) {
+      logMissingRelation(`public.${LIVE_ROUND_SESSIONS_TABLE}`, result.error);
+      return {
+        session: null,
+        missingTable: true,
+      };
+    }
+
+    if (result?.error) {
+      return result;
+    }
+
+    return {
+      session: Array.isArray(result.data) ? result.data[0] || null : result.data || null,
+      missingTable: false,
+    };
+  }
+
+  async function upsertLiveRoundSession(sessionRecord) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    const result = await request(`/rest/v1/${LIVE_ROUND_SESSIONS_TABLE}?on_conflict=invite_code`, {
+      method: "POST",
+      accessToken: active.session.access_token,
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=representation",
+      },
+      body: sessionRecord,
+    });
+
+    if (result?.error && isMissingRelationError(result.error)) {
+      logMissingRelation(`public.${LIVE_ROUND_SESSIONS_TABLE}`, result.error);
+      return { status: "skipped-missing-table", data: null };
+    }
+
+    return result;
+  }
+
+  async function broadcastRealtimeMessage(topic, event, payload) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    return request("/realtime/v1/api/broadcast", {
+      method: "POST",
+      accessToken: active.session?.access_token || "",
+      body: {
+        messages: [
+          {
+            topic,
+            event,
+            payload,
+            private: false,
+          },
+        ],
+      },
+    });
+  }
+
   return {
     mode: "supabase-rest-bridge",
     config: runtimeConfig,
@@ -465,5 +546,8 @@ export function createSupabaseRestBridge({
     upsertProfile,
     upsertWorkspace,
     submitTesterFeedback,
+    fetchLiveRoundSessionByInviteCode,
+    upsertLiveRoundSession,
+    broadcastRealtimeMessage,
   };
 }

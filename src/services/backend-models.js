@@ -138,6 +138,53 @@ export function toBackendGroupRecord(group, userId = null) {
   };
 }
 
+export function toBackendLiveRoundSessionRecord({
+  round,
+  group = null,
+  userId = null,
+  sessionId = null,
+} = {}) {
+  if (!round?.inviteCode) {
+    return null;
+  }
+
+  return {
+    id: sessionId || group?.id || round.groupId || `live-session-${String(round.inviteCode).toLowerCase()}`,
+    invite_code: round.inviteCode,
+    round_id: round.id,
+    host_user_id: group?.hostUserId || userId || null,
+    updated_by_user_id: userId || null,
+    course_name: round.courseName,
+    mode: round.mode,
+    status: group?.status || round.status || "active",
+    round_state: cloneData(round),
+    group_state: group ? cloneData(group) : null,
+    created_at: toIsoTimestamp(group?.createdAt || round.createdAt || Date.now()),
+    updated_at: toIsoTimestamp(Date.now()),
+  };
+}
+
+export function fromBackendLiveRoundSessionRecord(record) {
+  if (!record) {
+    return null;
+  }
+
+  return {
+    id: record.id,
+    inviteCode: record.invite_code,
+    roundId: record.round_id,
+    hostUserId: record.host_user_id,
+    updatedByUserId: record.updated_by_user_id,
+    courseName: record.course_name,
+    mode: record.mode,
+    status: record.status,
+    round: cloneData(record.round_state || null),
+    group: cloneData(record.group_state || null),
+    createdAt: record.created_at ? Date.parse(record.created_at) : Date.now(),
+    updatedAt: record.updated_at ? Date.parse(record.updated_at) : Date.now(),
+  };
+}
+
 export function toBackendTournamentRecord(tournament, userId = null) {
   if (!tournament) {
     return null;

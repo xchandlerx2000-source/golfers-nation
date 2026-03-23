@@ -50,6 +50,7 @@ describe("product platform", () => {
     expect(platform.capabilities.supabaseEnabled).toBe(true);
     expect(platform.capabilities.authMode).toBe("supabase-auth-adapter");
     expect(platform.capabilities.dataMode).toBe("supabase-cloud-adapter");
+    expect(platform.capabilities.realtimeMode).toBe("supabase-realtime-adapter");
   });
 
   it("creates realtime sessions with backend-friendly method names", () => {

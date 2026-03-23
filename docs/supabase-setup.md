@@ -8,6 +8,8 @@ Golfers Nation now supports a real tester flow with:
 - sign-out
 - password reset email scaffold
 - cloud-backed profile and workspace persistence
+- live round session discovery by invite code
+- Supabase Realtime round broadcasts across joined devices
 
 ## Environment variables
 
@@ -82,6 +84,21 @@ create table if not exists public.tester_feedback (
   user_agent text,
   created_at timestamptz default now()
 );
+
+create table if not exists public.live_round_sessions (
+  id text primary key,
+  invite_code text not null unique,
+  round_id text not null,
+  host_user_id uuid references auth.users (id) on delete cascade,
+  updated_by_user_id uuid references auth.users (id) on delete set null,
+  course_name text not null,
+  mode text not null default 'stroke',
+  status text not null default 'hosting',
+  round_state jsonb not null default '{}'::jsonb,
+  group_state jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
 ```
 
 ## Suggested row-level security
@@ -90,6 +107,7 @@ create table if not exists public.tester_feedback (
 alter table public.player_profiles enable row level security;
 alter table public.player_workspaces enable row level security;
 alter table public.tester_feedback enable row level security;
+alter table public.live_round_sessions enable row level security;
 
 create policy "profiles owner read"
 on public.player_profiles
@@ -122,7 +140,25 @@ create policy "feedback owner insert"
 on public.tester_feedback
 for insert
 with check (auth.uid() = user_id);
+
+create policy "live sessions authenticated read"
+on public.live_round_sessions
+for select
+using (auth.role() = 'authenticated');
+
+create policy "live sessions authenticated write"
+on public.live_round_sessions
+for all
+using (auth.role() = 'authenticated')
+with check (auth.role() = 'authenticated');
 ```
+
+## Realtime notes
+
+- Golfers Nation uses the `live_round_sessions` table to discover hosted rounds by invite code.
+- Live score changes then move through Supabase Realtime channels keyed by the invite code.
+- This policy set is intentionally tester-friendly so any authenticated golfer with the code can join the shared round.
+- Before public launch, tighten these policies so only invited participants can read and update a live round session.
 
 ## What is real now
 
@@ -130,13 +166,14 @@ with check (auth.uid() = user_id);
 - per-user cloud profile row
 - per-user cloud workspace row
 - per-user tester feedback notes
+- live invite-code round sessions
+- Supabase Realtime broadcast updates between joined devices
 - session restore from stored auth session
 - password reset email request
 
 ## What remains mocked
 
 - Google and Apple sign-in buttons still act as review/demo fallbacks
-- realtime live round sync is still local/device based
 - premium billing is still mocked
 
 ## Course testing note

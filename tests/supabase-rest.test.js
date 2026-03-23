@@ -99,4 +99,33 @@ describe("supabase rest bridge", () => {
     expect(profileResult.status).toBe("skipped-missing-table");
     expect(workspaceResult.status).toBe("skipped-missing-table");
   });
+
+  it("treats a missing live round session table as a non-blocking multiplayer fallback", async () => {
+    const storage = createMemoryStorage();
+    storage.setItem(SUPABASE_SESSION_STORAGE_KEY, JSON.stringify({
+      access_token: "token",
+      refresh_token: "refresh",
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: "user-1", email: "golfer@example.com" },
+    }));
+
+    const fetchImpl = vi.fn().mockResolvedValueOnce(createJsonResponse({
+      code: "PGRST205",
+      message: "Could not find the table 'public.live_round_sessions' in the schema cache",
+    }, { ok: false, status: 404 }));
+
+    const bridge = createSupabaseRestBridge({
+      config: {
+        supabaseUrl: "https://example.supabase.co",
+        supabaseAnonKey: "anon-key",
+      },
+      fetchImpl,
+      storage,
+    });
+
+    const result = await bridge.fetchLiveRoundSessionByInviteCode("ABC123");
+
+    expect(result.session).toBeNull();
+    expect(result.missingTable).toBe(true);
+  });
 });
