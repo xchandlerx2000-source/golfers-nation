@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#24352d" />
+    <meta name="application-name" content="Golfers Nation" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Golfers Nation" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Golfers Nation</title>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/icons/icon-192.png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="app-loading-shell" aria-label="Loading Golfers Nation">
+        <div class="loading-card">
+          <div class="loading-brand">
+            <img src="/icons/icon-192.png" alt="" width="56" height="56" />
+            <div class="loading-brand-copy">
+              <p class="eyebrow">Golfers Nation</p>
+              <strong class="loading-title">Launching your round companion</strong>
+            </div>
+          </div>
+          <div class="loading-bar" aria-hidden="true">
+            <span></span>
+          </div>
+          <p class="loading-caption">Preparing live rounds, player profiles, and your mobile app shell.</p>
+        </div>
+      </div>
+    </div>
+    <script>
+      window.__GN_APP_BOOT_STARTED__ = false;
+      window.setTimeout(function () {
+        var appRoot = document.getElementById("app");
+        if (!window.__GN_APP_BOOT_STARTED__ && appRoot) {
+          appRoot.innerHTML = '' +
+            '<div class="boot-recovery-shell">' +
+              '<div class="boot-recovery-card">' +
+                '<h1>Golfers Nation could not finish loading</h1>' +
+                '<p>The app shell loaded, but the live app did not start. Try reloading the page or refreshing the installed app.</p>' +
+                '<div class="boot-recovery-actions">' +
+                  '<button class="button primary" type="button" onclick="window.location.reload()">Retry</button>' +
+                '</div>' +
+              '</div>' +
+            '</div>';
+        }
+      }, 6000);
+    </script>
+    <script src="/runtime-config.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

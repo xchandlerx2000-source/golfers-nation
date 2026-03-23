@@ -1,0 +1,22 @@
+{
+  "name": "golfers-nation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build:web": "node scripts/build-browser-bundle.mjs",
+    "build:netlify": "node scripts/build-netlify-package.mjs",
+    "build:cloudflare": "node scripts/build-netlify-package.mjs",
+    "review:bundle": "node scripts/build-peer-review-bundle.mjs",
+    "test": "npx vitest run tests --pool=threads",
+    "test:watch": "npx vitest tests --pool=threads",
+    "test:e2e": "node -e \"console.log('Playwright setup skipped because browser automation support was not available in the setup environment.')\""
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0",
+    "vitest": "^2.1.0"
+  }
+}

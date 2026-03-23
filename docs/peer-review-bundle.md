@@ -1,0 +1,19876 @@
+# Golfers Nation Peer Review Bundle
+
+This file consolidates the current source-of-truth code, runtime config, deploy scripts, and tests for peer review.
+
+Use this bundle with `docs/business-partner-overview.md` and `docs/peer-review-guide.md` when sharing the project with leadership or other developers.
+
+## Included files
+
+- `package.json`
+- `README.md`
+- `index.html`
+- `manifest.json`
+- `service-worker.js`
+- `styles.css`
+- `runtime-config.js`
+- `netlify.toml`
+- `_redirects`
+- `scripts/build-browser-bundle.mjs`
+- `scripts/build-netlify-package.mjs`
+- `scripts/build-peer-review-bundle.mjs`
+- `scripts/build-runtime-config.mjs`
+- `src/config.js`
+- `src/domain/factories.js`
+- `src/domain/round-sync.js`
+- `src/domain/scoring.js`
+- `src/main.js`
+- `src/services/account-service.js`
+- `src/services/auth-gateway.js`
+- `src/services/backend-models.js`
+- `src/services/course-library.js`
+- `src/services/data-gateway.js`
+- `src/services/mock-api.js`
+- `src/services/player-service.js`
+- `src/services/product-platform.js`
+- `src/services/realtime-gateway.js`
+- `src/services/runtime-config.js`
+- `src/services/storage-service.js`
+- `src/services/supabase-rest.js`
+- `src/services/sync-service.js`
+- `src/state/default-state.js`
+- `src/state/store.js`
+- `src/ui/render.js`
+- `src/ui/templates.js`
+- `src/utils/formatters.js`
+- `tests/account-service.test.js`
+- `tests/bootstrap.test.js`
+- `tests/course-library.test.js`
+- `tests/data-gateway.test.js`
+- `tests/factories.test.js`
+- `tests/player-service.test.js`
+- `tests/product-platform.test.js`
+- `tests/round-sync.test.js`
+- `tests/scoring.test.js`
+- `tests/storage-service.test.js`
+- `tests/sync-service.test.js`
+- `tests/ui-helpers.test.js`
+
+---
+
+## `package.json`
+
+```json
+{
+  "name": "golfers-nation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build:web": "node scripts/build-browser-bundle.mjs",
+    "build:netlify": "node scripts/build-netlify-package.mjs",
+    "review:bundle": "node scripts/build-peer-review-bundle.mjs",
+    "test": "npx vitest run tests --pool=threads",
+    "test:watch": "npx vitest tests --pool=threads",
+    "test:e2e": "node -e \"console.log('Playwright setup skipped because browser automation support was not available in the setup environment.')\""
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0",
+    "vitest": "^2.1.0"
+  }
+}
+
+```
+
+## `README.md`
+
+```md
+# Golfers Nation
+
+Golfers Nation is a phase-1 offline-first product foundation for a nationwide golf platform. It is built as a static web app today, but the code is organized so the domain logic, service layer, and data model can move into React Native or another mobile stack later.
+
+## Current product areas
+
+- Live group play and score syncing
+- Golfer stats and player history
+- Tournament creation and management scaffold
+- Local and social game linking
+- Gear, apparel, and accessory scaffold
+
+## Architecture at a glance
+
+- `index.html`: app shell entry
+- `styles.css`: mobile-first premium UI system
+- `app.js`: thin bootstrap that starts the modular app
+- `src/domain`: round factories and scoring logic
+- `src/services`: storage, mock API, and sync transport layer
+- `src/state`: seed data and lightweight store
+- `src/ui`: render pipeline and templates
+
+## Run it
+
+Open `index.html` in a modern browser.
+
+Because the app is dependency-free, there is no install step. Data persists in local storage. Browser Bluetooth is treated as an optional prototype transport, not the primary multiplayer architecture.
+
+## Auth and tester accounts
+
+Golfers Nation now supports two account paths:
+
+- Real tester auth with Supabase email sign-up and sign-in when runtime config is provided
+- Local review/demo accounts as an optional fallback when you want to test quickly without live backend setup
+
+Review/demo accounts remain available:
+
+- Free demo account: `free@golfersnation.demo` / `fairway123`
+- Premium demo account: `premium@golfersnation.demo` / `fairway123`
+- `Continue with Google` and `Continue with Apple` remain review/demo fallbacks for now
+
+When Supabase is configured, testers can create their own real email accounts and keep rounds, stats, settings, and course history tied to that account.
+
+## PWA deployment and install
+
+Golfers Nation now includes a manifest, placeholder app icons, and a service worker so it can be installed to a phone home screen like a real test app.
+
+For desktop or local browser testing:
+
+1. Rebuild the browser bundle after source changes:
+   `node scripts/build-browser-bundle.mjs`
+2. Serve the folder from a local web server:
+   `npx serve .`
+3. Open the served URL in a browser.
+
+## Netlify deployment for phone testing
+
+The project now includes:
+
+- `netlify.toml` for Netlify build/publish settings
+- `npm run build:netlify` to generate a clean deployable `dist/` folder
+
+### Fastest manual deploy with Netlify Drop
+
+1. Build the deploy package:
+   `npm run build:netlify`
+2. Open Netlify Drop:
+   `https://app.netlify.com/drop`
+3. Drag the generated `dist/` folder into Netlify Drop.
+4. Wait for the deploy to finish and copy the `*.netlify.app` URL.
+5. Open that URL on your phone or send it to testers.
+
+### Repo-connected deploy on Netlify
+
+1. Push the project to GitHub, GitLab, or Bitbucket.
+2. In Netlify, choose `Add new site` -> `Import an existing project`.
+3. Connect the repo.
+4. Netlify should read `netlify.toml` automatically.
+5. The build command will be:
+   `npm run build:netlify`
+6. The publish directory will be:
+   `dist`
+
+### Supabase tester setup
+
+For a real tester build, edit [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/runtime-config.js) before running `npm run build:netlify`:
+
+- `supabaseUrl`
+- `supabaseAnonKey`
+- `supabaseResetRedirectUrl`
+- `siteUrl`
+
+Netlify repo-connected deploy:
+
+1. Update [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/runtime-config.js) in the repo
+2. Commit and push
+3. Trigger a new deploy
+
+Manual Netlify Drop deploy:
+
+1. Update [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/runtime-config.js)
+2. Run `npm run build:netlify`
+3. Upload the generated `dist/` folder
+
+[runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/runtime-config.js) is loaded by the app shell at runtime and copied into [dist](C:/Users/Bower/OneDrive/Desktop/golf%20nation/dist) unchanged during the Netlify build.
+
+### Important testing note
+
+With Supabase configured, email sign-up, sign-in, session restore, and cloud-backed user workspaces are real. Review/demo accounts still remain available as a fallback path. Realtime round sync is still device/mock based for now.
+
+## Lightweight tester feedback on Netlify
+
+The app now includes an in-app tester feedback form inside:
+
+- `Profile & settings` -> `App & Support`
+
+It is designed to work with Netlify Forms on the deployed site.
+
+### How it works
+
+- Testers can submit a short note from inside the app
+- The form includes lightweight context such as:
+  - current area of the app
+  - free vs premium plan
+  - install state
+  - theme / appearance
+  - recent activity summary
+- On Netlify, submissions should appear in the site `Forms` tab
+
+### Netlify setup for feedback collection
+
+1. Deploy the site to Netlify.
+2. In the Netlify site dashboard, confirm the `Forms` tab is available.
+3. If needed, enable form detection and redeploy once.
+4. Optionally add email notifications or integrations for form submissions in Netlify.
+5. Review submissions in the dashboard or export them as CSV for team review.
+
+### Suggested lightweight analytics plan
+
+Until a real backend analytics stack exists, use this combination:
+
+- Netlify Forms for structured tester feedback
+- screenshots / screen recordings from testers
+- manual issue tagging by area:
+  - onboarding
+  - round
+  - stats
+  - community
+  - premium
+- CSV export from Netlify Forms after each test round
+
+This gives you a simple real-world feedback loop without adding a full analytics service yet.
+
+For phone installation, deploy the static files to an HTTPS host. The fastest options are:
+
+1. Drag the project folder contents into Netlify Drop, or
+2. Deploy the folder as a static site on Vercel or GitHub Pages.
+
+If you use Netlify Drop manually, upload the generated `dist/` folder instead of the whole repo.
+
+Make sure these files are published together:
+
+- `index.html`
+- `styles.css`
+- `app.js`
+- `manifest.json`
+- `service-worker.js`
+- `icons/`
+
+### Install on iPhone
+
+1. Open the deployed HTTPS URL in Safari.
+2. Tap the Share button.
+3. Choose `Add to Home Screen`.
+4. Confirm the app name `Golfers Nation`.
+5. Launch it from the home screen. It should open in standalone mode without the normal browser chrome.
+
+### Install on Android
+
+1. Open the deployed HTTPS URL in Chrome.
+2. Wait for the install prompt, or open the browser menu.
+3. Tap `Install app` or `Add to Home screen`.
+4. Confirm `Golfers Nation`.
+5. Launch it from the home screen. It should open in standalone mode with the app theme color and offline shell support.
+
+## Product foundation notes
+
+- Invite code flow is the main multiplayer entry point.
+- Nearby and browser Bluetooth are abstracted behind the sync service for future replacement.
+- Round, group, tournament, and gear records are stored with backend-ready identifiers and relationships.
+- The scoring layer supports `stroke`, `match`, and `scramble` with room for more formats later.
+
+## Further documentation
+
+See `docs/product-foundation.md` for:
+
+- recommended file structure
+- architectural decisions
+- backend schema suggestion
+- native app migration plan
+- roadmap from MVP to production
+
+See `docs/supabase-setup.md` for:
+
+- Supabase table and RLS setup
+- runtime env variable details
+- what is now real vs still mocked
+- recommended tester deployment notes
+
+## Peer review bundle
+
+If you want to send the project for team review in one place:
+
+1. Run:
+   `npm run review:bundle`
+2. Share:
+   - `docs/business-partner-overview.md`
+   - `docs/peer-review-guide.md`
+   - `docs/peer-review-bundle.md`
+
+The business overview gives leadership the product story and step-by-step build summary. The guide gives reviewers the quickest way to understand the architecture and flows. The bundle file consolidates the current source-of-truth code and tests into one reviewable document.
+
+## Running tests locally
+
+This repository now includes a Vitest-based unit test setup for:
+
+- scoring logic
+- factories
+- storage service
+- sync service
+
+To run the tests once Node.js is available:
+
+1. Install dependencies:
+   `npm install`
+2. Run the unit test suite:
+   `npm test`
+3. Run Vitest in watch mode:
+   `npm run test:watch`
+4. Run the end-to-end placeholder script:
+   `npm run test:e2e`
+
+Notes:
+
+- The current setup uses `jsdom` only in the browser-adjacent service tests.
+- Playwright was not added because browser automation support was not available in the setup environment.
+- Node is not installed in the current workspace environment, so the commands above could not be executed here during setup.
+
+```
+
+## `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#24352d" />
+    <meta name="application-name" content="Golfers Nation" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Golfers Nation" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Golfers Nation</title>
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" href="./icons/icon-192.png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="app-loading-shell" aria-label="Loading Golfers Nation">
+        <div class="loading-card">
+          <div class="loading-brand">
+            <img src="./icons/icon-192.png" alt="" width="56" height="56" />
+            <div class="loading-brand-copy">
+              <p class="eyebrow">Golfers Nation</p>
+              <strong class="loading-title">Launching your round companion</strong>
+            </div>
+          </div>
+          <div class="loading-bar" aria-hidden="true">
+            <span></span>
+          </div>
+          <p class="loading-caption">Preparing live rounds, player profiles, and your mobile app shell.</p>
+        </div>
+      </div>
+    </div>
+    <form name="tester-feedback" method="POST" data-netlify="true" netlify-honeypot="bot-field" hidden>
+      <input type="hidden" name="form-name" value="tester-feedback" />
+      <input type="text" name="bot-field" />
+      <input type="text" name="testerName" />
+      <input type="email" name="email" />
+      <input type="text" name="feedbackArea" />
+      <input type="text" name="rating" />
+      <textarea name="feedbackMessage"></textarea>
+      <input type="text" name="appVersion" />
+      <input type="text" name="planTier" />
+      <input type="text" name="installState" />
+      <input type="text" name="appearanceMode" />
+      <input type="text" name="themeId" />
+      <input type="text" name="contextView" />
+      <textarea name="recentActivity"></textarea>
+      <textarea name="userAgent"></textarea>
+    </form>
+    <script src="./runtime-config.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
+
+```
+
+## `manifest.json`
+
+```json
+{
+  "name": "Golfers Nation",
+  "short_name": "Golfers Nation",
+  "description": "Premium social golf round tracking, player profiles, stats, and community play.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#182019",
+  "theme_color": "#24352d",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "./icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
+
+```
+
+## `service-worker.js`
+
+```js
+const CACHE_NAME = "golfers-nation-shell-v5";
+const APP_SHELL = [
+  "./",
+  "./index.html",
+  "./styles.css",
+  "./app.js",
+  "./runtime-config.js",
+  "./manifest.json",
+  "./icons/icon-192.png",
+  "./icons/icon-512.png",
+  "./icons/icon-maskable-512.png",
+  "./icons/apple-touch-icon.png"
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(APP_SHELL))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      ))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.method !== "GET") {
+    return;
+  }
+
+  const requestUrl = new URL(event.request.url);
+  const isSameOrigin = requestUrl.origin === self.location.origin;
+
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", copy)).catch(() => {});
+          return response;
+        })
+        .catch(() => caches.match("./index.html"))
+    );
+    return;
+  }
+
+  if (!isSameOrigin) {
+    return;
+  }
+
+  event.respondWith(
+    caches.match(event.request)
+      .then((cached) => {
+        if (cached) {
+          return cached;
+        }
+
+        return fetch(event.request)
+          .then((response) => {
+            if (!response || response.status !== 200 || response.type !== "basic") {
+              return response;
+            }
+
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)).catch(() => {});
+            return response;
+          })
+          .catch(() => caches.match("./index.html"));
+      })
+  );
+});
+
+```
+
+## `styles.css`
+
+```css
+:root {
+  --bg: #1e261f;
+  --bg-strong: #182019;
+  --bg-start: #7f8e73;
+  --bg-mid: #4e614f;
+  --bg-end: #182019;
+  --accent-rgb: 201, 157, 97;
+  --success-rgb: 139, 199, 160;
+  --glow-top-left: rgba(247, 224, 183, 0.32);
+  --glow-top-right: rgba(166, 194, 155, 0.24);
+  --glow-center: rgba(255, 240, 215, 0.06);
+  --glow-bottom: rgba(230, 205, 165, 0.18);
+  --surface: rgba(34, 43, 38, 0.74);
+  --surface-soft: rgba(255, 249, 238, 0.07);
+  --surface-strong: rgba(255, 249, 238, 0.12);
+  --surface-glow: rgba(255, 239, 210, 0.08);
+  --line: rgba(205, 171, 117, 0.22);
+  --line-soft: rgba(255, 244, 225, 0.12);
+  --text: #fff8ee;
+  --muted: #d9ccb8;
+  --text-soft: rgba(255, 248, 238, 0.84);
+  --text-faint: rgba(255, 248, 238, 0.74);
+  --text-subtle: rgba(255, 248, 238, 0.8);
+  --accent: #c99d61;
+  --accent-strong: #efd7a7;
+  --accent-ink: #231b11;
+  --success: #8bc7a0;
+  --danger: #db8f78;
+  --field-bg: rgba(5, 10, 8, 0.4);
+  --button-secondary-bg: rgba(255, 248, 236, 0.08);
+  --button-subtle-bg: rgba(255, 248, 236, 0.05);
+  --nav-shell-bg: rgba(22, 29, 24, 0.9);
+  --grid-tint: rgba(255, 255, 255, 0.015);
+  --shadow: 0 26px 58px rgba(17, 22, 18, 0.2);
+  --shadow-soft: 0 14px 24px rgba(17, 22, 18, 0.11);
+  --radius: 30px;
+  --radius-soft: 22px;
+  --space-1: 8px;
+  --space-2: 12px;
+  --space-3: 16px;
+  --space-4: 20px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --text-xs: 0.72rem;
+  --text-sm: 0.85rem;
+  --text-body: 0.96rem;
+  --text-h1: 2.05rem;
+  --text-h3: 1.72rem;
+  --text-h4: 1.22rem;
+  --motion-standard: 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html,
+body {
+  overscroll-behavior-y: none;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 8% 6%, var(--glow-top-left), transparent 24%),
+    radial-gradient(circle at 88% 10%, var(--glow-top-right), transparent 28%),
+    radial-gradient(circle at 50% 54%, var(--glow-center), transparent 30%),
+    radial-gradient(circle at 50% 100%, var(--glow-bottom), transparent 36%),
+    linear-gradient(180deg, var(--bg-start) 0%, var(--bg-mid) 28%, var(--bg) 68%, var(--bg-end) 100%);
+  color: var(--text);
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  transition: background var(--motion-standard), color var(--motion-standard);
+}
+
+body[data-app-shell-mode="standalone"] {
+  overflow-y: auto;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-tint) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-tint) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.78), transparent 94%);
+}
+
+body[data-theme="sand"] {
+  --bg-start: #d8c4a6;
+  --bg-mid: #b79f7f;
+  --bg-end: #6d5a46;
+  --accent: #bf8d56;
+  --accent-rgb: 191, 141, 86;
+  --accent-strong: #f0d8ae;
+  --success: #8fae8e;
+  --success-rgb: 143, 174, 142;
+  --glow-top-left: rgba(244, 214, 170, 0.36);
+  --glow-top-right: rgba(220, 204, 164, 0.22);
+  --glow-center: rgba(255, 247, 233, 0.08);
+  --glow-bottom: rgba(216, 187, 141, 0.2);
+  --surface: rgba(66, 53, 42, 0.76);
+  --surface-soft: rgba(255, 243, 224, 0.12);
+  --surface-strong: rgba(255, 245, 229, 0.18);
+  --surface-glow: rgba(255, 229, 187, 0.12);
+  --line: rgba(232, 191, 138, 0.24);
+  --line-soft: rgba(255, 240, 219, 0.16);
+  --field-bg: rgba(39, 28, 21, 0.38);
+  --button-secondary-bg: rgba(255, 244, 228, 0.14);
+  --button-subtle-bg: rgba(255, 246, 236, 0.08);
+  --nav-shell-bg: rgba(54, 42, 31, 0.9);
+}
+
+body[data-theme="slate"] {
+  --bg-start: #8895a6;
+  --bg-mid: #566274;
+  --bg-end: #222c3c;
+  --accent: #9db6d8;
+  --accent-rgb: 157, 182, 216;
+  --accent-strong: #e5eef9;
+  --success: #8faeb6;
+  --success-rgb: 143, 174, 182;
+  --glow-top-left: rgba(198, 210, 228, 0.28);
+  --glow-top-right: rgba(132, 150, 176, 0.24);
+  --glow-center: rgba(227, 234, 245, 0.06);
+  --glow-bottom: rgba(135, 148, 162, 0.16);
+  --surface: rgba(29, 38, 50, 0.78);
+  --surface-soft: rgba(232, 239, 250, 0.08);
+  --surface-strong: rgba(237, 243, 252, 0.14);
+  --surface-glow: rgba(209, 224, 244, 0.1);
+  --line: rgba(169, 189, 216, 0.24);
+  --line-soft: rgba(219, 230, 243, 0.14);
+  --field-bg: rgba(10, 16, 24, 0.42);
+  --button-secondary-bg: rgba(231, 238, 248, 0.1);
+  --button-subtle-bg: rgba(231, 238, 248, 0.05);
+  --nav-shell-bg: rgba(21, 29, 40, 0.92);
+}
+
+body[data-theme="ocean"] {
+  --bg-start: #6ea3a3;
+  --bg-mid: #35606c;
+  --bg-end: #182b36;
+  --accent: #69bcc3;
+  --accent-rgb: 105, 188, 195;
+  --accent-strong: #d9f6f3;
+  --success: #8ed1be;
+  --success-rgb: 142, 209, 190;
+  --glow-top-left: rgba(167, 216, 208, 0.26);
+  --glow-top-right: rgba(121, 163, 176, 0.24);
+  --glow-center: rgba(223, 244, 241, 0.06);
+  --glow-bottom: rgba(117, 160, 170, 0.2);
+  --surface: rgba(17, 42, 51, 0.78);
+  --surface-soft: rgba(220, 247, 242, 0.08);
+  --surface-strong: rgba(225, 249, 245, 0.13);
+  --surface-glow: rgba(181, 239, 233, 0.11);
+  --line: rgba(114, 191, 194, 0.24);
+  --line-soft: rgba(211, 241, 236, 0.14);
+  --field-bg: rgba(6, 20, 26, 0.42);
+  --button-secondary-bg: rgba(228, 248, 245, 0.1);
+  --button-subtle-bg: rgba(228, 248, 245, 0.05);
+  --nav-shell-bg: rgba(15, 35, 42, 0.92);
+}
+
+body[data-theme="midnight"] {
+  --bg-start: #434d78;
+  --bg-mid: #1d2744;
+  --bg-end: #0d1321;
+  --accent: #a9a0ff;
+  --accent-rgb: 169, 160, 255;
+  --accent-strong: #ebe8ff;
+  --success: #7ea5cb;
+  --success-rgb: 126, 165, 203;
+  --glow-top-left: rgba(132, 126, 207, 0.24);
+  --glow-top-right: rgba(69, 92, 138, 0.22);
+  --glow-center: rgba(221, 227, 255, 0.05);
+  --glow-bottom: rgba(92, 88, 129, 0.18);
+  --surface: rgba(15, 20, 37, 0.82);
+  --surface-soft: rgba(234, 232, 255, 0.08);
+  --surface-strong: rgba(237, 235, 255, 0.13);
+  --surface-glow: rgba(188, 181, 255, 0.12);
+  --line: rgba(169, 160, 255, 0.24);
+  --line-soft: rgba(229, 226, 255, 0.14);
+  --field-bg: rgba(7, 10, 19, 0.46);
+  --button-secondary-bg: rgba(236, 233, 255, 0.1);
+  --button-subtle-bg: rgba(236, 233, 255, 0.05);
+  --nav-shell-bg: rgba(9, 14, 27, 0.94);
+}
+
+body[data-theme="ember"] {
+  --bg-start: #a96b4c;
+  --bg-mid: #5b2f22;
+  --bg-end: #1e120f;
+  --accent: #e08d5d;
+  --accent-rgb: 224, 141, 93;
+  --accent-strong: #ffd9c4;
+  --success: #a9bb7b;
+  --success-rgb: 169, 187, 123;
+  --glow-top-left: rgba(255, 192, 149, 0.3);
+  --glow-top-right: rgba(205, 116, 79, 0.22);
+  --glow-center: rgba(255, 229, 213, 0.06);
+  --glow-bottom: rgba(186, 103, 70, 0.18);
+  --surface: rgba(45, 23, 19, 0.8);
+  --surface-soft: rgba(255, 235, 223, 0.08);
+  --surface-strong: rgba(255, 238, 228, 0.14);
+  --surface-glow: rgba(255, 205, 176, 0.11);
+  --line: rgba(230, 152, 107, 0.24);
+  --line-soft: rgba(255, 227, 211, 0.14);
+  --field-bg: rgba(18, 10, 8, 0.44);
+  --button-secondary-bg: rgba(255, 236, 224, 0.1);
+  --button-subtle-bg: rgba(255, 236, 224, 0.05);
+  --nav-shell-bg: rgba(31, 17, 14, 0.93);
+}
+
+body[data-theme="plum"] {
+  --bg-start: #835d83;
+  --bg-mid: #4c3552;
+  --bg-end: #1c1422;
+  --accent: #cf9fca;
+  --accent-rgb: 207, 159, 202;
+  --accent-strong: #f8e2f4;
+  --success: #9ab3d5;
+  --success-rgb: 154, 179, 213;
+  --glow-top-left: rgba(232, 191, 223, 0.26);
+  --glow-top-right: rgba(141, 108, 156, 0.22);
+  --glow-center: rgba(251, 236, 248, 0.05);
+  --glow-bottom: rgba(123, 87, 130, 0.16);
+  --surface: rgba(39, 25, 43, 0.8);
+  --surface-soft: rgba(250, 235, 247, 0.08);
+  --surface-strong: rgba(251, 239, 248, 0.14);
+  --surface-glow: rgba(239, 202, 233, 0.1);
+  --line: rgba(216, 177, 220, 0.24);
+  --line-soft: rgba(245, 223, 242, 0.14);
+  --field-bg: rgba(16, 9, 18, 0.42);
+  --button-secondary-bg: rgba(248, 236, 246, 0.1);
+  --button-subtle-bg: rgba(248, 236, 246, 0.05);
+  --nav-shell-bg: rgba(26, 17, 29, 0.93);
+}
+
+body[data-theme="ice"] {
+  --bg-start: #8cb4c8;
+  --bg-mid: #4b7188;
+  --bg-end: #183246;
+  --accent: #8cc9eb;
+  --accent-rgb: 140, 201, 235;
+  --accent-strong: #ebf9ff;
+  --success: #9bddcf;
+  --success-rgb: 155, 221, 207;
+  --glow-top-left: rgba(209, 241, 255, 0.28);
+  --glow-top-right: rgba(145, 192, 219, 0.22);
+  --glow-center: rgba(236, 250, 255, 0.06);
+  --glow-bottom: rgba(128, 185, 214, 0.18);
+  --surface: rgba(20, 44, 59, 0.78);
+  --surface-soft: rgba(234, 248, 255, 0.09);
+  --surface-strong: rgba(238, 251, 255, 0.15);
+  --surface-glow: rgba(201, 236, 250, 0.12);
+  --line: rgba(155, 208, 235, 0.24);
+  --line-soft: rgba(226, 245, 255, 0.16);
+  --field-bg: rgba(8, 21, 29, 0.42);
+  --button-secondary-bg: rgba(237, 249, 255, 0.11);
+  --button-subtle-bg: rgba(237, 249, 255, 0.06);
+  --nav-shell-bg: rgba(14, 32, 43, 0.93);
+}
+
+body[data-resolved-mode="light"] {
+  --bg: #e7ebdf;
+  --bg-strong: #d9ded0;
+  --bg-start: #f4efe4;
+  --bg-mid: #dce3d1;
+  --bg-end: #c8d0c1;
+  --accent-rgb: 180, 139, 83;
+  --success-rgb: 108, 165, 123;
+  --surface: rgba(255, 252, 246, 0.78);
+  --surface-soft: rgba(255, 255, 255, 0.62);
+  --surface-strong: rgba(255, 255, 255, 0.84);
+  --surface-glow: rgba(255, 255, 255, 0.2);
+  --line: rgba(116, 102, 83, 0.18);
+  --line-soft: rgba(96, 84, 67, 0.18);
+  --text: #233027;
+  --muted: #46534b;
+  --text-soft: rgba(35, 48, 39, 0.84);
+  --text-faint: rgba(35, 48, 39, 0.74);
+  --text-subtle: rgba(35, 48, 39, 0.8);
+  --accent-ink: #fffdf9;
+  --field-bg: rgba(255, 255, 255, 0.92);
+  --button-secondary-bg: rgba(255, 255, 255, 0.86);
+  --button-subtle-bg: rgba(246, 241, 234, 0.84);
+  --nav-shell-bg: rgba(249, 244, 236, 0.92);
+  --grid-tint: rgba(51, 63, 54, 0.04);
+  --shadow: 0 22px 48px rgba(51, 59, 52, 0.14);
+  --shadow-soft: 0 12px 22px rgba(51, 59, 52, 0.08);
+}
+
+body[data-resolved-mode="light"]::before {
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.22), transparent 94%);
+}
+
+body[data-resolved-mode="light"][data-theme="forest"] {
+  --bg-start: #f4efe4;
+  --bg-mid: #dce3d1;
+  --bg-end: #c8d0c1;
+  --accent: #b78955;
+  --accent-rgb: 183, 137, 85;
+  --accent-strong: #f4dec0;
+  --success: #7bab8b;
+  --success-rgb: 123, 171, 139;
+  --surface: rgba(255, 251, 244, 0.8);
+  --surface-soft: rgba(255, 255, 255, 0.68);
+  --surface-glow: rgba(255, 241, 215, 0.24);
+  --line: rgba(147, 120, 88, 0.18);
+  --line-soft: rgba(131, 111, 84, 0.14);
+  --button-secondary-bg: rgba(255, 252, 247, 0.92);
+  --nav-shell-bg: rgba(248, 244, 236, 0.94);
+}
+
+body[data-resolved-mode="light"][data-theme="sand"] {
+  --bg-start: #fbf0df;
+  --bg-mid: #ecd4b4;
+  --bg-end: #d9bd9f;
+  --accent: #c4874e;
+  --accent-rgb: 196, 135, 78;
+  --accent-strong: #ffe1bf;
+  --success: #8fa47f;
+  --success-rgb: 143, 164, 127;
+  --surface: rgba(255, 250, 244, 0.82);
+  --surface-soft: rgba(255, 253, 249, 0.72);
+  --surface-glow: rgba(255, 230, 188, 0.26);
+  --line: rgba(170, 131, 94, 0.18);
+  --line-soft: rgba(150, 121, 88, 0.14);
+  --button-secondary-bg: rgba(255, 250, 245, 0.94);
+  --nav-shell-bg: rgba(252, 244, 232, 0.95);
+}
+
+body[data-resolved-mode="light"][data-theme="slate"] {
+  --bg-start: #eef3f8;
+  --bg-mid: #d6deea;
+  --bg-end: #bcc8d7;
+  --accent: #6f8fb4;
+  --accent-rgb: 111, 143, 180;
+  --accent-strong: #dceafd;
+  --success: #6f969f;
+  --success-rgb: 111, 150, 159;
+  --surface: rgba(251, 253, 255, 0.82);
+  --surface-soft: rgba(255, 255, 255, 0.74);
+  --surface-glow: rgba(218, 233, 248, 0.26);
+  --line: rgba(109, 130, 157, 0.18);
+  --line-soft: rgba(118, 136, 161, 0.14);
+  --button-secondary-bg: rgba(251, 253, 255, 0.93);
+  --nav-shell-bg: rgba(242, 247, 252, 0.95);
+}
+
+body[data-resolved-mode="light"][data-theme="ocean"] {
+  --bg-start: #ebf8f6;
+  --bg-mid: #cfe9e5;
+  --bg-end: #afd3d7;
+  --accent: #4ea0a8;
+  --accent-rgb: 78, 160, 168;
+  --accent-strong: #d8f5f3;
+  --success: #6dbb9e;
+  --success-rgb: 109, 187, 158;
+  --surface: rgba(247, 254, 253, 0.82);
+  --surface-soft: rgba(255, 255, 255, 0.72);
+  --surface-glow: rgba(203, 240, 233, 0.28);
+  --line: rgba(91, 147, 152, 0.18);
+  --line-soft: rgba(109, 159, 164, 0.14);
+  --button-secondary-bg: rgba(248, 255, 254, 0.94);
+  --nav-shell-bg: rgba(240, 249, 248, 0.95);
+}
+
+body[data-resolved-mode="light"][data-theme="midnight"] {
+  --bg-start: #eeeffb;
+  --bg-mid: #d9dbf0;
+  --bg-end: #c1c7df;
+  --accent: #7d80cf;
+  --accent-rgb: 125, 128, 207;
+  --accent-strong: #e8e9ff;
+  --success: #6c92b8;
+  --success-rgb: 108, 146, 184;
+  --surface: rgba(251, 251, 255, 0.82);
+  --surface-soft: rgba(255, 255, 255, 0.74);
+  --surface-glow: rgba(219, 221, 255, 0.26);
+  --line: rgba(116, 119, 182, 0.18);
+  --line-soft: rgba(130, 133, 190, 0.14);
+  --button-secondary-bg: rgba(252, 252, 255, 0.94);
+  --nav-shell-bg: rgba(243, 244, 252, 0.95);
+}
+
+body[data-resolved-mode="light"][data-theme="ember"] {
+  --bg-start: #fff1e7;
+  --bg-mid: #f3d6c4;
+  --bg-end: #dfb9a6;
+  --accent: #c96f44;
+  --accent-rgb: 201, 111, 68;
+  --accent-strong: #ffe1d1;
+  --success: #90a167;
+  --success-rgb: 144, 161, 103;
+  --surface: rgba(255, 249, 245, 0.82);
+  --surface-soft: rgba(255, 255, 255, 0.72);
+  --surface-glow: rgba(255, 219, 193, 0.28);
+  --line: rgba(174, 105, 73, 0.18);
+  --line-soft: rgba(174, 105, 73, 0.14);
+  --button-secondary-bg: rgba(255, 250, 246, 0.94);
+  --nav-shell-bg: rgba(254, 245, 240, 0.95);
+}
+
+body[data-resolved-mode="light"][data-theme="plum"] {
+  --bg-start: #faf0f7;
+  --bg-mid: #ead9e9;
+  --bg-end: #d3bdd5;
+  --accent: #aa6ea5;
+  --accent-rgb: 170, 110, 165;
+  --accent-strong: #f7e0f4;
+  --success: #7b99bf;
+  --success-rgb: 123, 153, 191;
+  --surface: rgba(255, 249, 255, 0.82);
+  --surface-soft: rgba(255, 255, 255, 0.74);
+  --surface-glow: rgba(244, 214, 239, 0.28);
+  --line: rgba(150, 110, 148, 0.18);
+  --line-soft: rgba(150, 110, 148, 0.14);
+  --button-secondary-bg: rgba(255, 250, 255, 0.94);
+  --nav-shell-bg: rgba(249, 242, 249, 0.95);
+}
+
+body[data-resolved-mode="light"][data-theme="ice"] {
+  --bg-start: #f2fbff;
+  --bg-mid: #ddeff7;
+  --bg-end: #cae1ec;
+  --accent: #5ba4cb;
+  --accent-rgb: 91, 164, 203;
+  --accent-strong: #e7f8ff;
+  --success: #7ac7b8;
+  --success-rgb: 122, 199, 184;
+  --surface: rgba(248, 253, 255, 0.84);
+  --surface-soft: rgba(255, 255, 255, 0.76);
+  --surface-glow: rgba(214, 244, 255, 0.3);
+  --line: rgba(97, 151, 180, 0.18);
+  --line-soft: rgba(97, 151, 180, 0.14);
+  --button-secondary-bg: rgba(249, 254, 255, 0.95);
+  --nav-shell-bg: rgba(240, 249, 253, 0.96);
+}
+
+body[data-text-scale="large"] {
+  --text-xs: 0.76rem;
+  --text-sm: 0.92rem;
+  --text-body: 1.02rem;
+  --text-h1: 2.16rem;
+  --text-h3: 1.82rem;
+  --text-h4: 1.3rem;
+}
+
+body[data-density="compact"] {
+  --space-1: 6px;
+  --space-2: 10px;
+  --space-3: 14px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 26px;
+}
+
+body[data-contrast="high"][data-resolved-mode="dark"] {
+  --surface: rgba(17, 22, 21, 0.9);
+  --surface-soft: rgba(255, 255, 255, 0.11);
+  --surface-strong: rgba(255, 255, 255, 0.16);
+  --line: rgba(255, 255, 255, 0.2);
+  --line-soft: rgba(255, 255, 255, 0.16);
+  --text-soft: rgba(255, 248, 238, 0.94);
+  --text-faint: rgba(255, 248, 238, 0.88);
+  --text-subtle: rgba(255, 248, 238, 0.92);
+  --button-secondary-bg: rgba(255, 255, 255, 0.12);
+  --button-subtle-bg: rgba(255, 255, 255, 0.08);
+}
+
+body[data-contrast="high"][data-resolved-mode="light"] {
+  --surface: rgba(255, 255, 255, 0.92);
+  --surface-soft: rgba(255, 255, 255, 0.86);
+  --surface-strong: rgba(255, 255, 255, 0.96);
+  --line: rgba(55, 68, 60, 0.22);
+  --line-soft: rgba(55, 68, 60, 0.18);
+  --text-soft: rgba(35, 48, 39, 0.92);
+  --text-faint: rgba(35, 48, 39, 0.84);
+  --text-subtle: rgba(35, 48, 39, 0.9);
+  --button-secondary-bg: rgba(255, 255, 255, 0.96);
+  --button-subtle-bg: rgba(247, 244, 239, 0.92);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
+
+body[data-app-shell-mode="standalone"] #app {
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: auto;
+  overflow: visible;
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  width: min(1280px, 100%);
+  margin: 0 auto;
+  overflow: visible;
+}
+
+body[data-app-shell-mode="standalone"] .app-shell {
+  flex: 1 1 auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: auto;
+  overflow: visible;
+}
+
+.app-shell.is-standalone {
+  width: 100%;
+  max-width: none;
+}
+
+.app-shell.is-standalone .content-shell {
+  width: min(100%, calc(100vw - 12px));
+  padding-top: calc(6px + env(safe-area-inset-top, 0px));
+}
+
+.app-header-card {
+  position: relative;
+  z-index: 4;
+}
+
+.app-loading-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: calc(28px + env(safe-area-inset-top, 0px)) 18px calc(28px + env(safe-area-inset-bottom, 0px));
+}
+
+.loading-card {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 18px;
+  padding: 26px 22px;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 244, 225, 0.14);
+  background:
+    radial-gradient(circle at top left, rgba(248, 226, 186, 0.2), transparent 32%),
+    radial-gradient(circle at 100% 0%, rgba(144, 177, 136, 0.16), transparent 28%),
+    linear-gradient(145deg, rgba(255, 249, 239, 0.14), rgba(32, 42, 36, 0.26)),
+    rgba(28, 37, 32, 0.46);
+  box-shadow: var(--shadow);
+}
+
+.loading-brand {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.loading-brand img {
+  border-radius: 18px;
+  border: 1px solid rgba(255, 244, 225, 0.16);
+  box-shadow: var(--shadow-soft);
+}
+
+.loading-brand-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.loading-brand-copy p,
+.loading-caption {
+  margin: 0;
+  color: color-mix(in srgb, var(--text) 76%, transparent);
+}
+
+.loading-title {
+  font-size: 1.4rem;
+}
+
+.loading-bar {
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.loading-bar span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  animation: loading-slide 1.3s ease-in-out infinite;
+}
+
+.boot-recovery-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: calc(28px + env(safe-area-inset-top, 0px)) 18px calc(28px + env(safe-area-inset-bottom, 0px));
+}
+
+.boot-recovery-card {
+  width: min(100%, 440px);
+  display: grid;
+  gap: 16px;
+  padding: 28px 22px;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 244, 225, 0.16);
+  background:
+    radial-gradient(circle at top left, rgba(248, 226, 186, 0.18), transparent 34%),
+    radial-gradient(circle at 100% 0%, rgba(144, 177, 136, 0.14), transparent 30%),
+    linear-gradient(150deg, rgba(255, 249, 239, 0.18), rgba(30, 40, 34, 0.32)),
+    rgba(29, 38, 33, 0.52);
+  box-shadow: var(--shadow);
+}
+
+.boot-recovery-card h1,
+.boot-recovery-card p {
+  margin: 0;
+}
+
+.boot-recovery-detail {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: rgba(255, 248, 238, 0.08);
+  color: color-mix(in srgb, var(--text) 82%, transparent);
+}
+
+.boot-recovery-detail strong {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text) 60%, transparent);
+}
+
+.boot-recovery-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.side-rail,
+.card,
+.hero-panel,
+.summary-spotlight,
+.mobile-nav,
+.rail-card,
+.screen-stage {
+  backdrop-filter: blur(18px);
+  background:
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.12), transparent 46%),
+    radial-gradient(circle at top left, var(--surface-glow), transparent 42%),
+    var(--surface);
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow);
+}
+
+.content-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: visible;
+  width: min(1180px, calc(100vw - 20px));
+  margin: 0 auto;
+  padding: calc(var(--space-2) + env(safe-area-inset-top, 0px)) 0 0;
+}
+
+body[data-app-shell-mode="standalone"] .content-shell {
+  min-height: calc(100vh - env(safe-area-inset-top, 0px));
+  min-height: calc(100dvh - env(safe-area-inset-top, 0px));
+  overflow: visible;
+}
+
+.app-header-card,
+.screen-stage {
+  border-radius: var(--radius);
+}
+
+.app-header-card {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  align-items: center;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  background:
+    radial-gradient(circle at top left, rgba(var(--accent-rgb), 0.16), transparent 42%),
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.1), rgba(26, 34, 29, 0.06)),
+    color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-soft);
+}
+
+.app-header-card--round {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.08), rgba(26, 34, 29, 0.04)),
+    color-mix(in srgb, var(--surface) 80%, transparent);
+}
+
+.app-header-card--utility {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.app-header-context {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.app-header-context--utility,
+.app-header-context--round {
+  gap: 0;
+}
+
+.app-header-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-header-overline {
+  color: var(--text-faint);
+}
+
+.app-header-title {
+  display: block;
+  font-family: "Space Grotesk", "Trebuchet MS", sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.app-header-subtitle {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--text-sm);
+  line-height: 1.35;
+  max-width: 42ch;
+}
+
+.app-header-card--round .app-header-title {
+  font-size: 0.98rem;
+  line-height: 1.02;
+}
+
+.app-header-card--round .app-header-subtitle {
+  font-size: 0.76rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 54vw;
+}
+
+.account-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 16px;
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent),
+    var(--button-secondary-bg);
+  color: var(--text);
+  min-height: 50px;
+  flex-shrink: 0;
+  transition: transform var(--motion-standard), border-color var(--motion-standard), background var(--motion-standard);
+}
+
+.account-trigger-copy {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.account-trigger-copy strong {
+  font-size: 0.95rem;
+  line-height: 1.1;
+}
+
+.app-stage {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 0 calc(var(--space-4) + 88px + env(safe-area-inset-bottom, 0px));
+}
+
+body[data-app-shell-mode="standalone"] .app-stage {
+  flex: 0 0 auto;
+  min-height: 0;
+  overflow: visible;
+  overscroll-behavior: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+body[data-app-shell-mode="standalone"] .screen-stage {
+  overflow: visible;
+}
+
+.screen-stage {
+  position: relative;
+  overflow: clip;
+  padding: 20px;
+}
+
+.screen-stage--compact {
+  padding-top: 16px;
+}
+
+.screen-stage--round {
+  padding-top: 14px;
+}
+
+.screen-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 22%),
+    radial-gradient(circle at top center, rgba(255, 239, 210, 0.08), transparent 40%);
+}
+
+.screen-panel {
+  min-height: 0;
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.screen-utility-bar {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+.screen-utility-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.utility-copy-group {
+  gap: 2px;
+}
+
+.utility-heading {
+  font-size: clamp(1.2rem, 4.2vw, 1.55rem);
+  max-width: 18ch;
+  line-height: 1.02;
+}
+
+.utility-copy {
+  margin: 0;
+  max-width: 54ch;
+  font-size: var(--text-sm);
+  color: var(--text-faint);
+}
+
+.screen-utility-actions {
+  display: grid;
+  justify-items: end;
+  align-content: start;
+}
+
+.utility-header-button {
+  min-height: 44px;
+  min-width: 0;
+  padding-inline: 16px;
+}
+
+.screen-meta--utility {
+  padding-top: 0;
+  gap: 8px;
+}
+
+.screen-meta--utility .top-chip {
+  padding: 8px 12px;
+  font-size: 0.78rem;
+}
+
+.brand-block {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-mark {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.22), rgba(var(--success-rgb), 0.18));
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.brand-mark--compact {
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  font-size: 0.78rem;
+}
+
+.round-entry-card {
+  order: 2;
+}
+
+.round-entry-state {
+  align-items: start;
+  text-align: left;
+}
+
+.screen-hero {
+  display: grid;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  padding: clamp(24px, 4.6vw, 36px);
+  border-radius: 36px;
+  border: 1px solid rgba(var(--accent-rgb), 0.16);
+  background:
+    radial-gradient(circle at top left, rgba(var(--accent-rgb), 0.22), transparent 32%),
+    radial-gradient(circle at 100% 0%, rgba(var(--success-rgb), 0.16), transparent 28%),
+    radial-gradient(circle at 50% 100%, rgba(var(--accent-rgb), 0.1), transparent 34%),
+    linear-gradient(145deg, rgba(255, 249, 239, 0.14), rgba(32, 42, 36, 0.26)),
+    rgba(28, 37, 32, 0.44);
+  box-shadow: var(--shadow);
+}
+
+.screen-copy {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.screen-hero-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) auto;
+  gap: var(--space-5);
+  align-items: center;
+}
+
+.screen-hero-actions {
+  display: grid;
+  gap: var(--space-3);
+  align-content: center;
+  justify-items: start;
+  min-width: 0;
+}
+
+.hero-action-button {
+  min-width: 168px;
+  min-height: 52px;
+}
+
+.hero-support-copy {
+  margin: 0;
+  max-width: 22ch;
+  color: var(--text-faint);
+  line-height: 1.45;
+  font-size: var(--text-body);
+}
+
+.screen-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: 2px;
+}
+
+.eyebrow,
+.mini-label,
+.participant-heading span,
+.list-row span,
+.summary-grid span,
+.hero-panel span {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-family: "Cormorant Garamond", Georgia, serif;
+  line-height: 0.96;
+}
+
+h1 {
+  font-size: var(--text-h1);
+}
+
+h2 {
+  font-size: clamp(2.4rem, 7vw, 4.6rem);
+  max-width: 14ch;
+  line-height: 1;
+}
+
+h3 {
+  font-size: var(--text-h3);
+}
+
+h4 {
+  font-size: var(--text-h4);
+}
+
+.topbar-meta,
+.row-actions,
+.tag-row,
+.toggle-row,
+.hole-pills,
+.nav-stack {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.row-actions {
+  align-items: center;
+}
+
+.row-actions > *,
+.app-header-meta > *,
+.screen-hero-actions > * {
+  min-width: 0;
+}
+
+.top-chip,
+.status-pill,
+.tag {
+  padding: 10px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--button-secondary-bg);
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+}
+
+.hero-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.hero-panel,
+.card,
+.summary-spotlight,
+.side-rail,
+.rail-card,
+.mobile-nav,
+.app-header-card,
+.screen-stage {
+  border-radius: var(--radius);
+}
+
+.hero-panel {
+  padding: 20px;
+}
+
+.hero-panel-brand {
+  min-height: 190px;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-panel-brand::after {
+  content: "";
+  position: absolute;
+  right: -30px;
+  bottom: -50px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(240, 203, 131, 0.34), transparent 72%);
+}
+
+.hero-panel strong,
+.summary-grid strong,
+.list-row strong,
+.leader-row strong,
+.participant-card strong,
+.rail-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.2rem;
+}
+
+.hero-copy,
+.body-copy,
+.participant-heading p,
+.leader-row p,
+.list-row p,
+.rail-card p {
+  margin: 10px 0 0;
+  line-height: 1.65;
+  color: var(--text-soft);
+  font-size: var(--text-body);
+}
+
+.summary-spotlight,
+.card {
+  padding: var(--space-4);
+  position: relative;
+}
+
+.avatar-chip {
+  width: 40px;
+  height: 40px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 14px;
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.2), rgba(var(--success-rgb), 0.14));
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.avatar-chip.is-large {
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  font-size: 1rem;
+}
+
+.avatar-chip.is-header {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  font-size: 0.84rem;
+}
+
+.summary-spotlight {
+  margin-bottom: var(--space-4);
+}
+
+.install-card {
+  border-color: rgba(var(--accent-rgb), 0.22);
+  background:
+    radial-gradient(circle at top right, rgba(var(--accent-rgb), 0.16), transparent 44%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 55%),
+    var(--surface);
+}
+
+.install-card--installed {
+  border-color: rgba(var(--success-rgb), 0.26);
+  background:
+    radial-gradient(circle at top right, rgba(var(--success-rgb), 0.14), transparent 44%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 55%),
+    var(--surface);
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  align-items: start;
+  margin-bottom: var(--space-4);
+}
+
+.view-shell {
+  animation: screen-fade var(--motion-standard);
+}
+
+.view-shell.transition-forward {
+  animation: screen-slide-forward 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.view-shell.transition-backward {
+  animation: screen-slide-backward 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.view-shell.transition-focus {
+  animation: screen-focus 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.view-shell.transition-return {
+  animation: screen-return 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes screen-fade {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.992);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes loading-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  55% {
+    transform: translateX(155%);
+  }
+
+  100% {
+    transform: translateX(155%);
+  }
+}
+
+@keyframes screen-slide-forward {
+  from {
+    opacity: 0;
+    transform: translateX(16px) translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
+}
+
+@keyframes screen-slide-backward {
+  from {
+    opacity: 0;
+    transform: translateX(-16px) translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
+}
+
+@keyframes screen-focus {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes screen-return {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.view-grid {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.play-grid {
+  grid-template-columns: 0.95fr 1.05fr;
+}
+
+.stats-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.card-span-2 {
+  grid-column: span 2;
+}
+
+.card-span-3 {
+  grid-column: span 3;
+}
+
+.stack-form,
+.stack-list,
+.summary-grid,
+.leaderboard-list,
+.participant-grid {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.stack-form label,
+.inline-form label {
+  display: grid;
+  gap: 8px;
+  font-size: var(--text-body);
+}
+
+.split-inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background: var(--field-bg);
+  color: var(--text);
+  font-size: 16px;
+  transition: border-color var(--motion-standard), background var(--motion-standard), box-shadow var(--motion-standard);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 54%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+textarea {
+  resize: vertical;
+}
+
+.inline-form {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  margin-top: 16px;
+}
+
+.inline-grow {
+  flex: 1;
+}
+
+.button {
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 13px 18px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  transition: transform 160ms ease, background var(--motion-standard), border-color var(--motion-standard), box-shadow var(--motion-standard);
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.button.primary {
+  color: var(--accent-ink);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 90%, white 8%), var(--accent-strong));
+  box-shadow:
+    0 12px 24px rgba(var(--accent-rgb), 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+}
+
+.button.secondary {
+  color: var(--text);
+  background: var(--button-secondary-bg);
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.button.subtle {
+  color: var(--text-soft);
+  background: var(--button-subtle-bg);
+  border: 1px solid var(--line-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.settings-header-button {
+  min-width: 152px;
+}
+
+.guided-action {
+  border-color: rgba(var(--accent-rgb), 0.55);
+  box-shadow:
+    0 0 0 3px rgba(var(--accent-rgb), 0.12),
+    0 14px 28px rgba(var(--accent-rgb), 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.compact-header-button {
+  min-height: 38px;
+  padding: 8px 14px;
+}
+
+.account-trigger:hover,
+.account-trigger:focus-visible {
+  border-color: rgba(var(--accent-rgb), 0.3);
+  transform: translateY(-1px);
+}
+
+.profile-preview-button {
+  margin-bottom: 12px;
+}
+
+.profile-identity-row,
+.participant-heading-main,
+.leader-name-row,
+.player-preview-pill {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.profile-identity-row p,
+.leader-name-row p,
+.player-preview-pill span {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.profile-identity-row strong {
+  letter-spacing: -0.01em;
+}
+
+.compact-profile-row {
+  margin-bottom: 16px;
+}
+
+.participant-heading-main {
+  min-width: 0;
+}
+
+.participant-heading-main > div,
+.leader-name-row > div {
+  min-width: 0;
+}
+
+.hole-nav {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.hole-stepper {
+  min-height: 44px;
+  min-width: 70px;
+}
+
+.hole-nav-meta,
+.quick-help-row,
+.summary-detail-list,
+.onboarding-list {
+  display: grid;
+  gap: 10px;
+}
+
+.hole-pills {
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x proximity;
+}
+
+.hole-pill {
+  min-width: 60px;
+  padding: 10px 9px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+  scroll-snap-align: center;
+}
+
+.hole-pill.is-active {
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(var(--accent-rgb), 0.13);
+  color: var(--text);
+}
+
+.hole-pill.is-complete {
+  box-shadow: inset 0 0 0 1px rgba(var(--success-rgb), 0.24);
+}
+
+.hole-pill span {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.hole-pill strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.72rem;
+}
+
+.hole-utility-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 10px;
+  margin-bottom: 12px;
+  align-items: stretch;
+}
+
+.hole-utility-card {
+  padding: 12px 14px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.hole-utility-card--primary {
+  background:
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.1), transparent),
+    rgba(255, 255, 255, 0.03);
+}
+
+.hole-utility-card p {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.hole-next-button {
+  min-height: 100%;
+  min-width: 148px;
+}
+
+.hole-focus-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.hole-focus-bar > div {
+  padding: 14px 16px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.hole-focus-bar strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.12rem;
+}
+
+.hole-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.quick-help-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.round-score-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 8px;
+}
+
+.round-score-subcopy {
+  margin-top: 6px;
+}
+
+.round-score-status {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.round-score-guidance {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.round-help-row {
+  margin-bottom: 10px;
+}
+
+.round-continue-inline {
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.participant-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.participant-card,
+.leader-row,
+.list-row,
+.feed-row,
+.summary-grid article,
+.auth-provider-button,
+.privacy-option,
+.player-preview-pill {
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 55%),
+    var(--surface-soft);
+}
+
+.participant-card,
+.leader-row,
+.list-row,
+.feed-row,
+.summary-grid article,
+.auth-provider-button,
+.privacy-option,
+.player-preview-pill {
+  padding: 16px;
+}
+
+.participant-heading {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.participant-heading--score {
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.participant-subcopy {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
+.participant-heading-tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.auth-provider-list,
+.privacy-grid,
+.account-access-meta,
+.participant-preview-row,
+.round-support-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-visibility-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+
+.view-grid.settings-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings-top-card,
+.settings-nav-card,
+.settings-card {
+  align-self: start;
+}
+
+.settings-top-card {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.settings-nav-card {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-section-nav {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.settings-section-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-section-pill {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: var(--button-subtle-bg);
+  color: var(--muted);
+  font-weight: 700;
+  scroll-snap-align: center;
+  transition: transform 160ms ease, border-color var(--motion-standard), background var(--motion-standard), color var(--motion-standard), box-shadow var(--motion-standard);
+}
+
+.settings-section-pill.is-active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 14%, transparent), rgba(255, 255, 255, 0.03));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.settings-card {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.settings-option-group {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-choice-grid,
+.theme-choice-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-choice-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings-choice-grid--dual {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.theme-choice-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-choice-card,
+.theme-choice-card,
+.settings-toggle-card,
+.settings-support-panel {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 56%),
+    var(--surface-soft);
+  box-shadow: var(--shadow-soft);
+}
+
+.settings-choice-card,
+.theme-choice-card,
+.settings-toggle-card {
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    border-color var(--motion-standard),
+    background var(--motion-standard),
+    box-shadow var(--motion-standard);
+}
+
+.theme-current-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: calc(var(--radius-soft) + 2px);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line-soft));
+  background:
+    radial-gradient(circle at top right, rgba(var(--accent-rgb), 0.18), transparent 42%),
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.08), rgba(255, 255, 255, 0.02)),
+    var(--surface-soft);
+  box-shadow:
+    0 16px 34px color-mix(in srgb, var(--accent) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.theme-current-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.theme-current-copy strong {
+  font-size: 1.05rem;
+}
+
+.theme-current-copy p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+}
+
+.theme-current-eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.settings-choice-card input,
+.theme-choice-card input,
+.settings-toggle-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 1px;
+  height: 1px;
+}
+
+.settings-choice-card strong,
+.theme-choice-card strong,
+.settings-toggle-card strong {
+  font-size: 0.98rem;
+}
+
+.settings-choice-card p,
+.theme-choice-card p,
+.settings-toggle-card p,
+.settings-support-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.settings-choice-card.is-selected,
+.theme-choice-card.is-selected,
+.settings-toggle-card.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 44%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, transparent), rgba(255, 255, 255, 0.03)),
+    var(--surface-soft);
+  box-shadow:
+    0 12px 28px color-mix(in srgb, var(--accent) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.settings-choice-card:has(input:checked),
+.theme-choice-card:has(input:checked),
+.settings-toggle-card:has(input:checked) {
+  border-color: color-mix(in srgb, var(--accent) 44%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, transparent), rgba(255, 255, 255, 0.03)),
+    var(--surface-soft);
+  box-shadow:
+    0 12px 28px color-mix(in srgb, var(--accent) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.theme-choice-card.is-selected,
+.theme-choice-card:has(input:checked) {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 58%, transparent);
+  box-shadow:
+    0 18px 36px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 0 0 1px rgba(var(--accent-rgb), 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.theme-choice-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.theme-preview-swatches {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.theme-preview-swatches--hero {
+  gap: 10px;
+}
+
+.theme-preview-swatch {
+  display: inline-flex;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.theme-preview-swatch--bg {
+  width: 46px;
+  height: 14px;
+  background: linear-gradient(135deg, var(--theme-preview-start), var(--theme-preview-end));
+}
+
+.theme-preview-swatch--surface {
+  width: 28px;
+  height: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent),
+    var(--theme-preview-surface);
+}
+
+.theme-preview-swatch--accent {
+  width: 18px;
+  height: 18px;
+  background: linear-gradient(135deg, var(--theme-preview-accent), var(--theme-preview-accent-strong));
+}
+
+.theme-choice-badge {
+  display: none;
+}
+
+.theme-choice-card.is-selected .theme-choice-badge,
+.theme-choice-card:has(input:checked) .theme-choice-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.14);
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.theme-choice-card::before {
+  content: "";
+  display: block;
+  height: 74px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background:
+    radial-gradient(circle at 20% 18%, rgba(255, 255, 255, 0.28), transparent 28%),
+    radial-gradient(circle at 76% 68%, rgba(255, 255, 255, 0.14), transparent 24%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.14), rgba(0, 0, 0, 0.08));
+}
+
+.theme-choice-card.is-selected::before,
+.theme-choice-card:has(input:checked)::before {
+  border-color: rgba(var(--accent-rgb), 0.38);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 10px 20px rgba(var(--accent-rgb), 0.14);
+}
+
+.theme-choice-card[data-theme-preview="forest"],
+.theme-current-card[data-theme-preview="forest"] {
+  --theme-preview-start: #95a78e;
+  --theme-preview-end: #203125;
+  --theme-preview-surface: rgba(246, 239, 225, 0.24);
+  --theme-preview-accent: #c99d61;
+  --theme-preview-accent-strong: #efd7a7;
+}
+
+.theme-choice-card[data-theme-preview="sand"],
+.theme-current-card[data-theme-preview="sand"] {
+  --theme-preview-start: #edd9bd;
+  --theme-preview-end: #82654c;
+  --theme-preview-surface: rgba(255, 243, 223, 0.26);
+  --theme-preview-accent: #bf8d56;
+  --theme-preview-accent-strong: #f0d8ae;
+}
+
+.theme-choice-card[data-theme-preview="slate"],
+.theme-current-card[data-theme-preview="slate"] {
+  --theme-preview-start: #acb8c9;
+  --theme-preview-end: #2a3647;
+  --theme-preview-surface: rgba(227, 235, 245, 0.22);
+  --theme-preview-accent: #9db6d8;
+  --theme-preview-accent-strong: #e5eef9;
+}
+
+.theme-choice-card[data-theme-preview="ocean"],
+.theme-current-card[data-theme-preview="ocean"] {
+  --theme-preview-start: #85c6c3;
+  --theme-preview-end: #173743;
+  --theme-preview-surface: rgba(220, 247, 242, 0.22);
+  --theme-preview-accent: #69bcc3;
+  --theme-preview-accent-strong: #d9f6f3;
+}
+
+.theme-choice-card[data-theme-preview="midnight"],
+.theme-current-card[data-theme-preview="midnight"] {
+  --theme-preview-start: #7179b6;
+  --theme-preview-end: #11192b;
+  --theme-preview-surface: rgba(234, 232, 255, 0.2);
+  --theme-preview-accent: #a9a0ff;
+  --theme-preview-accent-strong: #ebe8ff;
+}
+
+.theme-choice-card[data-theme-preview="ember"],
+.theme-current-card[data-theme-preview="ember"] {
+  --theme-preview-start: #cb7f58;
+  --theme-preview-end: #27130d;
+  --theme-preview-surface: rgba(255, 235, 223, 0.22);
+  --theme-preview-accent: #e08d5d;
+  --theme-preview-accent-strong: #ffd9c4;
+}
+
+.theme-choice-card[data-theme-preview="plum"],
+.theme-current-card[data-theme-preview="plum"] {
+  --theme-preview-start: #a37aaa;
+  --theme-preview-end: #241826;
+  --theme-preview-surface: rgba(250, 235, 247, 0.22);
+  --theme-preview-accent: #cf9fca;
+  --theme-preview-accent-strong: #f8e2f4;
+}
+
+.theme-choice-card[data-theme-preview="ice"],
+.theme-current-card[data-theme-preview="ice"] {
+  --theme-preview-start: #b1dcf3;
+  --theme-preview-end: #1d4258;
+  --theme-preview-surface: rgba(234, 248, 255, 0.24);
+  --theme-preview-accent: #8cc9eb;
+  --theme-preview-accent-strong: #ebf9ff;
+}
+
+.theme-choice-card[data-theme-preview="forest"]::before {
+  background:
+    radial-gradient(circle at 20% 18%, rgba(246, 226, 187, 0.34), transparent 28%),
+    radial-gradient(circle at 76% 68%, rgba(170, 203, 154, 0.16), transparent 24%),
+    linear-gradient(160deg, #8a987f, #304034 70%, #19211a);
+}
+
+.theme-choice-card[data-theme-preview="sand"]::before {
+  background:
+    radial-gradient(circle at 20% 18%, rgba(255, 246, 224, 0.42), transparent 28%),
+    radial-gradient(circle at 76% 68%, rgba(224, 183, 135, 0.16), transparent 24%),
+    linear-gradient(160deg, #ead9bf, #c8b292 68%, #8c775f);
+}
+
+.theme-choice-card[data-theme-preview="slate"]::before {
+  background:
+    radial-gradient(circle at 20% 18%, rgba(232, 237, 245, 0.34), transparent 28%),
+    radial-gradient(circle at 76% 68%, rgba(151, 176, 204, 0.16), transparent 24%),
+    linear-gradient(160deg, #a9b2bf, #687385 68%, #394454);
+}
+
+.theme-choice-card[data-theme-preview="ocean"]::before {
+  background:
+    radial-gradient(circle at 20% 18%, rgba(225, 247, 244, 0.34), transparent 28%),
+    radial-gradient(circle at 76% 68%, rgba(98, 194, 197, 0.18), transparent 24%),
+    linear-gradient(160deg, #8bb9b5, #4e7b88 68%, #213744);
+}
+
+.theme-choice-card[data-theme-preview="midnight"]::before {
+  background:
+    radial-gradient(circle at 20% 18%, rgba(222, 215, 255, 0.26), transparent 28%),
+    radial-gradient(circle at 76% 68%, rgba(147, 158, 255, 0.16), transparent 24%),
+    linear-gradient(160deg, #636ea1, #253154 70%, #101828);
+}
+
+.theme-choice-card[data-theme-preview="ember"]::before {
+  background:
+    radial-gradient(circle at 20% 18%, rgba(255, 223, 198, 0.32), transparent 28%),
+    radial-gradient(circle at 76% 68%, rgba(255, 169, 113, 0.18), transparent 24%),
+    linear-gradient(160deg, #c67c55, #6f3424 70%, #23120e);
+}
+
+.theme-choice-card[data-theme-preview="plum"]::before {
+  background:
+    radial-gradient(circle at 20% 18%, rgba(248, 228, 244, 0.32), transparent 28%),
+    radial-gradient(circle at 76% 68%, rgba(202, 150, 210, 0.16), transparent 24%),
+    linear-gradient(160deg, #9d74a3, #55395c 70%, #211724);
+}
+
+.theme-choice-card[data-theme-preview="ice"]::before {
+  background:
+    radial-gradient(circle at 20% 18%, rgba(235, 251, 255, 0.36), transparent 28%),
+    radial-gradient(circle at 76% 68%, rgba(152, 213, 242, 0.2), transparent 24%),
+    linear-gradient(160deg, #b3d8ec, #5a89a2 70%, #1d3b51);
+}
+
+.settings-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-toggle-card {
+  min-height: 110px;
+}
+
+.settings-social-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.settings-support-list {
+  gap: 12px;
+}
+
+.course-picker-block {
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.course-search-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.course-search-field {
+  display: grid;
+  gap: 8px;
+}
+
+.course-search-actions {
+  justify-content: flex-start;
+}
+
+.course-results-list {
+  display: grid;
+  gap: 12px;
+}
+
+.course-result-card,
+.course-selected-card {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 56%),
+    var(--surface-soft);
+  color: var(--text);
+  text-align: left;
+  box-shadow: var(--shadow-soft);
+}
+
+.course-result-card {
+  transition:
+    transform 160ms ease,
+    border-color var(--motion-standard),
+    background var(--motion-standard),
+    box-shadow var(--motion-standard);
+}
+
+.course-result-card:hover,
+.course-result-card:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.course-result-card.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 14%, transparent), rgba(255, 255, 255, 0.03)),
+    var(--surface-soft);
+  box-shadow:
+    0 16px 30px color-mix(in srgb, var(--accent) 12%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.course-result-copy,
+.course-selected-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.course-result-copy p,
+.course-selected-copy p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+}
+
+.course-result-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.course-result-meta .status-pill {
+  color: var(--text);
+}
+
+.course-selected-card {
+  gap: 14px;
+}
+
+.course-selected-actions {
+  align-items: end;
+}
+
+.course-selected-actions-buttons {
+  display: grid;
+  align-items: end;
+}
+
+.selected-course-summary-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.compact-empty-state {
+  padding: 16px;
+}
+
+.settings-link-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  text-align: left;
+  color: inherit;
+}
+
+.settings-link-row > div {
+  min-width: 0;
+}
+
+.settings-link-row span {
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+
+.compact-form {
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.auth-shell {
+  width: min(1180px, calc(100vw - 20px));
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: calc(20px + env(safe-area-inset-top, 0px)) 0 calc(110px + env(safe-area-inset-bottom, 0px));
+  display: grid;
+  gap: var(--space-4);
+}
+
+.auth-benefit-grid,
+.auth-provider-stack,
+.auth-mode-toggle {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-reset-form {
+  margin-top: 12px;
+}
+
+.auth-provider-button:disabled {
+  opacity: 0.72;
+  cursor: default;
+  transform: none;
+  box-shadow: none;
+}
+
+.auth-example-details {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-example-details summary {
+  display: grid;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.auth-example-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.auth-benefit-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.auth-benefit-grid article {
+  padding: 16px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.auth-benefit-grid span {
+  display: block;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.auth-panel-card,
+.auth-review-card,
+.auth-hero-card {
+  align-self: start;
+}
+
+.global-feedback-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.global-feedback {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 70%),
+    rgba(255, 255, 255, 0.04);
+}
+
+.global-feedback strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.global-feedback p {
+  margin: 0;
+  color: var(--text-soft);
+}
+
+.global-feedback.is-success {
+  border-color: rgba(123, 208, 154, 0.26);
+  background: rgba(123, 208, 154, 0.08);
+}
+
+.global-feedback.is-error {
+  border-color: rgba(239, 142, 120, 0.24);
+  background: rgba(239, 142, 120, 0.08);
+}
+
+.global-feedback.is-info,
+.global-feedback.is-loading {
+  border-color: rgba(240, 203, 131, 0.24);
+  background: rgba(240, 203, 131, 0.07);
+}
+
+.compact-feedback-button {
+  white-space: nowrap;
+}
+
+.auth-message {
+  padding: 13px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(123, 208, 154, 0.2);
+  background: rgba(123, 208, 154, 0.09);
+  color: var(--text);
+}
+
+.auth-message.is-error {
+  border-color: rgba(239, 142, 120, 0.2);
+  background: rgba(239, 142, 120, 0.1);
+}
+
+.auth-helper-note {
+  padding: 14px 16px;
+  border-radius: var(--radius-soft);
+  border: 1px solid rgba(240, 203, 131, 0.18);
+  background: rgba(255, 248, 236, 0.04);
+}
+
+.auth-helper-note strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.auth-helper-note p {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.55;
+}
+
+.auth-helper-note--compact {
+  margin-top: 4px;
+}
+
+.help-row {
+  margin-top: 10px;
+}
+
+.help-inline-button {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 38px;
+  padding: 9px 14px;
+  font-size: 0.84rem;
+}
+
+.help-inline-button.is-compact {
+  padding: 8px 12px;
+}
+
+.help-inline-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(240, 203, 131, 0.16);
+  color: var(--accent-strong);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.visibility-card {
+  padding: 16px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.visibility-card span {
+  display: block;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.visibility-card strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 1rem;
+}
+
+.visibility-card p {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.auth-provider-button,
+.player-preview-pill {
+  width: 100%;
+  text-align: left;
+  color: var(--text);
+}
+
+.auth-provider-button strong,
+.player-profile-card strong,
+.competitive-preview-card strong {
+  display: block;
+}
+
+.auth-provider-button span {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-subtle);
+  line-height: 1.45;
+}
+
+.privacy-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.privacy-option {
+  display: flex;
+  gap: 10px;
+  align-items: start;
+}
+
+.privacy-option input {
+  width: auto;
+  margin-top: 4px;
+}
+
+.account-access-meta {
+  margin-top: 12px;
+}
+
+.round-card .participant-card:first-child {
+  border-color: rgba(240, 203, 131, 0.45);
+}
+
+.participant-card.is-local {
+  border-color: rgba(240, 203, 131, 0.42);
+  background: rgba(240, 203, 131, 0.08);
+}
+
+.participant-card.is-leader {
+  box-shadow: inset 0 0 0 1px rgba(123, 208, 154, 0.32);
+}
+
+.participant-card.is-recent-score {
+  animation: score-pulse 760ms ease;
+}
+
+.round-score-shell .participant-card {
+  padding: 14px;
+}
+
+.competitive-note {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  color: var(--text-soft);
+  font-size: 0.84rem;
+}
+
+.competitive-note--tight {
+  margin-bottom: 10px;
+}
+
+.competitive-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(240, 203, 131, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.competitive-pill.is-leading {
+  border-color: rgba(123, 208, 154, 0.28);
+  background: rgba(123, 208, 154, 0.1);
+}
+
+.participant-compact-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.participant-compact-stats span {
+  padding: 6px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.78rem;
+  color: var(--text-soft);
+}
+
+.score-primary-block {
+  display: grid;
+  gap: 10px;
+}
+
+.quick-score-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+.score-chip {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-soft);
+  min-height: 70px;
+  padding: 10px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-weight: 700;
+  box-shadow: var(--shadow-soft);
+  transition:
+    transform 140ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.score-chip.is-primary {
+  background: linear-gradient(135deg, rgba(240, 203, 131, 0.18), rgba(240, 203, 131, 0.26));
+  border-color: rgba(240, 203, 131, 0.35);
+}
+
+.score-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 24px rgba(14, 19, 16, 0.18);
+}
+
+.score-chip:active {
+  transform: scale(0.98);
+}
+
+.score-chip span {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.score-chip strong {
+  margin: 0;
+  font-size: 1.28rem;
+}
+
+.score-manual-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.score-inline-field {
+  display: grid;
+  gap: 6px;
+  font-size: 0.84rem;
+}
+
+.score-inline-field span {
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+}
+
+.score-inline-field input,
+.score-secondary-grid input {
+  padding: 12px 14px;
+  min-height: 46px;
+}
+
+.score-next-button {
+  min-height: 46px;
+  min-width: 128px;
+}
+
+.advanced-hole-stats {
+  margin-top: 10px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.advanced-hole-stats summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.advanced-hole-stats summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-hole-stats summary span {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.advanced-hole-stats summary strong {
+  font-size: 0.86rem;
+  line-height: 1.3;
+  text-align: right;
+  color: var(--text-soft);
+}
+
+.advanced-hole-stats[open] summary {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.advanced-hole-stats-body {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px 14px;
+}
+
+.score-secondary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.toggle-row-advanced {
+  gap: 8px;
+}
+
+.toggle-row-advanced .toggle-pill {
+  min-width: calc(50% - 4px);
+  flex: 0 0 calc(50% - 4px);
+}
+
+.profile-preview-button--inline {
+  min-height: 32px;
+  padding: 6px 10px;
+  margin-bottom: 0;
+}
+
+.toggle-pill {
+  flex: 1;
+  padding: 11px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.toggle-pill.is-on {
+  color: #112017;
+  background: linear-gradient(135deg, var(--success), var(--accent));
+  border-color: transparent;
+}
+
+.summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.summary-grid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stats-primary-card .summary-grid article,
+.stats-quiet-card .summary-grid article,
+.player-profile-card .summary-grid article {
+  background: rgba(255, 255, 255, 0.025);
+  box-shadow: none;
+}
+
+.stats-primary-card .summary-grid article strong {
+  font-size: clamp(1.45rem, 4.6vw, 2rem);
+  line-height: 1;
+}
+
+.stats-primary-card .body-copy,
+.stats-quiet-card .body-copy,
+.account-access-card .body-copy,
+.player-profile-card .body-copy {
+  max-width: 62ch;
+}
+
+.stats-quiet-card,
+.account-access-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 58%),
+    rgba(28, 37, 32, 0.42);
+  box-shadow: var(--shadow-soft);
+}
+
+.leaderboard-list,
+.stack-list {
+  gap: 10px;
+}
+
+.leader-highlight {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-soft);
+  border: 1px solid rgba(240, 203, 131, 0.25);
+  background: linear-gradient(135deg, rgba(240, 203, 131, 0.12), rgba(255, 255, 255, 0.03));
+}
+
+.leader-row,
+.list-row.large {
+  display: grid;
+  grid-template-columns: 1.5fr 0.5fr 0.7fr 0.8fr;
+  gap: 14px;
+  align-items: center;
+}
+
+.leader-row > *,
+.list-row.large > * {
+  min-width: 0;
+}
+
+.leader-row.is-local {
+  border-color: rgba(240, 203, 131, 0.4);
+  background: rgba(240, 203, 131, 0.08);
+}
+
+.leader-row.is-leader {
+  border-color: rgba(123, 208, 154, 0.24);
+  background: linear-gradient(135deg, rgba(123, 208, 154, 0.1), rgba(255, 255, 255, 0.03));
+}
+
+.rank-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--accent-strong);
+}
+
+.sync-banner {
+  padding: 14px 16px;
+  border-radius: var(--radius-soft);
+  margin-bottom: 14px;
+  border: 1px solid var(--line-soft);
+}
+
+.sync-banner strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.sync-banner p {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.sync-banner.is-success {
+  background: rgba(123, 208, 154, 0.1);
+  border-color: rgba(123, 208, 154, 0.25);
+}
+
+.sync-banner.is-warning {
+  background: rgba(239, 142, 120, 0.1);
+  border-color: rgba(239, 142, 120, 0.24);
+}
+
+.sync-banner.is-quiet {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.round-subtle-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.connection-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.summary-detail-list {
+  margin-top: 12px;
+}
+
+.summary-detail-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 22px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.summary-detail-row.is-local {
+  border-color: rgba(240, 203, 131, 0.35);
+  background: rgba(240, 203, 131, 0.08);
+}
+
+.onboarding-card {
+  background:
+    radial-gradient(circle at top right, rgba(123, 208, 154, 0.12), transparent 40%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent),
+    var(--surface);
+}
+
+.onboarding-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.onboarding-list article {
+  padding: 16px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.onboarding-list strong {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  border-radius: 50%;
+  background: rgba(240, 203, 131, 0.14);
+  color: var(--accent-strong);
+}
+
+.onboarding-list p {
+  margin: 0;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+.onboarding-state strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.onboarding-state p {
+  margin: 0;
+}
+
+.auth-onboarding-list {
+  margin-top: 2px;
+}
+
+.player-preview-pill {
+  justify-content: flex-start;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.help-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.help-overview-card {
+  background:
+    radial-gradient(circle at top right, rgba(240, 203, 131, 0.08), transparent 40%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 56%),
+    var(--surface);
+}
+
+.help-jump-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.help-jump-pill {
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  text-align: left;
+  font-weight: 700;
+}
+
+.help-jump-pill.is-active,
+.help-section-card.is-selected {
+  border-color: rgba(240, 203, 131, 0.28);
+  background: linear-gradient(180deg, rgba(240, 203, 131, 0.09), rgba(255, 255, 255, 0.03));
+}
+
+.help-item-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.help-item {
+  padding: 16px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 65%),
+    rgba(255, 255, 255, 0.03);
+}
+
+.help-item strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.help-item p {
+  margin: 0;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+
+.metric-help-grid {
+  margin-bottom: 14px;
+}
+
+.metric-help-grid article,
+.help-center-list .feature-row {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.metric-help-grid article {
+  padding: 14px 16px;
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+}
+
+.metric-help-grid span {
+  display: block;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.metric-help-grid strong {
+  font-size: 0.94rem;
+  line-height: 1.45;
+}
+
+.help-center-card .row-actions {
+  margin-top: 16px;
+}
+
+.join-helper-copy {
+  margin: 10px 0 0;
+}
+
+.player-preview-pill .avatar-chip {
+  flex-shrink: 0;
+}
+
+.compact-stack .feature-row {
+  padding: 10px 12px;
+}
+
+.stats-grid > .card {
+  align-self: start;
+}
+
+.list-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+}
+
+.list-row > * {
+  min-width: 0;
+}
+
+.list-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: end;
+  color: var(--muted);
+}
+
+.feed-row time {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.empty-state {
+  padding: 18px;
+  border-radius: var(--radius-soft);
+  border: 1px dashed var(--line-soft);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.empty-state-actions {
+  margin-top: 12px;
+}
+
+.side-rail {
+  display: none;
+}
+
+.mobile-nav {
+  position: fixed;
+  left: max(10px, calc(50% - 340px));
+  right: max(10px, calc(50% - 340px));
+  bottom: max(10px, calc(env(safe-area-inset-bottom, 0px) + 8px));
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+  padding: 9px 9px calc(9px + env(safe-area-inset-bottom, 0px));
+  border-color: rgba(var(--accent-rgb), 0.16);
+  background:
+    radial-gradient(circle at top center, rgba(var(--accent-rgb), 0.12), transparent 52%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent),
+    var(--nav-shell-bg);
+  box-shadow: 0 16px 36px rgba(17, 22, 18, 0.24);
+}
+
+.nav-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 72px;
+  padding: 10px 8px 12px;
+  border-radius: var(--radius-soft);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  text-align: center;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.nav-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.nav-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nav-label {
+  font-size: 0.82rem;
+  line-height: 1;
+}
+
+.nav-indicator {
+  width: 22px;
+  height: 3px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.nav-item.is-active {
+  color: var(--text);
+  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.16), rgba(255, 255, 255, 0.04));
+  border-color: rgba(var(--accent-rgb), 0.28);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.nav-item.is-active .nav-icon {
+  background: rgba(var(--accent-rgb), 0.14);
+  border-color: rgba(var(--accent-rgb), 0.24);
+}
+
+.nav-item.is-active .nav-indicator {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+}
+
+.app-shell.is-standalone .mobile-nav {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 28px 28px 0 0;
+  padding-left: 12px;
+  padding-right: 12px;
+  box-shadow: 0 -6px 30px rgba(17, 22, 18, 0.22);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@keyframes score-pulse {
+  0% {
+    transform: scale(0.992);
+    box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0.22);
+  }
+
+  45% {
+    transform: scale(1.01);
+    box-shadow: 0 0 0 10px rgba(var(--accent-rgb), 0);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: none;
+  }
+}
+
+.hero-copy.compact-copy,
+.body-copy.compact-copy {
+  margin-top: 6px;
+}
+
+.hero-home-card,
+.round-hero-card,
+.community-hero-card,
+.premium-hero-card,
+.premium-summary-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 34px;
+}
+
+.hero-home-card::after,
+.round-hero-card::after,
+.community-hero-card::after,
+.premium-hero-card::after {
+  content: "";
+  position: absolute;
+  right: -36px;
+  bottom: -46px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(240, 203, 131, 0.18), transparent 72%);
+  pointer-events: none;
+}
+
+.cta-row,
+.hero-status-grid,
+.mode-strip,
+.mode-preview-grid,
+.participant-badges,
+.comparison-grid,
+.premium-shop-grid,
+.locked-insight-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.cta-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 18px 0;
+}
+
+.hero-button {
+  min-height: 54px;
+}
+
+.hero-status-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 8px;
+}
+
+.hero-status-grid article,
+.mode-preview-card,
+.locked-insight,
+.plan-card,
+.feature-row {
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background: var(--surface-soft);
+  box-shadow: var(--shadow-soft);
+}
+
+.hero-status-grid article,
+.mode-preview-card,
+.locked-insight,
+.plan-card {
+  padding: 16px;
+}
+
+.hero-status-grid strong,
+.mode-preview-card strong,
+.plan-card strong {
+  display: block;
+  margin: 6px 0 8px;
+  font-size: 1.1rem;
+}
+
+.hero-status-grid p,
+.mode-preview-card p,
+.locked-insight p,
+.plan-card p {
+  margin: 0;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+
+.mode-strip {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+.section-divider {
+  height: 1px;
+  margin: 18px 0;
+  background: linear-gradient(90deg, transparent, var(--line), transparent);
+}
+
+.mode-preview-grid,
+.locked-insight-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mode-preview-card,
+.plan-card {
+  display: grid;
+  gap: 12px;
+}
+
+.mode-preview-card.is-locked,
+.premium-lock-card {
+  border-color: rgba(240, 203, 131, 0.2);
+  background: linear-gradient(180deg, rgba(240, 203, 131, 0.05), rgba(255, 255, 255, 0.03));
+}
+
+.premium-badge,
+.player-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(240, 203, 131, 0.25);
+  background: rgba(240, 203, 131, 0.11);
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.premium-badge.is-live,
+.player-badge.is-leader {
+  border-color: rgba(123, 208, 154, 0.3);
+  background: rgba(123, 208, 154, 0.11);
+  color: var(--success);
+}
+
+.player-badge.is-local {
+  color: #14110a;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  border-color: transparent;
+}
+
+.participant-badges {
+  grid-auto-flow: column;
+  justify-content: start;
+}
+
+.round-grid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+}
+
+.round-main-column,
+.round-side-column {
+  display: grid;
+  gap: 16px;
+}
+
+.round-live-summary article {
+  min-height: 92px;
+}
+
+.participant-card {
+  box-shadow: var(--shadow-soft);
+}
+
+.participant-card.is-local {
+  border-color: rgba(240, 203, 131, 0.42);
+  background: linear-gradient(180deg, rgba(240, 203, 131, 0.11), rgba(255, 255, 255, 0.03));
+}
+
+.participant-card.is-leader {
+  box-shadow:
+    inset 0 0 0 1px rgba(123, 208, 154, 0.32),
+    var(--shadow-soft);
+}
+
+.participant-stat-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.participant-stat-strip span {
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-soft);
+  font-size: 0.8rem;
+}
+
+.score-input-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.premium-finish-card,
+.premium-summary-card,
+.premium-hero-card,
+.tier-card.is-premium {
+  border-color: rgba(240, 203, 131, 0.28);
+  background:
+    radial-gradient(circle at top right, rgba(240, 203, 131, 0.12), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 52%),
+    var(--surface);
+}
+
+.finish-actions {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.finish-button {
+  min-height: 54px;
+  font-size: 1rem;
+}
+
+.comparison-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.comparison-player-grid {
+  margin-top: 4px;
+}
+
+.comparison-player-card,
+.comparison-metric-row {
+  border-radius: var(--radius-soft);
+  border: 1px solid var(--line-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 65%),
+    rgba(255, 255, 255, 0.03);
+}
+
+.comparison-player-card {
+  padding: 16px;
+}
+
+.comparison-metric-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.comparison-metric-row {
+  display: grid;
+  grid-template-columns: minmax(62px, auto) 1fr minmax(62px, auto);
+  gap: 12px;
+  align-items: center;
+  padding: 13px 14px;
+}
+
+.comparison-metric-row span {
+  color: var(--muted);
+  text-align: center;
+}
+
+.comparison-metric-row strong:last-child {
+  text-align: right;
+}
+
+.comparison-summary-grid {
+  margin-top: 14px;
+}
+
+.comparison-callout {
+  margin-top: 14px;
+}
+
+.insight-breakdown-grid {
+  margin: 14px 0;
+}
+
+.plan-card.is-premium {
+  border-color: rgba(240, 203, 131, 0.25);
+  background: linear-gradient(180deg, rgba(240, 203, 131, 0.08), rgba(255, 255, 255, 0.03));
+}
+
+.plan-card.is-current {
+  box-shadow: inset 0 0 0 1px rgba(123, 208, 154, 0.24);
+}
+
+.feature-row {
+  padding: 12px 14px;
+  border-radius: var(--radius-soft);
+}
+
+.premium-shop-grid {
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  margin-top: 16px;
+}
+
+.community-grid,
+.premium-grid,
+.home-grid,
+.stats-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 1023px) {
+  .view-grid.settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-strip,
+  .play-grid,
+  .settings-grid,
+  .stats-grid,
+  .help-grid,
+  .view-grid,
+  .home-grid,
+  .community-grid,
+  .premium-grid,
+  .round-grid,
+  .participant-grid,
+  .split-inputs,
+  .summary-grid.compact,
+  .leader-row,
+  .list-row.large,
+  .leader-highlight,
+  .hole-focus-bar,
+  .summary-detail-row,
+  .quick-help-row,
+  .onboarding-list,
+  .cta-row,
+  .hero-status-grid,
+  .mode-strip,
+  .mode-preview-grid,
+  .locked-insight-grid,
+  .comparison-grid,
+  .premium-shop-grid,
+  .privacy-grid,
+  .profile-visibility-grid,
+  .settings-choice-grid,
+  .settings-social-actions,
+  .auth-benefit-grid,
+  .auth-mode-toggle,
+  .help-jump-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .theme-choice-grid,
+  .settings-choice-grid--dual,
+  .settings-toggle-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inline-form,
+  .global-feedback,
+  .hole-header,
+  .list-row,
+  .screen-hero-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-header-card {
+    padding: 9px 10px;
+    margin-bottom: 8px;
+    border-radius: 20px;
+  }
+
+  .app-header-card--round {
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    border-radius: 16px;
+  }
+
+  .app-header-context {
+    gap: 8px;
+  }
+
+  .app-header-copy {
+    gap: 1px;
+  }
+
+  .app-header-title {
+    font-size: 0.94rem;
+  }
+
+  .app-header-subtitle {
+    font-size: 0.74rem;
+  }
+
+  .app-header-card:not([data-view="home"]) .app-header-overline {
+    display: none;
+  }
+
+  .app-header-card--round .app-header-subtitle {
+    display: block;
+    font-size: 0.7rem;
+    max-width: 100%;
+  }
+
+  .account-trigger {
+    min-height: 40px;
+    min-width: 40px;
+    padding: 4px;
+    border-radius: 14px;
+  }
+
+  .app-header-card--round .account-trigger {
+    min-height: 36px;
+    min-width: 36px;
+    padding: 2px;
+    border-radius: 12px;
+  }
+
+  .account-trigger-copy {
+    display: none;
+  }
+
+  .row-actions .button,
+  .screen-hero-actions .button,
+  .settings-social-actions .button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .screen-utility-main {
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: start;
+  }
+
+  .screen-utility-actions {
+    justify-items: end;
+  }
+
+  .screen-utility-bar {
+    gap: 6px;
+    margin-bottom: 0;
+  }
+
+  .screen-utility-bar .eyebrow {
+    display: none;
+  }
+
+  .utility-heading {
+    font-size: 1.08rem;
+    max-width: none;
+  }
+
+  .utility-copy {
+    font-size: 0.79rem;
+    line-height: 1.35;
+  }
+
+  .screen-meta--utility .top-chip {
+    padding: 6px 10px;
+    font-size: 0.72rem;
+  }
+
+  .content-shell {
+    width: min(100%, calc(100vw - 10px));
+    padding: calc(2px + env(safe-area-inset-top, 0px)) 0 calc(var(--space-4) + 88px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-stage {
+    gap: 10px;
+  }
+
+  .screen-meta {
+    gap: 8px;
+  }
+
+  .screen-stage {
+    padding: 14px;
+  }
+
+  .screen-stage--compact {
+    padding-top: 12px;
+  }
+
+  .screen-stage--round {
+    padding-top: 10px;
+  }
+
+  .screen-panel {
+    gap: 16px;
+  }
+
+  .round-score-heading,
+  .round-score-guidance {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .round-score-status {
+    justify-content: flex-start;
+  }
+
+  .hole-nav {
+    grid-template-columns: auto 1fr auto;
+    gap: 8px;
+  }
+
+  .hole-stepper {
+    min-width: 58px;
+    min-height: 42px;
+    padding-inline: 10px;
+  }
+
+  .hole-utility-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hole-next-button {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
+  .screen-hero-main {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .screen-hero-actions {
+    justify-items: stretch;
+  }
+
+  .mobile-nav {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    gap: 4px;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    border-radius: 24px 24px 0 0;
+    padding: 8px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+    background:
+      radial-gradient(circle at top center, rgba(255, 236, 204, 0.08), transparent 54%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.08), color-mix(in srgb, var(--nav-shell-bg) 96%, transparent)),
+      var(--nav-shell-bg);
+  }
+
+  .nav-item {
+    min-height: 64px;
+    padding-top: 10px;
+    padding-bottom: 8px;
+  }
+
+  .hero-action-button {
+    width: 100%;
+  }
+
+  .list-metrics {
+    justify-content: start;
+  }
+
+  .settings-link-row {
+    align-items: start;
+  }
+
+  .round-score-shell .quick-score-row {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .score-chip {
+    min-width: 0;
+    min-height: 64px;
+    padding: 9px 6px;
+  }
+
+  .score-chip span {
+    font-size: 0.7rem;
+  }
+
+  .score-chip strong {
+    font-size: 1.08rem;
+  }
+
+  .score-manual-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .score-next-button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .advanced-hole-stats summary {
+    flex-direction: column;
+    align-items: start;
+  }
+
+  .advanced-hole-stats summary strong {
+    text-align: left;
+  }
+
+  .score-secondary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .participant-badges {
+    grid-auto-flow: row;
+  }
+
+  .connection-actions,
+  .finish-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .card-span-2,
+  .card-span-3 {
+    grid-column: auto;
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    padding: 20px;
+  }
+
+  .app-header-card {
+    position: sticky;
+    top: calc(8px + env(safe-area-inset-top, 0px));
+    z-index: 18;
+  }
+
+  .side-rail {
+    display: none;
+  }
+
+  .brand-block {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .brand-mark {
+    width: 58px;
+    height: 58px;
+    display: grid;
+    place-items: center;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(240, 203, 131, 0.2), rgba(123, 208, 154, 0.18));
+    border: 1px solid var(--line);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  .nav-stack {
+    display: grid;
+    gap: 8px;
+  }
+
+  .nav-item {
+    min-height: 60px;
+    flex-direction: row;
+    justify-content: flex-start;
+    text-align: left;
+    padding: 12px 14px;
+  }
+
+  .nav-indicator {
+    margin-left: auto;
+  }
+
+  .rail-card {
+    padding: 18px;
+  }
+
+  .mobile-nav {
+    left: max(20px, calc(50% - 360px));
+    right: max(20px, calc(50% - 360px));
+  }
+
+  .content-shell {
+    width: min(1240px, 100%);
+    padding: 10px 0 32px;
+  }
+
+  .view-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .round-grid {
+    grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+  }
+
+  .account-trigger-copy {
+    display: grid;
+  }
+}
+
+```
+
+## `runtime-config.js`
+
+```js
+window.__GN_RUNTIME_CONFIG__ = Object.assign(
+  {
+    supabaseUrl: "https://jsvxckzbymbdilyujjko.supabase.co",
+    supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impzdnhja3pieW1iZGlseXVqamtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxOTY2MTksImV4cCI6MjA4OTc3MjYxOX0._-lsBDKYQZ3XOD6LQPtvhHLDf7jlKJKOfru-250x8F8",
+    supabaseResetRedirectUrl: "",
+    siteUrl: "",
+  },
+  window.__GN_RUNTIME_CONFIG__ || {}
+);
+
+```
+
+## `netlify.toml`
+
+```
+[build]
+  command = "npm run build:netlify"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/service-worker.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+```
+
+## `_redirects`
+
+```
+/* /index.html 200
+
+```
+
+## `scripts/build-browser-bundle.mjs`
+
+```js
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, "..");
+
+const files = [
+  "src/utils/formatters.js",
+  "src/config.js",
+  "src/domain/factories.js",
+  "src/domain/scoring.js",
+  "src/domain/round-sync.js",
+  "src/state/store.js",
+  "src/services/storage-service.js",
+  "src/services/account-service.js",
+  "src/services/course-library.js",
+  "src/services/runtime-config.js",
+  "src/services/supabase-rest.js",
+  "src/services/player-service.js",
+  "src/services/mock-api.js",
+  "src/services/sync-service.js",
+  "src/services/backend-models.js",
+  "src/services/auth-gateway.js",
+  "src/services/data-gateway.js",
+  "src/services/realtime-gateway.js",
+  "src/state/default-state.js",
+  "src/ui/templates.js",
+  "src/ui/render.js",
+  "src/services/product-platform.js",
+  "src/main.js",
+];
+
+function stripModuleSyntax(content) {
+  return content
+    .replace(/^\s*import[\s\S]*?from\s+["'][^"']+["'];?\r?\n/gm, "")
+    .replace(/^\s*export\s+/gm, "");
+}
+
+async function buildBundle() {
+  const parts = [
+    "(function () {",
+    '"use strict";',
+    "",
+    "// Generated browser-safe bundle for direct file opening.",
+    "",
+  ];
+
+  for (const relativeFile of files) {
+    const absoluteFile = path.join(rootDir, relativeFile);
+    const content = await readFile(absoluteFile, "utf8");
+    parts.push(`// ---- ${relativeFile} ----`);
+    parts.push(stripModuleSyntax(content).trim());
+    parts.push("");
+  }
+
+  parts.push("startApp();");
+  parts.push("})();");
+
+  await writeFile(path.join(rootDir, "app.js"), `${parts.join("\r\n")}\r\n`, "utf8");
+}
+
+await buildBundle();
+
+```
+
+## `scripts/build-netlify-package.mjs`
+
+```js
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "..");
+const distRoot = path.join(projectRoot, "dist");
+
+const filesToCopy = [
+  "_redirects",
+  "index.html",
+  "styles.css",
+  "app.js",
+  "runtime-config.js",
+  "manifest.json",
+  "service-worker.js",
+];
+
+async function ensureCleanDirectory(directoryPath) {
+  await fs.rm(directoryPath, { recursive: true, force: true });
+  await fs.mkdir(directoryPath, { recursive: true });
+}
+
+async function copyFile(relativePath) {
+  await fs.copyFile(
+    path.join(projectRoot, relativePath),
+    path.join(distRoot, relativePath)
+  );
+}
+
+async function copyDirectory(relativeDirectory) {
+  const sourceDirectory = path.join(projectRoot, relativeDirectory);
+  const destinationDirectory = path.join(distRoot, relativeDirectory);
+  const entries = await fs.readdir(sourceDirectory, { withFileTypes: true });
+
+  await fs.mkdir(destinationDirectory, { recursive: true });
+
+  for (const entry of entries) {
+    const entryRelativePath = path.join(relativeDirectory, entry.name);
+    if (entry.isDirectory()) {
+      await copyDirectory(entryRelativePath);
+      continue;
+    }
+
+    await fs.copyFile(
+      path.join(projectRoot, entryRelativePath),
+      path.join(distRoot, entryRelativePath)
+    );
+  }
+}
+
+execFileSync(process.execPath, [path.join("scripts", "build-browser-bundle.mjs")], {
+  cwd: projectRoot,
+  stdio: "inherit",
+});
+
+await ensureCleanDirectory(distRoot);
+
+for (const relativePath of filesToCopy) {
+  await copyFile(relativePath);
+}
+
+await copyDirectory("icons");
+
+console.log(`Netlify package written to ${path.relative(projectRoot, distRoot)}`);
+
+```
+
+## `scripts/build-peer-review-bundle.mjs`
+
+```js
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "..");
+const outputPath = path.join(projectRoot, "docs", "peer-review-bundle.md");
+
+const fixedFiles = [
+  "package.json",
+  "README.md",
+  "index.html",
+  "manifest.json",
+  "service-worker.js",
+  "styles.css",
+  "runtime-config.js",
+  "netlify.toml",
+  "_redirects",
+  "scripts/build-browser-bundle.mjs",
+  "scripts/build-netlify-package.mjs",
+  "scripts/build-peer-review-bundle.mjs",
+  "scripts/build-runtime-config.mjs",
+];
+
+async function collectFiles(directory, extensions = [".js"]) {
+  const absoluteDirectory = path.join(projectRoot, directory);
+  const entries = await fs.readdir(absoluteDirectory, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    const relativePath = path.posix.join(directory.replace(/\\/g, "/"), entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await collectFiles(relativePath, extensions));
+      continue;
+    }
+
+    if (extensions.includes(path.extname(entry.name))) {
+      files.push(relativePath);
+    }
+  }
+
+  return files.sort((left, right) => left.localeCompare(right));
+}
+
+function getLanguage(relativePath) {
+  const extension = path.extname(relativePath).toLowerCase();
+  if (extension === ".js" || extension === ".mjs") {
+    return "js";
+  }
+  if (extension === ".json") {
+    return "json";
+  }
+  if (extension === ".html") {
+    return "html";
+  }
+  if (extension === ".css") {
+    return "css";
+  }
+  if (extension === ".md") {
+    return "md";
+  }
+  return "";
+}
+
+async function readSection(relativePath) {
+  const absolutePath = path.join(projectRoot, relativePath);
+  const language = getLanguage(relativePath);
+  const contents = await fs.readFile(absolutePath, "utf8");
+  return `## \`${relativePath}\`\n\n\`\`\`${language}\n${contents}\n\`\`\`\n`;
+}
+
+const sourceFiles = await collectFiles("src", [".js"]);
+const testFiles = await collectFiles("tests", [".js"]);
+const includedFiles = [...new Set([...fixedFiles, ...sourceFiles, ...testFiles])];
+
+const sections = await Promise.all(includedFiles.map((relativePath) => readSection(relativePath)));
+
+const markdown = `# Golfers Nation Peer Review Bundle
+
+This file consolidates the current source-of-truth code, runtime config, deploy scripts, and tests for peer review.
+
+Use this bundle with \`docs/business-partner-overview.md\` and \`docs/peer-review-guide.md\` when sharing the project with leadership or other developers.
+
+## Included files
+
+${includedFiles.map((relativePath) => `- \`${relativePath}\``).join("\n")}
+
+---
+
+${sections.join("\n")}
+`;
+
+await fs.writeFile(outputPath, markdown, "utf8");
+
+console.log(`Peer review bundle written to ${path.relative(projectRoot, outputPath)}`);
+
+```
+
+## `scripts/build-runtime-config.mjs`
+
+```js
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "..");
+
+function readEnv(...keys) {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value) {
+      return String(value).trim();
+    }
+  }
+
+  return "";
+}
+
+const runtimeConfig = {
+  supabaseUrl: readEnv("GN_SUPABASE_URL", "SUPABASE_URL") || "https://jsvxckzbymbdilyujjko.supabase.co",
+  supabaseAnonKey: readEnv("GN_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY"),
+  supabaseResetRedirectUrl: readEnv("GN_SUPABASE_RESET_REDIRECT_URL"),
+  siteUrl: readEnv("GN_SITE_URL", "URL", "DEPLOY_PRIME_URL"),
+};
+
+const output = `window.__GN_RUNTIME_CONFIG__ = Object.assign(
+  {
+    supabaseUrl: ${JSON.stringify(runtimeConfig.supabaseUrl)},
+    supabaseAnonKey: ${JSON.stringify(runtimeConfig.supabaseAnonKey)},
+    supabaseResetRedirectUrl: ${JSON.stringify(runtimeConfig.supabaseResetRedirectUrl)},
+    siteUrl: ${JSON.stringify(runtimeConfig.siteUrl)},
+  },
+  window.__GN_RUNTIME_CONFIG__ || {}
+);
+`;
+
+await writeFile(path.join(projectRoot, "runtime-config.js"), output, "utf8");
+
+```
+
+## `src/config.js`
+
+```js
+export const STORAGE_KEY = "golfers-nation-platform-v2";
+export const APP_VERSION = "0.1.0";
+export const SUPABASE_SESSION_STORAGE_KEY = "golfers-nation-supabase-session-v1";
+export const RUNTIME_CONFIG_GLOBAL = "__GN_RUNTIME_CONFIG__";
+export const FEATURED_COURSE_ID = "golden-nugget-lake-charles";
+export const TESTER_DEFAULT_SUBSCRIPTION_TIER = "premium";
+
+export const AUTH_PROVIDER_OPTIONS = [
+  {
+    id: "google",
+    label: "Continue with Google",
+    shortLabel: "Google",
+    description: "Fast sign-in for existing golfers and future cloud sync.",
+  },
+  {
+    id: "apple",
+    label: "Continue with Apple",
+    shortLabel: "Apple",
+    description: "Private, high-trust account access for mobile-first use.",
+  },
+  {
+    id: "email",
+    label: "Sign up or log in with email",
+    shortLabel: "Email",
+    description: "Traditional account setup for universal access and recovery.",
+  },
+];
+
+export const VIEW_ORDER = [
+  { id: "home", label: "Home", shortLabel: "Home" },
+  { id: "round", label: "Round", shortLabel: "Round" },
+  { id: "stats", label: "Stats", shortLabel: "Stats" },
+  { id: "community", label: "Community", shortLabel: "Groups" },
+  { id: "premium", label: "Premium", shortLabel: "Premium" },
+];
+
+export const GAME_MODES = {
+  stroke: {
+    id: "stroke",
+    label: "Stroke Play",
+    description: "Track every player by total strokes and to-par standing.",
+  },
+  match: {
+    id: "match",
+    label: "Match Play",
+    description: "Track side-vs-side holes won with a head-to-head scoreboard.",
+  },
+  scramble: {
+    id: "scramble",
+    label: "Scramble",
+    description: "Score teams with one combined card and faster social play.",
+  },
+};
+
+export const COURSE_TEMPLATE = [
+  { number: 1, par: 4, yards: 412 },
+  { number: 2, par: 5, yards: 531 },
+  { number: 3, par: 3, yards: 188 },
+  { number: 4, par: 4, yards: 427 },
+  { number: 5, par: 4, yards: 396 },
+  { number: 6, par: 5, yards: 548 },
+  { number: 7, par: 3, yards: 173 },
+  { number: 8, par: 4, yards: 442 },
+  { number: 9, par: 4, yards: 408 },
+  { number: 10, par: 4, yards: 399 },
+  { number: 11, par: 5, yards: 554 },
+  { number: 12, par: 4, yards: 434 },
+  { number: 13, par: 3, yards: 181 },
+  { number: 14, par: 4, yards: 446 },
+  { number: 15, par: 4, yards: 402 },
+  { number: 16, par: 3, yards: 194 },
+  { number: 17, par: 5, yards: 566 },
+  { number: 18, par: 4, yards: 418 },
+];
+
+export const CONNECTION_COPY = {
+  local: "Local only",
+  invite: "Invite code",
+  nearby: "Nearby sync",
+  bluetooth: "Bluetooth sync",
+  cloud: "Mock cloud sync",
+};
+
+export const TOURNAMENT_STATUSES = ["planning", "open", "live", "completed"];
+export const GEAR_CATEGORIES = ["club", "apparel", "accessory"];
+export const PREMIUM_MODE_IDS = ["match", "scramble"];
+export const SUBSCRIPTION_PLANS = [
+  {
+    id: "free",
+    label: "Free",
+    priceLabel: "$0",
+    billingLabel: "Included",
+    highlight: "Simple live scoring and round history",
+    features: [
+      "Start and track rounds",
+      "Basic score entry and leaderboard",
+      "Round history and simple stats",
+      "Join rounds by invite code",
+      "Basic player profile",
+    ],
+  },
+  {
+    id: "premium",
+    label: "Premium",
+    priceLabel: "$8.99",
+    billingLabel: "per month",
+    highlight: "Advanced golf intelligence and premium group tools",
+    features: [
+      "Advanced stats and round insights",
+      "Enhanced live group and sync tools",
+      "Tournament and league controls",
+      "Advanced scoring modes",
+      "Future GPS, watch, and smart gear integrations",
+    ],
+  },
+];
+
+export const PRIVACY_CONTROL_OPTIONS = [
+  { id: "showHomeCourse", label: "Show home course publicly" },
+  { id: "showHandicap", label: "Show handicap publicly" },
+  { id: "showBio", label: "Show bio publicly" },
+  { id: "showRecentForm", label: "Show recent form publicly" },
+  { id: "showHeadToHead", label: "Show head-to-head placeholders publicly" },
+];
+
+export const APPEARANCE_MODE_OPTIONS = [
+  { id: "system", label: "System default", description: "Follow your phone or browser appearance." },
+  { id: "light", label: "Light mode", description: "Brighter surfaces with softer contrast." },
+  { id: "dark", label: "Dark mode", description: "Deeper contrast for low-light use." },
+];
+
+export const TEXT_SCALE_OPTIONS = [
+  { id: "standard", label: "Standard text", description: "Balanced sizing for most golfers." },
+  { id: "large", label: "Larger text", description: "A little easier to scan during play." },
+];
+
+export const THEME_PRESET_OPTIONS = [
+  { id: "forest", label: "Forest", description: "Classic fairway greens with warm club-house gold." },
+  { id: "sand", label: "Sand", description: "Sunlit neutrals with richer bronze trim." },
+  { id: "ocean", label: "Ocean", description: "Blue-green depth with brighter coastal accents." },
+  { id: "slate", label: "Slate", description: "Cool stone surfaces with crisp steel-blue contrast." },
+  { id: "midnight", label: "Midnight", description: "Deep ink tones with premium late-round glow." },
+  { id: "ember", label: "Ember", description: "Copper warmth and sunset energy without the noise." },
+  { id: "plum", label: "Plum", description: "Refined berry tones with soft luxury contrast." },
+  { id: "ice", label: "Ice", description: "Clean arctic light with bright modern highlights." },
+];
+
+export const PROFILE_VISIBILITY_OPTIONS = [
+  { id: "public", label: "Public", description: "Visible anywhere shared rounds and profiles are shown." },
+  { id: "friends", label: "Friends only", description: "Best for invite-code groups and known golfers." },
+  { id: "private", label: "Private", description: "Keep your competitive card mostly hidden for now." },
+];
+
+export const NETLIFY_FEEDBACK_FORM_NAME = "tester-feedback";
+
+export const TESTER_FEEDBACK_AREAS = [
+  { id: "onboarding", label: "Getting started" },
+  { id: "account", label: "Account or settings" },
+  { id: "round", label: "Playing a round" },
+  { id: "stats", label: "Stats and profiles" },
+  { id: "community", label: "Community or joining" },
+  { id: "premium", label: "Premium or upgrades" },
+  { id: "bug", label: "Bug or broken behavior" },
+  { id: "other", label: "Other feedback" },
+];
+
+```
+
+## `src/domain/factories.js`
+
+```js
+import { CONNECTION_COPY, COURSE_TEMPLATE, GAME_MODES } from "../config.js";
+import { ensureRoundSyncScaffold } from "./round-sync.js";
+import { cloneData, compactNames, uid } from "../utils/formatters.js";
+
+function slugifyName(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 18);
+}
+
+function createAvatarLabel(displayName) {
+  return String(displayName || "")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || "GN";
+}
+
+function sanitizePlayers(players, currentUser) {
+  const base = Array.isArray(players) ? players : [];
+  const normalized = base
+    .map((player) => {
+      if (typeof player === "string") {
+        const name = String(player || "").trim();
+        return name
+          ? {
+              name,
+              displayName: name,
+              username: slugifyName(name),
+              avatarLabel: createAvatarLabel(name),
+            }
+          : null;
+      }
+
+      const displayName = String(player?.displayName || player?.name || "").trim();
+      if (!displayName) {
+        return null;
+      }
+
+      return {
+        profileId: player.profileId || player.id || null,
+        userId: player.userId || null,
+        name: displayName,
+        displayName,
+        username: player.username || slugifyName(displayName),
+        avatarLabel: player.avatarLabel || player.avatar || createAvatarLabel(displayName),
+      };
+    })
+    .filter(Boolean);
+
+  const currentName = currentUser.displayName || currentUser.name;
+  if (!normalized.some((player) =>
+    player.profileId
+      ? player.profileId === currentUser.profileId
+      : player.name.toLowerCase() === String(currentName).toLowerCase()
+  )) {
+    normalized.unshift({
+      profileId: currentUser.profileId || null,
+      userId: currentUser.id,
+      name: currentName,
+      displayName: currentName,
+      username: currentUser.username || slugifyName(currentName),
+      avatarLabel: currentUser.avatarLabel || currentUser.avatar || createAvatarLabel(currentName),
+    });
+  }
+
+  const seen = new Set();
+  return normalized.filter((player) => {
+    const key = player.profileId || player.name.toLowerCase();
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  }).slice(0, 4);
+}
+
+function createPlayer(player, index, currentUserId, currentUserName) {
+  return {
+    id: uid("player"),
+    profileId: player.profileId || null,
+    userId: player.userId || (player.name.toLowerCase() === currentUserName.toLowerCase() ? currentUserId : null),
+    name: player.name,
+    username: player.username || slugifyName(player.name),
+    avatarLabel: player.avatarLabel || createAvatarLabel(player.name),
+    role: index === 0 ? "owner" : "guest",
+  };
+}
+
+function createSides(mode, players) {
+  if (mode === "stroke") {
+    return [];
+  }
+
+  const left = players.filter((_, index) => index % 2 === 0);
+  const right = players.filter((_, index) => index % 2 === 1);
+
+  return [
+    {
+      id: uid("side"),
+      name: mode === "scramble" ? "Team Fairway" : "Side A",
+      playerIds: left.map((player) => player.id),
+      playerNames: left.map((player) => player.name),
+    },
+    {
+      id: uid("side"),
+      name: mode === "scramble" ? "Team Green" : "Side B",
+      playerIds: right.map((player) => player.id),
+      playerNames: right.map((player) => player.name),
+    },
+  ].filter((side) => side.playerIds.length);
+}
+
+function createHoleEntries(mode, players, sides) {
+  const participants = mode === "stroke" ? players : sides;
+  return participants.map((participant) => ({
+    participantId: participant.id,
+    strokes: null,
+    putts: null,
+    penalties: 0,
+    fairwayHit: false,
+    gir: false,
+    upAndDown: false,
+    sandSave: false,
+    updatedAt: null,
+    lastEventId: null,
+  }));
+}
+
+export function createRound({
+  currentUser,
+  courseName,
+  teeBox,
+  teeBoxId = null,
+  weather,
+  mode = "stroke",
+  players,
+  syncTransport = "local",
+  status = "active",
+  inviteCode = null,
+  groupId = null,
+  tournamentId = null,
+  courseId = null,
+  courseCity = "",
+  courseState = "",
+  courseRegion = "",
+  courseLatitude = null,
+  courseLongitude = null,
+  courseSource = "",
+  courseSeeded = false,
+  holesTemplate = null,
+  courseRating = null,
+  courseSlope = null,
+}) {
+  const safeMode = GAME_MODES[mode] ? mode : "stroke";
+  const currentUserName = currentUser.displayName || currentUser.name;
+  const playerInputs = sanitizePlayers(players, currentUser);
+  const playerRecords = playerInputs.map((player, index) =>
+    createPlayer(player, index, currentUser.id, currentUserName)
+  );
+  const sideRecords = createSides(safeMode, playerRecords);
+  const sourceHoles = Array.isArray(holesTemplate) && holesTemplate.length === 18
+    ? holesTemplate
+    : COURSE_TEMPLATE;
+  const holes = sourceHoles.map((hole) => ({
+    ...cloneData(hole),
+    entries: createHoleEntries(safeMode, playerRecords, sideRecords),
+  }));
+
+  const round = {
+    id: uid("round"),
+    status,
+    mode: safeMode,
+    courseName: courseName || "National Pines",
+    teeBox: teeBox || "Blue",
+    teeBoxId,
+    courseId,
+    courseCity,
+    courseState,
+    courseRegion,
+    courseLatitude,
+    courseLongitude,
+    courseSource,
+    courseSeeded,
+    courseRating,
+    courseSlope,
+    weather: weather || "Calm 72F",
+    visibility: "friends",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    startedAt: Date.now(),
+    completedAt: status === "completed" ? Date.now() : null,
+    inviteCode,
+    groupId,
+    tournamentId,
+    currentHole: 1,
+    players: playerRecords,
+    sides: sideRecords,
+    holes,
+    sync: {
+      state: syncTransport === "local" ? "local" : "connected",
+      transport: syncTransport,
+      label: CONNECTION_COPY[syncTransport] || CONNECTION_COPY.local,
+      lastEventAt: null,
+      note: "Offline-first round data with a future real-time sync path.",
+    },
+    eventLog: [],
+    notes: [],
+  };
+
+  return ensureRoundSyncScaffold(round);
+}
+
+export function createGroup({ round, currentUser, inviteCode, transport = "invite", status = "hosting" }) {
+  return {
+    id: uid("group"),
+    roundId: round.id,
+    title: `${round.courseName} ${GAME_MODES[round.mode].label}`,
+    inviteCode,
+    status,
+    transport,
+    hostUserId: currentUser.id,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    hostRequired: false,
+    hostOptional: true,
+    members: round.players.map((player, index) => ({
+      id: uid("member"),
+      playerId: player.id,
+      profileId: player.profileId,
+      userId: player.userId,
+      displayName: player.name,
+      username: player.username || slugifyName(player.name),
+      avatarLabel: player.avatarLabel || createAvatarLabel(player.name),
+      role: index === 0 ? "host" : "player",
+      connectionState: index === 0 ? "ready" : "pending",
+    })),
+    feed: [
+      createActivity({
+        type: "sync",
+        message: `Invite code ${inviteCode} is live for ${round.courseName}.`,
+      }),
+    ],
+  };
+}
+
+export function createTournament({
+  name,
+  courseName,
+  date,
+  mode = "stroke",
+  fieldSize = 16,
+  linkedRoundId = null,
+  status = "planning",
+}) {
+  return {
+    id: uid("tournament"),
+    name,
+    courseName,
+    date,
+    mode,
+    fieldSize,
+    linkedRoundId,
+    status,
+    createdAt: Date.now(),
+    entries: [],
+  };
+}
+
+export function createGearItem({ category, name, notes = "", packed = false, weatherUse = "" }) {
+  return {
+    id: uid("gear"),
+    category,
+    name,
+    notes,
+    packed,
+    weatherUse,
+    createdAt: Date.now(),
+  };
+}
+
+export function createPlayerProfile({
+  userId = null,
+  displayName,
+  username,
+  avatarLabel,
+  email = "",
+  homeCourse = "",
+  handicap = null,
+  bio = "",
+  createdAt = Date.now(),
+  premiumStatus = "free",
+  privacy = {},
+  publicStats = {},
+  recentForm = [],
+  headToHead = [],
+}) {
+  const safeDisplayName = String(displayName || "").trim() || "Golfer";
+  const safeUsername = String(username || "").trim() || slugifyName(safeDisplayName);
+  const safeAvatarLabel = String(avatarLabel || "").trim() || createAvatarLabel(safeDisplayName);
+
+  return {
+    id: uid("profile"),
+    userId,
+    displayName: safeDisplayName,
+    username: safeUsername.startsWith("@") ? safeUsername : `@${safeUsername}`,
+    avatarLabel: safeAvatarLabel,
+    account: {
+      email,
+      createdAt,
+      premiumStatus,
+      authProviders: [],
+    },
+    privateProfile: {
+      homeCourse,
+      handicap,
+      bio,
+      privacy: {
+        showHomeCourse: true,
+        showHandicap: true,
+        showBio: true,
+        showRecentForm: true,
+        showHeadToHead: false,
+        showEmail: false,
+        ...privacy,
+      },
+    },
+    publicProfile: {
+      displayName: safeDisplayName,
+      username: safeUsername.startsWith("@") ? safeUsername : `@${safeUsername}`,
+      avatarLabel: safeAvatarLabel,
+      homeCourse,
+      handicap,
+      bio,
+      roundsPlayed: publicStats.roundsPlayed || 0,
+      averageScore: publicStats.averageScore || null,
+      bestRound: publicStats.bestRound || null,
+      recentFormSummary: publicStats.recentFormSummary || "New profile",
+      fairwayPercentage: publicStats.fairwayPercentage ?? 0,
+      girPercentage: publicStats.girPercentage ?? 0,
+      averagePutts: publicStats.averagePutts ?? null,
+      penaltiesAverage: publicStats.penaltiesAverage ?? 0,
+      upAndDownRate: publicStats.upAndDownRate ?? 0,
+      sandSaveCount: publicStats.sandSaveCount ?? 0,
+      scoringByParType: publicStats.scoringByParType || {},
+      hardestHoles: publicStats.hardestHoles || [],
+      bestHoles: publicStats.bestHoles || [],
+      strokesGained: publicStats.strokesGained || null,
+      formLabel: publicStats.formLabel || "Stable",
+      trendSummary: publicStats.trendSummary || "Building a trend",
+      handicapIndex: publicStats.handicapIndex ?? null,
+      smartInsights: publicStats.smartInsights || [],
+      recentForm,
+      headToHead,
+    },
+    updatedAt: Date.now(),
+  };
+}
+
+export function createActivity({ type = "update", message }) {
+  return {
+    id: uid("activity"),
+    type,
+    message,
+    createdAt: Date.now(),
+  };
+}
+
+export function describeSide(side) {
+  return `${side.name}: ${compactNames(side.playerNames)}`;
+}
+
+```
+
+## `src/domain/round-sync.js`
+
+```js
+import { CONNECTION_COPY } from "../config.js";
+import { uid } from "../utils/formatters.js";
+import { applyHoleUpdate } from "./scoring.js";
+
+export const ROUND_CONFLICT_STRATEGY = "latest-write-wins";
+
+const DEFAULT_SYNC_NOTE = "Offline-first round data with a future real-time sync path.";
+const LOCAL_SAVE_NOTE = "Scores are safe on this device first and will keep trying to back up when signal returns.";
+const SYNCING_NOTE = "Local changes are safe and currently backing up to the cloud.";
+const SYNCED_NOTE = "All live round changes are backed up.";
+
+function getRawPendingRoundEvents(round) {
+  const events = Array.isArray(round?.eventLog) ? round.eventLog : [];
+  return events.filter((event) => event.syncState !== "synced");
+}
+
+function detectActionType(patch = {}) {
+  if (Object.hasOwn(patch, "strokes")) {
+    return "score-set";
+  }
+
+  if (Object.hasOwn(patch, "putts")) {
+    return "putts-updated";
+  }
+
+  if (Object.hasOwn(patch, "penalties")) {
+    return "penalty-updated";
+  }
+
+  return "stat-toggle-changed";
+}
+
+export function ensureRoundSyncScaffold(round) {
+  if (!round) {
+    return round;
+  }
+
+  round.eventLog = Array.isArray(round.eventLog) ? round.eventLog : [];
+  round.sync = {
+    state: "local",
+    transport: "local",
+    label: CONNECTION_COPY.local,
+    lastEventAt: null,
+    note: DEFAULT_SYNC_NOTE,
+    hostRequired: false,
+    hostOptional: true,
+    saveState: round.status === "completed" ? "synced" : "saved-local",
+    pendingActionCount: 0,
+    lastLocalSaveAt: round.updatedAt || round.createdAt || Date.now(),
+    lastSyncedAt: 0,
+    lastSyncError: "",
+    conflictStrategy: ROUND_CONFLICT_STRATEGY,
+    ...(round.sync || {}),
+  };
+
+  round.sync.hostRequired = false;
+  round.sync.hostOptional = true;
+  round.sync.conflictStrategy = ROUND_CONFLICT_STRATEGY;
+  round.sync.pendingActionCount = getRawPendingRoundEvents(round).length;
+
+  if (!round.sync.lastLocalSaveAt) {
+    round.sync.lastLocalSaveAt = round.updatedAt || round.createdAt || Date.now();
+  }
+
+  if (!round.sync.lastSyncedAt && round.sync.pendingActionCount === 0 && round.status === "completed") {
+    round.sync.lastSyncedAt = round.completedAt || round.updatedAt || Date.now();
+  }
+
+  return round;
+}
+
+export function createRoundActionEvent({
+  roundId,
+  participantId,
+  holeNumber,
+  patch,
+  actorUserId = null,
+  deviceId = "local-device",
+  actionType,
+  occurredAt = Date.now(),
+} = {}) {
+  const nextPatch = { ...(patch || {}) };
+
+  return {
+    id: uid("round-event"),
+    roundId,
+    participantId,
+    holeNumber: Number(holeNumber) || 1,
+    patch: nextPatch,
+    fields: Object.keys(nextPatch),
+    actionType: actionType || detectActionType(nextPatch),
+    actorUserId,
+    deviceId,
+    occurredAt,
+    syncState: "pending",
+    syncAttempts: 0,
+    lastAttemptAt: 0,
+    lastError: "",
+    syncedAt: 0,
+    conflictStrategy: ROUND_CONFLICT_STRATEGY,
+  };
+}
+
+export function appendRoundAction(round, event) {
+  ensureRoundSyncScaffold(round);
+  round.eventLog.push(event);
+  round.sync.pendingActionCount = getRawPendingRoundEvents(round).length;
+  round.sync.lastLocalSaveAt = event?.occurredAt || Date.now();
+  round.sync.lastEventAt = event?.occurredAt || Date.now();
+  round.sync.lastSyncError = "";
+  round.sync.saveState = "saved-local";
+  round.sync.note = LOCAL_SAVE_NOTE;
+  return event;
+}
+
+export function applyRoundActionEvent(round, event) {
+  ensureRoundSyncScaffold(round);
+
+  const hole = round.holes.find((item) => item.number === Number(event?.holeNumber));
+  const entry = hole?.entries.find((item) => item.participantId === event?.participantId);
+  if (!hole || !entry) {
+    return {
+      applied: false,
+      reason: "missing-entry",
+      conflictStrategy: ROUND_CONFLICT_STRATEGY,
+    };
+  }
+
+  const eventTimestamp = Number(event?.occurredAt) || Date.now();
+  const currentTimestamp = Number(entry.updatedAt) || 0;
+  if (currentTimestamp && eventTimestamp < currentTimestamp) {
+    return {
+      applied: false,
+      reason: "stale-event",
+      conflictStrategy: ROUND_CONFLICT_STRATEGY,
+    };
+  }
+
+  applyHoleUpdate(round, hole.number, entry.participantId, event.patch || {}, {
+    timestamp: eventTimestamp,
+    eventId: event.id,
+  });
+
+  round.sync.lastEventAt = eventTimestamp;
+  round.sync.lastLocalSaveAt = eventTimestamp;
+  return {
+    applied: true,
+    conflictStrategy: ROUND_CONFLICT_STRATEGY,
+  };
+}
+
+export function getPendingRoundEvents(round) {
+  ensureRoundSyncScaffold(round);
+  return getRawPendingRoundEvents(round);
+}
+
+export function markRoundEventsSyncing(round, eventIds = [], attemptedAt = Date.now()) {
+  ensureRoundSyncScaffold(round);
+  const idSet = new Set(eventIds);
+
+  round.eventLog.forEach((event) => {
+    if (idSet.has(event.id) && event.syncState !== "synced") {
+      event.syncState = "syncing";
+      event.syncAttempts = (event.syncAttempts || 0) + 1;
+      event.lastAttemptAt = attemptedAt;
+      event.lastError = "";
+    }
+  });
+
+  round.sync.pendingActionCount = getRawPendingRoundEvents(round).length;
+  round.sync.saveState = round.sync.pendingActionCount ? "syncing" : "synced";
+  round.sync.lastSyncError = "";
+  round.sync.note = round.sync.pendingActionCount ? SYNCING_NOTE : SYNCED_NOTE;
+}
+
+export function markRoundEventsSynced(round, eventIds = [], syncedAt = Date.now()) {
+  ensureRoundSyncScaffold(round);
+  const idSet = new Set(eventIds);
+
+  round.eventLog.forEach((event) => {
+    if (idSet.has(event.id)) {
+      event.syncState = "synced";
+      event.syncedAt = syncedAt;
+      event.lastError = "";
+    }
+  });
+
+  round.sync.pendingActionCount = getRawPendingRoundEvents(round).length;
+  round.sync.lastSyncedAt = syncedAt;
+  round.sync.lastSyncError = "";
+  round.sync.saveState = round.sync.pendingActionCount ? "saved-local" : "synced";
+  round.sync.note = round.sync.pendingActionCount ? LOCAL_SAVE_NOTE : SYNCED_NOTE;
+}
+
+export function markRoundEventsRetryNeeded(round, eventIds = [], errorMessage = "", attemptedAt = Date.now()) {
+  ensureRoundSyncScaffold(round);
+  const idSet = new Set(eventIds);
+
+  round.eventLog.forEach((event) => {
+    if (idSet.has(event.id) && event.syncState !== "synced") {
+      event.syncState = "pending";
+      event.lastAttemptAt = attemptedAt;
+      event.lastError = errorMessage || "";
+    }
+  });
+
+  round.sync.pendingActionCount = getRawPendingRoundEvents(round).length;
+  round.sync.saveState = round.sync.pendingActionCount ? "retry-needed" : "synced";
+  round.sync.lastSyncError = errorMessage || "";
+  round.sync.note = round.sync.pendingActionCount
+    ? "Live updates are still safe on this device. Cloud backup will retry when the connection stabilizes."
+    : SYNCED_NOTE;
+}
+
+export function workspaceHasPendingRoundSync(workspace) {
+  const rounds = workspace?.rounds || [];
+
+  return rounds.some((round) => {
+    ensureRoundSyncScaffold(round);
+    const pendingCount = getRawPendingRoundEvents(round).length;
+    return pendingCount > 0
+      || ["syncing", "retry-needed"].includes(round.sync.saveState);
+  });
+}
+
+```
+
+## `src/domain/scoring.js`
+
+```js
+import { GAME_MODES } from "../config.js";
+import { average, formatRelationToPar } from "../utils/formatters.js";
+
+const PAR_TYPES = [3, 4, 5];
+
+function isPlayedEntry(entry) {
+  return Boolean(entry && entry.strokes !== null && entry.strokes > 0);
+}
+
+function roundRatio(value, total) {
+  return total ? Math.round((value / total) * 100) : 0;
+}
+
+function roundValue(value, digits = 1) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Number(value.toFixed(digits))
+    : null;
+}
+
+function createParTypeBucket(par) {
+  return {
+    par,
+    holes: 0,
+    totalStrokes: 0,
+    totalPar: 0,
+    averageScore: null,
+    toPar: 0,
+  };
+}
+
+function summarizeParTypeScoring(playedHoles) {
+  const buckets = {
+    3: createParTypeBucket(3),
+    4: createParTypeBucket(4),
+    5: createParTypeBucket(5),
+  };
+
+  playedHoles.forEach(({ hole, entry }) => {
+    const bucket = buckets[hole.par];
+    if (!bucket) {
+      return;
+    }
+
+    bucket.holes += 1;
+    bucket.totalStrokes += entry.strokes;
+    bucket.totalPar += hole.par;
+  });
+
+  PAR_TYPES.forEach((par) => {
+    const bucket = buckets[par];
+    bucket.averageScore = bucket.holes ? roundValue(bucket.totalStrokes / bucket.holes, 2) : null;
+    bucket.toPar = bucket.totalStrokes - bucket.totalPar;
+  });
+
+  return buckets;
+}
+
+function mergeParTypeScoring(collection) {
+  const merged = {
+    3: createParTypeBucket(3),
+    4: createParTypeBucket(4),
+    5: createParTypeBucket(5),
+  };
+
+  collection.forEach((buckets) => {
+    PAR_TYPES.forEach((par) => {
+      const source = buckets?.[par];
+      if (!source) {
+        return;
+      }
+
+      merged[par].holes += source.holes || 0;
+      merged[par].totalStrokes += source.totalStrokes || 0;
+      merged[par].totalPar += source.totalPar || 0;
+    });
+  });
+
+  PAR_TYPES.forEach((par) => {
+    const bucket = merged[par];
+    bucket.averageScore = bucket.holes ? roundValue(bucket.totalStrokes / bucket.holes, 2) : null;
+    bucket.toPar = bucket.totalStrokes - bucket.totalPar;
+  });
+
+  return merged;
+}
+
+function createHolePerformanceBucket(holeNumber, par) {
+  return {
+    holeNumber,
+    par,
+    rounds: 0,
+    totalStrokes: 0,
+    totalToPar: 0,
+    totalPutts: 0,
+    totalPenalties: 0,
+    fairwaysHit: 0,
+    fairwayOpportunities: 0,
+    greensHit: 0,
+  };
+}
+
+function summarizeHolePerformance(detailCollections) {
+  const buckets = new Map();
+
+  detailCollections.forEach((details) => {
+    (details || []).forEach((detail) => {
+      const existing = buckets.get(detail.holeNumber) || createHolePerformanceBucket(detail.holeNumber, detail.par);
+      existing.rounds += 1;
+      existing.totalStrokes += detail.strokes;
+      existing.totalToPar += detail.toPar;
+      existing.totalPutts += detail.putts ?? 0;
+      existing.totalPenalties += detail.penalties || 0;
+      existing.greensHit += detail.gir ? 1 : 0;
+
+      if (detail.par > 3) {
+        existing.fairwayOpportunities += 1;
+        existing.fairwaysHit += detail.fairwayHit ? 1 : 0;
+      }
+
+      buckets.set(detail.holeNumber, existing);
+    });
+  });
+
+  const list = [...buckets.values()]
+    .map((bucket) => ({
+      ...bucket,
+      averageScore: bucket.rounds ? roundValue(bucket.totalStrokes / bucket.rounds, 2) : null,
+      averageToPar: bucket.rounds ? roundValue(bucket.totalToPar / bucket.rounds, 2) : null,
+      averagePutts: bucket.rounds ? roundValue(bucket.totalPutts / bucket.rounds, 2) : null,
+      penaltiesAverage: bucket.rounds ? roundValue(bucket.totalPenalties / bucket.rounds, 2) : 0,
+      fairwayRate: roundRatio(bucket.fairwaysHit, bucket.fairwayOpportunities),
+      girRate: roundRatio(bucket.greensHit, bucket.rounds),
+    }))
+    .sort((left, right) => left.holeNumber - right.holeNumber);
+
+  const byDifficulty = [...list].sort((left, right) =>
+    (right.averageToPar ?? -999) - (left.averageToPar ?? -999)
+    || (right.averageScore ?? -999) - (left.averageScore ?? -999)
+    || left.holeNumber - right.holeNumber
+  );
+  const byScoring = [...list].sort((left, right) =>
+    (left.averageToPar ?? 999) - (right.averageToPar ?? 999)
+    || (left.averageScore ?? 999) - (right.averageScore ?? 999)
+    || left.holeNumber - right.holeNumber
+  );
+
+  return {
+    holePerformance: list,
+    hardestHoles: byDifficulty.slice(0, 3),
+    bestHoles: byScoring.slice(0, 3),
+  };
+}
+
+function buildStrokesGainedCategory(value) {
+  const rounded = roundValue(value, 1) || 0;
+  return {
+    value: rounded,
+    label: rounded >= 0.6 ? "Gaining" : rounded <= -0.6 ? "Losing" : "Neutral",
+  };
+}
+
+function calculateSimplifiedStrokesGained(playedHoles) {
+  let driving = 0;
+  let approach = 0;
+  let putting = 0;
+
+  playedHoles.forEach(({ hole, entry }) => {
+    const penalties = entry.penalties || 0;
+
+    if (hole.par > 3) {
+      driving += entry.fairwayHit ? 0.25 : -0.18;
+      driving -= penalties * 0.55;
+    }
+
+    approach += entry.gir ? 0.32 : -0.2;
+
+    if (hole.par === 3 && !entry.gir) {
+      approach -= 0.08;
+    }
+
+    if (typeof entry.putts === "number" && Number.isFinite(entry.putts)) {
+      putting += (2 - entry.putts) * 0.45;
+    }
+  });
+
+  const categories = {
+    driving: buildStrokesGainedCategory(driving),
+    approach: buildStrokesGainedCategory(approach),
+    putting: buildStrokesGainedCategory(putting),
+  };
+
+  const ranked = Object.entries(categories).sort((left, right) => right[1].value - left[1].value);
+
+  return {
+    ...categories,
+    total: roundValue(driving + approach + putting, 1) || 0,
+    bestCategory: ranked[0]?.[0] || "driving",
+    weakestCategory: ranked[ranked.length - 1]?.[0] || "putting",
+  };
+}
+
+export function getRecentTrend(roundEntries) {
+  const values = roundEntries
+    .map((entry) => entry?.totalStrokes)
+    .filter((value) => typeof value === "number" && value > 0);
+
+  if (values.length < 2) {
+    return {
+      label: "Stable",
+      delta: 0,
+      summary: "Need more rounds to establish a trend",
+    };
+  }
+
+  const recentAverage = average(values.slice(0, 3));
+  const priorValues = values.slice(3, 6);
+
+  if (!priorValues.length) {
+    return {
+      label: "Stable",
+      delta: 0,
+      summary: "Building a trend from recent rounds",
+    };
+  }
+
+  const priorAverage = average(priorValues);
+  const delta = roundValue(priorAverage - recentAverage, 1) || 0;
+  const label = delta >= 1.5
+      ? "Improving"
+      : delta <= -1.5
+        ? "Declining"
+        : "Stable";
+
+  return {
+    label,
+    delta,
+    summary: label === "Improving"
+      ? `${Math.abs(delta).toFixed(1)} strokes better than the prior stretch`
+      : label === "Declining"
+        ? `${Math.abs(delta).toFixed(1)} strokes higher than the prior stretch`
+        : "Recent scoring is holding steady",
+  };
+}
+
+export function calculateHandicapScaffold(roundEntries) {
+  const differentials = roundEntries
+    .map((entry) => {
+      if (typeof entry?.totalStrokes !== "number" || typeof entry?.totalPar !== "number") {
+        return null;
+      }
+
+      return entry.totalStrokes - entry.totalPar;
+    })
+    .filter((value) => value !== null)
+    .sort((left, right) => left - right);
+
+  if (!differentials.length) {
+    return null;
+  }
+
+  const sampleSize = differentials.length >= 8 ? 3 : differentials.length >= 4 ? 2 : 1;
+  return roundValue(average(differentials.slice(0, sampleSize)) * 0.96, 1);
+}
+
+export function buildPerformanceInsights(metrics) {
+  const insights = [];
+  const fairwayRate = metrics.fairwayRate ?? metrics.fairwayPercentage ?? metrics.fairways ?? 0;
+  const girRate = metrics.girRate ?? metrics.girPercentage ?? metrics.gir ?? 0;
+  const averagePutts = metrics.averagePutts ?? metrics.putts ?? null;
+  const penalties = metrics.totalPenalties ?? metrics.penaltiesAverage ?? 0;
+  const upAndDownRate = metrics.upAndDownRate ?? 0;
+  const trendLabel = metrics.recentTrend?.label || metrics.formLabel || null;
+  const parFive = metrics.scoringByParType?.[5];
+  const strokesGained = metrics.strokesGained || null;
+  const hardestHole = metrics.hardestHoles?.[0] || null;
+
+  if (fairwayRate >= 60) {
+    insights.push("Driving looks reliable and is keeping the round in position.");
+  } else if (fairwayRate > 0 && fairwayRate <= 45) {
+    insights.push("Missed fairways are costing clean approaches. Tighten the tee ball first.");
+  }
+
+  if (girRate >= 55) {
+    insights.push("Approach play is creating plenty of birdie and par looks.");
+  } else if (girRate > 0 && girRate <= 35) {
+    insights.push("Greens in regulation are low. More center-green approaches could save shots quickly.");
+  }
+
+  if (typeof averagePutts === "number" && averagePutts <= 1.9) {
+    insights.push("Putting is a strength right now. Conversion on the green is helping scoring.");
+  } else if (typeof averagePutts === "number" && averagePutts >= 2.2) {
+    insights.push("Putting is leaving strokes out there. Short-putt cleanup is the fastest gain.");
+  }
+
+  if (penalties >= 1.5) {
+    insights.push("Penalty strokes are adding up. Smarter misses can lower scores quickly.");
+  }
+
+  if (upAndDownRate >= 45) {
+    insights.push("Short-game recovery is strong when greens are missed.");
+  }
+
+  if (parFive?.holes && parFive.toPar <= 0) {
+    insights.push("Par 5 scoring is a clear advantage in the current sample.");
+  }
+
+  if (strokesGained?.putting?.label === "Gaining") {
+    insights.push("Putting is outperforming your baseline and helping you convert scoring chances.");
+  } else if (strokesGained?.approach?.label === "Losing") {
+    insights.push("Approach play is trailing the rest of the game. More greens hit would move scoring fast.");
+  }
+
+  if (hardestHole && hardestHole.averageToPar >= 0.8) {
+    insights.push(`Hole ${hardestHole.holeNumber} has been the toughest scoring spot in your recent sample.`);
+  }
+
+  if (trendLabel === "Improving") {
+    insights.push("Recent rounds are trending better. The current practice plan is working.");
+  } else if (trendLabel === "Declining") {
+    insights.push("Recent rounds are slipping. Focus on the weakest category before the next card.");
+  }
+
+  if (!insights.length) {
+    insights.push("The stat sample is still building. Finish a few more rounds for sharper insights.");
+  }
+
+  return insights.slice(0, 3);
+}
+
+export function getScoringParticipants(round) {
+  return round.mode === "stroke" ? round.players : round.sides;
+}
+
+export function getLocalParticipantIds(round, currentUserId) {
+  if (round.mode === "stroke") {
+    return round.players.filter((player) => player.userId === currentUserId).map((player) => player.id);
+  }
+
+  return round.sides
+    .filter((side) => side.playerIds.some((playerId) => round.players.find((player) => player.id === playerId)?.userId === currentUserId))
+    .map((side) => side.id);
+}
+
+export function applyHoleUpdate(round, holeNumber, participantId, patch, options = {}) {
+  const hole = round.holes.find((item) => item.number === holeNumber);
+  if (!hole) {
+    return round;
+  }
+
+  const entry = hole.entries.find((item) => item.participantId === participantId);
+  if (!entry) {
+    return round;
+  }
+
+  if (Object.hasOwn(patch, "strokes")) {
+    entry.strokes = patch.strokes === null || patch.strokes === "" ? null : Number(patch.strokes);
+  }
+
+  if (Object.hasOwn(patch, "putts")) {
+    entry.putts = patch.putts === null || patch.putts === "" ? null : Number(patch.putts);
+  }
+
+  if (Object.hasOwn(patch, "penalties")) {
+    entry.penalties = patch.penalties === null || patch.penalties === ""
+      ? 0
+      : Math.max(0, Number(patch.penalties));
+  }
+
+  if (Object.hasOwn(patch, "fairwayHit")) {
+    entry.fairwayHit = Boolean(patch.fairwayHit);
+  }
+
+  if (Object.hasOwn(patch, "gir")) {
+    entry.gir = Boolean(patch.gir);
+  }
+
+  if (Object.hasOwn(patch, "upAndDown")) {
+    entry.upAndDown = Boolean(patch.upAndDown);
+  }
+
+  if (Object.hasOwn(patch, "sandSave")) {
+    entry.sandSave = Boolean(patch.sandSave);
+  }
+
+  const appliedAt = Number.isFinite(options.timestamp) ? Number(options.timestamp) : Date.now();
+  entry.updatedAt = appliedAt;
+  if (options.eventId) {
+    entry.lastEventId = options.eventId;
+  }
+  round.updatedAt = appliedAt;
+  round.currentHole = hole.number;
+  return round;
+}
+
+export function getParticipantTotals(round, participantId) {
+  const holes = round.holes
+    .map((hole) => ({
+      hole,
+      entry: hole.entries.find((item) => item.participantId === participantId),
+    }))
+    .filter(({ entry }) => entry);
+
+  const played = holes.filter(({ entry }) => isPlayedEntry(entry));
+  const holeDetails = played.map(({ hole, entry }) => ({
+    holeNumber: hole.number,
+    par: hole.par,
+    strokes: entry.strokes,
+    toPar: entry.strokes - hole.par,
+    putts: typeof entry.putts === "number" ? entry.putts : null,
+    penalties: entry.penalties || 0,
+    fairwayHit: entry.fairwayHit,
+    gir: entry.gir,
+  }));
+  const totalStrokes = played.reduce((sum, item) => sum + item.entry.strokes, 0);
+  const puttEntries = played.filter(({ entry }) => typeof entry.putts === "number" && Number.isFinite(entry.putts));
+  const totalPutts = puttEntries.reduce((sum, item) => sum + item.entry.putts, 0);
+  const totalPar = played.reduce((sum, item) => sum + item.hole.par, 0);
+  const totalPenalties = played.reduce((sum, item) => sum + (item.entry.penalties || 0), 0);
+  const fairwayEligible = played.filter(({ hole }) => hole.par > 3);
+  const fairwaysHit = fairwayEligible.filter(({ entry }) => entry.fairwayHit).length;
+  const greensHit = played.filter(({ entry }) => entry.gir).length;
+  const upAndDownOpportunities = played.filter(({ entry }) => !entry.gir).length;
+  const upAndDownSuccesses = played.filter(({ entry }) => entry.upAndDown).length;
+  const sandSaveCount = played.filter(({ entry }) => entry.sandSave).length;
+  const scoringByParType = summarizeParTypeScoring(played);
+  const strokesGained = calculateSimplifiedStrokesGained(played);
+
+  return {
+    holesPlayed: played.length,
+    holeDetails,
+    totalStrokes,
+    totalPutts,
+    puttHolesRecorded: puttEntries.length,
+    totalPar,
+    toPar: totalStrokes - totalPar,
+    fairwaysHit,
+    fairwayOpportunities: fairwayEligible.length,
+    fairwayRate: roundRatio(fairwaysHit, fairwayEligible.length),
+    greensHit,
+    girOpportunities: played.length,
+    girRate: roundRatio(greensHit, played.length),
+    totalPenalties,
+    upAndDownSuccesses,
+    upAndDownOpportunities,
+    upAndDownRate: roundRatio(upAndDownSuccesses, upAndDownOpportunities),
+    sandSaveCount,
+    averagePutts: puttEntries.length ? roundValue(totalPutts / puttEntries.length, 2) : null,
+    scoringByParType,
+    strokesGained,
+  };
+}
+
+function buildStrokeLeaderboard(round, currentUserId) {
+  return getScoringParticipants(round)
+    .map((participant) => {
+      const totals = getParticipantTotals(round, participant.id);
+      const localIds = getLocalParticipantIds(round, currentUserId);
+      return {
+        id: participant.id,
+        name: participant.name,
+        subtitle: round.mode === "scramble" ? participant.playerNames.join(", ") : "Player card",
+        isLocal: localIds.includes(participant.id),
+        thru: totals.holesPlayed,
+        total: totals.totalStrokes,
+        toPar: totals.toPar,
+        fairwayRate: totals.fairwayRate,
+        girRate: totals.girRate,
+        totalPutts: totals.totalPutts,
+        totalPenalties: totals.totalPenalties,
+        displayStatus: totals.holesPlayed ? formatRelationToPar(totals.toPar) : "NS",
+      };
+    })
+    .sort((left, right) => {
+      if (left.thru === 0 && right.thru > 0) {
+        return 1;
+      }
+      if (right.thru === 0 && left.thru > 0) {
+        return -1;
+      }
+      return left.toPar - right.toPar || left.total - right.total || right.thru - left.thru;
+    })
+    .map((entry, index) => ({
+      ...entry,
+      rank: index + 1,
+    }));
+}
+
+function buildMatchLeaderboard(round, currentUserId) {
+  const sides = getScoringParticipants(round);
+  const [left, right] = sides;
+
+  if (!left || !right) {
+    return buildStrokeLeaderboard(round, currentUserId);
+  }
+
+  let leftWins = 0;
+  let rightWins = 0;
+  let halved = 0;
+  let holesPlayed = 0;
+
+  round.holes.forEach((hole) => {
+    const leftEntry = hole.entries.find((entry) => entry.participantId === left.id);
+    const rightEntry = hole.entries.find((entry) => entry.participantId === right.id);
+    if (!leftEntry?.strokes || !rightEntry?.strokes) {
+      return;
+    }
+
+    holesPlayed += 1;
+    if (leftEntry.strokes < rightEntry.strokes) {
+      leftWins += 1;
+      return;
+    }
+
+    if (rightEntry.strokes < leftEntry.strokes) {
+      rightWins += 1;
+      return;
+    }
+
+    halved += 1;
+  });
+
+  const delta = leftWins - rightWins;
+  const leftLocal = getLocalParticipantIds(round, currentUserId).includes(left.id);
+  const rightLocal = getLocalParticipantIds(round, currentUserId).includes(right.id);
+
+  const leftStanding = delta > 0 ? `${delta} Up` : delta < 0 ? `${Math.abs(delta)} Down` : "AS";
+  const rightStanding = delta < 0 ? `${Math.abs(delta)} Up` : delta > 0 ? `${delta} Down` : "AS";
+
+  return [
+    {
+      id: left.id,
+      rank: delta >= 0 ? 1 : 2,
+      name: left.name,
+      subtitle: left.playerNames.join(", "),
+      isLocal: leftLocal,
+      thru: holesPlayed,
+      total: leftWins,
+      toPar: 0,
+      fairwayRate: 0,
+      girRate: 0,
+      totalPutts: 0,
+      totalPenalties: 0,
+      displayStatus: leftStanding,
+      holesWon: leftWins,
+      holesHalved: halved,
+    },
+    {
+      id: right.id,
+      rank: delta <= 0 ? 1 : 2,
+      name: right.name,
+      subtitle: right.playerNames.join(", "),
+      isLocal: rightLocal,
+      thru: holesPlayed,
+      total: rightWins,
+      toPar: 0,
+      fairwayRate: 0,
+      girRate: 0,
+      totalPutts: 0,
+      totalPenalties: 0,
+      displayStatus: rightStanding,
+      holesWon: rightWins,
+      holesHalved: halved,
+    },
+  ].sort((leftEntry, rightEntry) => leftEntry.rank - rightEntry.rank);
+}
+
+export function buildLeaderboard(round, currentUserId) {
+  return round.mode === "match"
+    ? buildMatchLeaderboard(round, currentUserId)
+    : buildStrokeLeaderboard(round, currentUserId);
+}
+
+export function getRoundSummary(round, currentUserId) {
+  const leaderboard = buildLeaderboard(round, currentUserId);
+  const localParticipant = leaderboard.find((entry) => entry.isLocal) || leaderboard[0];
+  const localTotals = localParticipant ? getParticipantTotals(round, localParticipant.id) : null;
+  const holesPlayed = Math.max(...leaderboard.map((entry) => entry.thru), 0);
+
+  return {
+    leaderboard,
+    holesPlayed,
+    totalHoles: round.holes.length,
+    localParticipant,
+    localTotals,
+    roundInsights: localTotals ? buildPerformanceInsights({
+      ...localTotals,
+      ...summarizeHolePerformance([localTotals.holeDetails]),
+    }) : [],
+    roundLabel: GAME_MODES[round.mode].label,
+    averagePutts: localTotals?.averagePutts ?? null,
+    completed: round.status === "completed",
+    winnerLabel: leaderboard.length ? leaderboard[0].name : "No leader yet",
+  };
+}
+
+export function getHistoryMetrics(rounds, currentUserId) {
+  const localRounds = rounds
+    .filter((round) => round.status === "completed")
+    .map((round) => {
+      const participantId = getLocalParticipantIds(round, currentUserId)[0];
+      if (!participantId) {
+        return null;
+      }
+
+      return {
+        roundId: round.id,
+        completedAt: round.completedAt || round.updatedAt || round.createdAt,
+        totals: getParticipantTotals(round, participantId),
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => (right.completedAt || 0) - (left.completedAt || 0));
+
+  const totalFairwaysHit = localRounds.reduce((sum, round) => sum + round.totals.fairwaysHit, 0);
+  const totalFairwayOpportunities = localRounds.reduce((sum, round) => sum + round.totals.fairwayOpportunities, 0);
+  const totalGreensHit = localRounds.reduce((sum, round) => sum + round.totals.greensHit, 0);
+  const totalGirOpportunities = localRounds.reduce((sum, round) => sum + round.totals.girOpportunities, 0);
+  const totalPutts = localRounds.reduce((sum, round) => sum + round.totals.totalPutts, 0);
+  const totalPlayedHoles = localRounds.reduce((sum, round) => sum + round.totals.holesPlayed, 0);
+  const totalPuttHoles = localRounds.reduce((sum, round) => sum + (round.totals.puttHolesRecorded || 0), 0);
+  const totalPenalties = localRounds.reduce((sum, round) => sum + round.totals.totalPenalties, 0);
+  const totalUpAndDowns = localRounds.reduce((sum, round) => sum + round.totals.upAndDownSuccesses, 0);
+  const totalUpAndDownOpportunities = localRounds.reduce((sum, round) => sum + round.totals.upAndDownOpportunities, 0);
+  const totalSandSaves = localRounds.reduce((sum, round) => sum + round.totals.sandSaveCount, 0);
+  const recentTrend = getRecentTrend(localRounds.map((round) => ({
+    totalStrokes: round.totals.totalStrokes,
+  })));
+  const scoringByParType = mergeParTypeScoring(localRounds.map((round) => round.totals.scoringByParType));
+  const holeSummary = summarizeHolePerformance(localRounds.map((round) => round.totals.holeDetails));
+  const strokesGained = ["driving", "approach", "putting"].reduce((result, key) => {
+    const values = localRounds
+      .map((round) => round.totals.strokesGained?.[key]?.value)
+      .filter((value) => typeof value === "number");
+    const averageValue = values.length ? roundValue(average(values), 1) || 0 : 0;
+    result[key] = buildStrokesGainedCategory(averageValue);
+    return result;
+  }, {});
+  const rankedStrokesGained = Object.entries(strokesGained).sort((left, right) => right[1].value - left[1].value);
+  const handicapIndex = calculateHandicapScaffold(localRounds.map((round) => ({
+    totalStrokes: round.totals.totalStrokes,
+    totalPar: round.totals.totalPar,
+  })));
+
+  return {
+    roundsPlayed: localRounds.length,
+    scoringAverage: average(localRounds.map((round) => round.totals.totalStrokes || 0)),
+    fairways: roundRatio(totalFairwaysHit, totalFairwayOpportunities),
+    gir: roundRatio(totalGreensHit, totalGirOpportunities),
+    putts: totalPuttHoles ? roundValue(totalPutts / totalPuttHoles, 2) : null,
+    penaltiesAverage: localRounds.length ? roundValue(totalPenalties / localRounds.length, 2) : 0,
+    upAndDownRate: roundRatio(totalUpAndDowns, totalUpAndDownOpportunities),
+    sandSaveCount: totalSandSaves,
+    scoringByParType,
+    hardestHoles: holeSummary.hardestHoles,
+    bestHoles: holeSummary.bestHoles,
+    holePerformance: holeSummary.holePerformance,
+    recentTrend,
+    formLabel: recentTrend.label,
+    trendDirection: recentTrend.delta > 0 ? "up" : recentTrend.delta < 0 ? "down" : "flat",
+    handicapIndex,
+    strokesGained: {
+      ...strokesGained,
+      total: roundValue(
+        (strokesGained.driving?.value || 0)
+        + (strokesGained.approach?.value || 0)
+        + (strokesGained.putting?.value || 0),
+        1
+      ) || 0,
+      bestCategory: rankedStrokesGained[0]?.[0] || "driving",
+      weakestCategory: rankedStrokesGained[rankedStrokesGained.length - 1]?.[0] || "putting",
+    },
+    smartInsights: buildPerformanceInsights({
+      fairways: roundRatio(totalFairwaysHit, totalFairwayOpportunities),
+      gir: roundRatio(totalGreensHit, totalGirOpportunities),
+      putts: totalPuttHoles ? roundValue(totalPutts / totalPuttHoles, 2) : null,
+      penaltiesAverage: localRounds.length ? roundValue(totalPenalties / localRounds.length, 2) : 0,
+      upAndDownRate: roundRatio(totalUpAndDowns, totalUpAndDownOpportunities),
+      scoringByParType,
+      hardestHoles: holeSummary.hardestHoles,
+      recentTrend,
+      formLabel: recentTrend.label,
+      strokesGained: {
+        ...strokesGained,
+        total: roundValue(
+          (strokesGained.driving?.value || 0)
+          + (strokesGained.approach?.value || 0)
+          + (strokesGained.putting?.value || 0),
+          1
+        ) || 0,
+      },
+    }),
+  };
+}
+
+export function getFrequentPartners(rounds, currentUserId) {
+  const partnerMap = new Map();
+
+  rounds.forEach((round) => {
+    const localPlayers = round.players.filter((player) => player.userId === currentUserId);
+    if (!localPlayers.length) {
+      return;
+    }
+
+    round.players
+      .filter((player) => player.userId !== currentUserId)
+      .forEach((player) => {
+        const previous = partnerMap.get(player.name) || { name: player.name, rounds: 0, latest: 0 };
+        previous.rounds += 1;
+        previous.latest = Math.max(previous.latest, round.updatedAt || round.completedAt || round.createdAt);
+        partnerMap.set(player.name, previous);
+      });
+  });
+
+  return [...partnerMap.values()]
+    .sort((left, right) => right.rounds - left.rounds || right.latest - left.latest)
+    .slice(0, 6);
+}
+
+```
+
+## `src/main.js`
+
+```js
+import { createActivity, createGearItem, createRound, createTournament } from "./domain/factories.js";
+import {
+  appendRoundAction,
+  applyRoundActionEvent,
+  createRoundActionEvent,
+  ensureRoundSyncScaffold,
+  getPendingRoundEvents,
+  markRoundEventsRetryNeeded,
+  markRoundEventsSynced,
+  markRoundEventsSyncing,
+  workspaceHasPendingRoundSync,
+} from "./domain/round-sync.js";
+import { APP_VERSION, FEATURED_COURSE_ID, NETLIFY_FEEDBACK_FORM_NAME, STORAGE_KEY, VIEW_ORDER } from "./config.js";
+import { joinByInviteCode, hostRoundGroup } from "./services/mock-api.js";
+import { ensureProfilesForNames, refreshProfileSnapshots, syncCurrentUserProfile } from "./services/player-service.js";
+import { createProductPlatform } from "./services/product-platform.js";
+import { createManualCourseSelection, createRoundCourseSelection, findCourseById, getDefaultTeeBox } from "./services/course-library.js";
+import { createDefaultState } from "./state/default-state.js";
+import { createStore } from "./state/store.js";
+import { createRenderer } from "./ui/render.js";
+
+function findRound(state, roundId) {
+  return state.rounds.find((round) => round.id === roundId);
+}
+
+function getRoundEventSyncCopy(round, pendingCount = getPendingRoundEvents(round).length) {
+  const courseName = round?.courseName || "This round";
+  const baseSubject = pendingCount === 1 ? "1 live change" : `${pendingCount} live changes`;
+
+  return {
+    pendingLabel: pendingCount ? `Backing up ${baseSubject} from ${courseName}...` : "Checking live round backup...",
+    successTitle: "Live round synced",
+    successMessage: `${courseName} is backed up and safe to reopen on this golfer account.`,
+    failureTitle: "Saved locally",
+    failureMessage: pendingCount
+      ? `${baseSubject} are safe on this device, and Golfers Nation will keep retrying when the connection improves.`
+      : `${courseName} is still safe on this device, and Golfers Nation will keep retrying when the connection improves.`,
+    retryLabel: "Retry live sync",
+  };
+}
+
+function hasPendingRoundSyncForUser(state, userId = state.auth?.activeUserId || state.currentUser?.id || null) {
+  if (!userId) {
+    return false;
+  }
+
+  return workspaceHasPendingRoundSync({
+    rounds: state.rounds,
+  });
+}
+
+function collectPendingRoundEvents(state, userId = state.auth?.activeUserId || state.currentUser?.id || null) {
+  if (!userId) {
+    return [];
+  }
+
+  return (state.rounds || [])
+    .map((round) => ({
+      round,
+      events: getPendingRoundEvents(round),
+    }))
+    .filter(({ events }) => events.length)
+    .map(({ round, events }) => ({
+      roundId: round.id,
+      eventIds: events.map((event) => event.id),
+      pendingCount: events.length,
+      events,
+    }));
+}
+
+function parsePlayers(value, currentUserName) {
+  const names = String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const deduped = [];
+  const seen = new Set();
+
+  names.forEach((name) => {
+    const normalized = name.toLowerCase();
+    if (seen.has(normalized)) {
+      return;
+    }
+
+    seen.add(normalized);
+    deduped.push(name);
+  });
+
+  if (!seen.has(currentUserName.toLowerCase())) {
+    deduped.unshift(currentUserName);
+    seen.add(currentUserName.toLowerCase());
+  } else {
+    const currentIndex = deduped.findIndex((name) => name.toLowerCase() === currentUserName.toLowerCase());
+    if (currentIndex > 0) {
+      const [currentName] = deduped.splice(currentIndex, 1);
+      deduped.unshift(currentName);
+    }
+  }
+
+  const adjustments = [];
+  if (deduped.length < 2) {
+    deduped.push("Maya Chen");
+    adjustments.push("A second golfer was added so the round is ready for a real scorecard.");
+  }
+
+  if (deduped.length > 4) {
+    deduped.length = 4;
+    adjustments.push("This build keeps live rounds to four golfers, so only the first four names were used.");
+  }
+
+  return {
+    names: deduped,
+    note: adjustments.join(" "),
+  };
+}
+
+function getDefaultRoundSetup() {
+  const featuredCourse = findCourseById(FEATURED_COURSE_ID);
+  const featuredTeeBox = featuredCourse ? getDefaultTeeBox(featuredCourse) : null;
+
+  return {
+    courseQuery: "",
+    selectedCourseId: featuredCourse?.id || "",
+    selectedTeeBoxId: featuredTeeBox?.id || "",
+  };
+}
+
+function getRoundSetupState(state) {
+  return {
+    ...getDefaultRoundSetup(),
+    ...(state.session?.roundSetup || {}),
+  };
+}
+
+function resetRoundSetup(draft) {
+  draft.session.roundSetup = getDefaultRoundSetup();
+}
+
+function setSelectedCourse(draft, courseId, teeBoxId = "") {
+  const course = findCourseById(courseId);
+  if (!course) {
+    draft.session.roundSetup = {
+      ...getRoundSetupState(draft),
+      selectedCourseId: "",
+      selectedTeeBoxId: "",
+    };
+    return;
+  }
+
+  const defaultTee = getDefaultTeeBox(course);
+  draft.session.roundSetup = {
+    ...getRoundSetupState(draft),
+    selectedCourseId: course.id,
+    selectedTeeBoxId: teeBoxId || defaultTee?.id || "",
+  };
+}
+
+function appendActivity(draft, message, type = "product") {
+  draft.social.activity.unshift(
+    createActivity({
+      type,
+      message,
+    })
+  );
+  draft.social.activity = draft.social.activity.slice(0, 16);
+}
+
+function setFeedback(draft, tone, title, message) {
+  draft.session.feedback = {
+    tone,
+    title,
+    message,
+    updatedAt: Date.now(),
+  };
+  draft.session.pendingLabel = "";
+}
+
+function clearFeedback(draft) {
+  draft.session.feedback = null;
+  draft.session.pendingLabel = "";
+}
+
+function getDefaultCloudSyncState() {
+  return {
+    status: "idle",
+    scope: "",
+    roundId: null,
+    userId: null,
+    errorMessage: "",
+    lastAttemptAt: 0,
+    lastSuccessAt: 0,
+    retryCount: 0,
+  };
+}
+
+function mergeCloudSyncState(current = {}, updates = {}) {
+  return {
+    ...getDefaultCloudSyncState(),
+    ...(current || {}),
+    ...(updates || {}),
+  };
+}
+
+function setCloudSyncState(draft, updates = {}) {
+  draft.session.cloudSync = mergeCloudSyncState(draft.session.cloudSync, updates);
+}
+
+function resetCloudSyncState(draft) {
+  draft.session.cloudSync = mergeCloudSyncState(draft.session.cloudSync, {
+    status: "idle",
+    scope: "",
+    roundId: null,
+    userId: null,
+    errorMessage: "",
+    retryCount: 0,
+    lastSuccessAt: Date.now(),
+  });
+}
+
+function getCloudSyncCopy(scope = "workspace", roundId = null) {
+  if (scope === "round-finish") {
+    return {
+      pendingLabel: "Backing up this round to your golfer account...",
+      successTitle: "Round backed up",
+      successMessage: "This round is now saved to your Golfers Nation account and will restore after refresh or sign-in.",
+      failureTitle: "Round saved on this device",
+      failureMessage: "This round is safe on this phone, but cloud backup needs another try before it appears on other restored sessions.",
+      retryLabel: "Retry round save",
+    };
+  }
+
+  return {
+    pendingLabel: "Saving your latest changes to the cloud...",
+    successTitle: "Cloud save complete",
+    successMessage: "Your latest account changes are backed up to this golfer.",
+    failureTitle: "Saved on this device",
+    failureMessage: "Your latest changes are safe on this device, but cloud backup needs another try.",
+    retryLabel: roundId ? "Retry save" : "Retry cloud save",
+  };
+}
+
+function encodeFormPayload(payload) {
+  return new URLSearchParams(payload).toString();
+}
+
+function normalizeUsernameInput(value, fallbackName = "golfer") {
+  const source = String(value || "").trim() || fallbackName;
+  const base = source
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 16);
+  return base ? `@${base}` : "@golfer";
+}
+
+function normalizeAvatarLabel(value, fallbackName = "Golfer") {
+  const source = String(value || "").trim().toUpperCase();
+  if (source && source.length <= 2 && !source.includes(" ")) {
+    return source.slice(0, 2);
+  }
+
+  const derived = (source || fallbackName)
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
+  return derived || "GN";
+}
+
+function syncIdentityAcrossRecords(draft) {
+  draft.rounds.forEach((round) => {
+    round.players.forEach((player) => {
+      if (player.userId === draft.currentUser.id || player.profileId === draft.currentUser.profileId) {
+        player.name = draft.currentUser.name;
+        player.displayName = draft.currentUser.displayName;
+        player.username = draft.currentUser.username;
+        player.avatarLabel = draft.currentUser.avatarLabel;
+      }
+    });
+
+    round.sides.forEach((side) => {
+      side.playerNames = side.playerIds.map((playerId) => {
+        const player = round.players.find((item) => item.id === playerId);
+        return player ? player.name : "";
+      });
+    });
+  });
+
+  draft.groups.forEach((group) => {
+    group.members.forEach((member) => {
+      if (member.userId === draft.currentUser.id || member.profileId === draft.currentUser.profileId) {
+        member.displayName = draft.currentUser.name;
+        member.username = draft.currentUser.username;
+        member.avatarLabel = draft.currentUser.avatarLabel;
+      }
+    });
+  });
+}
+
+function getNextIncompleteHoleNumber(round, participantId, currentHoleNumber) {
+  const orderedHoles = round.holes
+    .slice(currentHoleNumber)
+    .concat(round.holes.slice(0, currentHoleNumber));
+  const nextHole = orderedHoles.find((hole) => {
+    const entry = hole.entries.find((item) => item.participantId === participantId);
+    return entry && (entry.strokes === null || entry.strokes === 0);
+  });
+
+  return nextHole ? nextHole.number : currentHoleNumber;
+}
+
+function getViewIndex(viewId) {
+  return VIEW_ORDER.findIndex((view) => view.id === viewId);
+}
+
+function setActiveView(draft, nextView, transitionKind = "tab") {
+  const previousView = draft.session.activeView || "home";
+  const previousIndex = getViewIndex(previousView);
+  const nextIndex = getViewIndex(nextView);
+
+  draft.session.previousView = previousView;
+  draft.session.activeView = nextView;
+
+  if (transitionKind === "focus-round") {
+    draft.session.transitionDirection = "focus";
+    return;
+  }
+
+  if (transitionKind === "return") {
+    draft.session.transitionDirection = "return";
+    return;
+  }
+
+  if (previousIndex !== -1 && nextIndex !== -1) {
+    draft.session.transitionDirection = nextIndex >= previousIndex ? "forward" : "backward";
+    return;
+  }
+
+  draft.session.transitionDirection = "steady";
+}
+
+function openHelpView(draft, sectionId = "getting-started") {
+  const currentView = draft.session.activeView || "home";
+  draft.session.helpReturnView = draft.auth?.status === "authenticated"
+    ? (currentView === "help" ? draft.session.helpReturnView || "home" : currentView)
+    : "auth";
+  draft.session.helpSection = sectionId || draft.session.helpSection || "getting-started";
+  setActiveView(draft, "help", "focus");
+}
+
+function closeHelpView(draft) {
+  const returnView = draft.session.helpReturnView || "home";
+  setActiveView(draft, returnView === "auth" ? "home" : returnView, "return");
+}
+
+function openSettingsView(draft, sectionId = "account") {
+  const currentView = draft.session.activeView || "stats";
+  draft.session.settingsReturnView = currentView === "settings"
+    ? (draft.session.settingsReturnView || "stats")
+    : currentView;
+  draft.session.settingsSection = sectionId || draft.session.settingsSection || "account";
+  setActiveView(draft, "settings", "focus");
+}
+
+function closeSettingsView(draft) {
+  const returnView = draft.session.settingsReturnView || "stats";
+  setActiveView(draft, returnView, "return");
+}
+
+function getInstallEnvironment(hasDeferredPrompt = false) {
+  if (typeof window === "undefined") {
+    return {
+      standaloneMode: false,
+      installPromptAvailable: false,
+      installState: "browser",
+    };
+  }
+
+  const standaloneMode = (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches)
+    || window.navigator.standalone === true;
+  const userAgent = window.navigator.userAgent || "";
+  const isIOS = /iPhone|iPad|iPod/i.test(userAgent);
+  const isSafari = /Safari/i.test(userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(userAgent);
+
+  return {
+    standaloneMode,
+    installPromptAvailable: hasDeferredPrompt && !standaloneMode,
+    installState: standaloneMode
+      ? "installed"
+      : hasDeferredPrompt
+        ? "prompt"
+        : isIOS && isSafari
+          ? "ios-share"
+          : "browser",
+  };
+}
+
+function registerServiceWorker() {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+    return;
+  }
+
+  if (window.location.protocol === "file:") {
+    return;
+  }
+
+  const secureContext = window.location.protocol === "https:"
+    || window.location.hostname === "localhost"
+    || window.location.hostname === "127.0.0.1";
+
+  if (!secureContext) {
+    return;
+  }
+
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js", { scope: "./" }).catch(() => {});
+  }, { once: true });
+}
+
+function applyAppearanceSelectionToDocument(appearance = {}) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const colorMode = appearance.colorMode || "system";
+  const themeId = appearance.themeId || "forest";
+  const textScale = appearance.textScale || "standard";
+  const contrastMode = appearance.contrastMode === "high" ? "high" : "standard";
+  const compactMode = appearance.compactMode === true;
+  let resolvedMode = colorMode;
+
+  if (colorMode === "system") {
+    resolvedMode = typeof window !== "undefined"
+      && typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-color-scheme: light)").matches
+      ? "light"
+      : "dark";
+  }
+
+  document.body.dataset.colorMode = colorMode;
+  document.body.dataset.resolvedMode = resolvedMode === "light" ? "light" : "dark";
+  document.body.dataset.theme = themeId;
+  document.body.dataset.textScale = textScale === "large" ? "large" : "standard";
+  document.body.dataset.contrast = contrastMode;
+  document.body.dataset.density = compactMode ? "compact" : "comfortable";
+  document.body.style.colorScheme = resolvedMode === "light" ? "light" : "dark";
+}
+
+function applyAppearanceToDocument(state) {
+  applyAppearanceSelectionToDocument(state.currentUser?.appearance || {});
+}
+
+function applyShellModeToDocument(state) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.body.dataset.appShellMode = state.session?.standaloneMode ? "standalone" : "browser";
+}
+
+function syncAppearancePreviewSummary(form) {
+  if (!form) {
+    return;
+  }
+
+  const selectedTheme = form.querySelector('input[name="themeId"]:checked');
+  const activeThemeName = form.querySelector('[data-active-theme-name]');
+  const activeThemeDescription = form.querySelector('[data-active-theme-description]');
+  const activeThemeCard = form.querySelector('[data-active-theme-card]');
+
+  if (selectedTheme) {
+    const nextThemeId = String(selectedTheme.value || "forest");
+
+    if (activeThemeName) {
+      activeThemeName.textContent = selectedTheme.dataset.themeLabel || nextThemeId;
+    }
+
+    if (activeThemeDescription) {
+      activeThemeDescription.textContent = selectedTheme.dataset.themeDescription || "";
+    }
+
+    if (activeThemeCard) {
+      activeThemeCard.dataset.themePreview = nextThemeId;
+    }
+  }
+}
+
+function previewAppearanceFromForm(form) {
+  if (!form) {
+    return;
+  }
+
+  const formData = new FormData(form);
+  applyAppearanceSelectionToDocument({
+    colorMode: String(formData.get("colorMode") || "system"),
+    themeId: String(formData.get("themeId") || "forest"),
+    textScale: String(formData.get("textScale") || "standard"),
+    compactMode: formData.get("compactMode") === "on",
+    contrastMode: formData.get("contrastMode") === "high" ? "high" : "standard",
+  });
+  syncAppearancePreviewSummary(form);
+}
+
+function createNoopRealtimeSession() {
+  return {
+    connect() {},
+    disconnect() {},
+    publishRoundUpdate() {},
+    enableNearbySync() {},
+    enableBluetoothSync() {
+      return Promise.resolve();
+    },
+    updateTransport() {},
+  };
+}
+
+function createBootErrorMessage(stage, error) {
+  const stageLabel = String(stage || "startup")
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const message = error instanceof Error ? error.message : String(error || "Unknown startup error.");
+  return {
+    stageLabel,
+    message: message || "Unknown startup error.",
+  };
+}
+
+function renderStartupShell(root, caption = "Preparing live rounds, player profiles, and your mobile app shell.") {
+  if (!root) {
+    return;
+  }
+
+  root.innerHTML = `
+    <div class="app-loading-shell" aria-label="Loading Golfers Nation">
+      <div class="loading-card">
+        <div class="loading-brand">
+          <img src="./icons/icon-192.png" alt="" width="56" height="56" />
+          <div class="loading-brand-copy">
+            <p class="eyebrow">Golfers Nation</p>
+            <strong class="loading-title">Opening your golf app</strong>
+          </div>
+        </div>
+        <div class="loading-bar" aria-hidden="true">
+          <span></span>
+        </div>
+        <p class="loading-caption">${caption}</p>
+      </div>
+    </div>
+  `;
+}
+
+function showBootRecoveryScreen(root, {
+  stage,
+  error,
+  locationRef = typeof window !== "undefined" ? window.location : null,
+  storage = null,
+  onRetry = null,
+} = {}) {
+  const detail = createBootErrorMessage(stage, error);
+  console.error(`[Golfers Nation] Startup failed during ${stage || "startup"}.`, error);
+  let availableStorage = storage;
+  if (availableStorage === null) {
+    try {
+      availableStorage = typeof localStorage === "undefined" ? null : localStorage;
+    } catch (storageError) {
+      availableStorage = null;
+    }
+  }
+
+  root.innerHTML = `
+    <section class="boot-recovery-shell" aria-live="polite">
+      <article class="boot-recovery-card" role="alert">
+        <p class="eyebrow">Golfers Nation</p>
+        <h1>We couldn't finish opening the app.</h1>
+        <p class="body-copy">A startup step failed before the product shell was ready. Try launching again, or reset local app data on this device for testing.</p>
+        <div class="boot-recovery-detail">
+          <strong>${detail.stageLabel}</strong>
+          <span>${detail.message}</span>
+        </div>
+        <div class="boot-recovery-actions">
+          <button type="button" class="button button-primary" data-boot-action="retry">Retry</button>
+          <button type="button" class="button button-secondary" data-boot-action="reset">Reset local app data</button>
+        </div>
+      </article>
+    </section>
+  `;
+
+  root.querySelector('[data-boot-action="retry"]')?.addEventListener("click", () => {
+    if (typeof onRetry === "function") {
+      renderStartupShell(root, "Trying startup again with a safe local handoff.");
+      try {
+        onRetry();
+        return;
+      } catch (retryError) {
+        console.error("[Golfers Nation] Retry failed immediately.", retryError);
+      }
+    }
+
+    if (locationRef && typeof locationRef.reload === "function") {
+      locationRef.reload();
+    }
+  });
+
+  root.querySelector('[data-boot-action="reset"]')?.addEventListener("click", () => {
+    try {
+      availableStorage?.removeItem(STORAGE_KEY);
+    } catch (storageError) {
+      console.warn("[Golfers Nation] Failed to clear local app data.", storageError);
+    }
+
+    if (typeof onRetry === "function") {
+      renderStartupShell(root, "Resetting local data and reopening Golfers Nation.");
+      try {
+        onRetry();
+        return;
+      } catch (retryError) {
+        console.error("[Golfers Nation] Reset-and-retry failed immediately.", retryError);
+      }
+    }
+
+    if (locationRef && typeof locationRef.reload === "function") {
+      locationRef.reload();
+    }
+  });
+}
+
+function applyStartupWarning(state, title, message) {
+  if (!state?.session || !state?.auth) {
+    return state;
+  }
+
+  state.session.feedback = {
+    tone: "warning",
+    title,
+    message,
+    updatedAt: Date.now(),
+  };
+  state.auth.notice = message;
+  return state;
+}
+
+function finishRound(draft, roundId, dataGateway) {
+  const round = draft.rounds.find((item) => item.id === roundId);
+  if (!round) {
+    return null;
+  }
+
+  const progress = round.holes.filter((hole) => hole.entries.some((entry) => entry.strokes && entry.strokes > 0)).length;
+  if (!progress) {
+    setFeedback(
+      draft,
+      "info",
+      "Score at least one hole",
+      "Enter a score before finishing so the round summary and stats have something real to save."
+    );
+    return null;
+  }
+
+  round.status = "completed";
+  round.completedAt = Date.now();
+  round.updatedAt = Date.now();
+  draft.session.summaryRoundId = round.id;
+  appendActivity(draft, `${round.courseName} was finished and moved into round history.`, "round");
+  setFeedback(
+    draft,
+    "info",
+    "Round finished",
+    `${round.courseName} was added to ${draft.currentUser.displayName}'s history on this device. Cloud backup is finishing now.`
+  );
+  draft.session.activeRoundId = null;
+  draft.session.selectedHole = 1;
+  draft.session.selectedProfileId = draft.currentUser.profileId;
+  setActiveView(draft, "stats", "tab");
+  refreshProfileSnapshots(draft);
+  syncCurrentUserProfile(draft);
+  dataGateway.saveWorkspace(draft, draft.currentUser.id);
+  return round.id;
+}
+
+export function bootstrapApp({
+  root = typeof document !== "undefined" ? document.querySelector("#app") : null,
+  platformFactory = createProductPlatform,
+  createDefaultStateFn = createDefaultState,
+  rendererFactory = createRenderer,
+  timeoutMs = 4000,
+  locationRef = typeof window !== "undefined" ? window.location : null,
+  storage = null,
+} = {}) {
+  if (!root) {
+    return { status: "missing-root" };
+  }
+
+  renderStartupShell(root);
+
+  let availableStorage = storage;
+  if (availableStorage === null) {
+    try {
+      availableStorage = typeof localStorage === "undefined" ? null : localStorage;
+    } catch (error) {
+      availableStorage = null;
+    }
+  }
+
+  let bootFailed = false;
+  let bootSettled = false;
+  let bootWatchdog = null;
+  let scorePulseTimer = null;
+  let roundSyncRetryTimer = null;
+  let roundSyncHeartbeatTimer = null;
+  let roundSyncRequest = null;
+  let realtimeSession = createNoopRealtimeSession();
+  let removeBeforeUnload = () => {};
+  let removeAppearanceListener = () => {};
+  const removeStartupGuards = [];
+  const removeRuntimeListeners = [];
+  const localDeviceId = `device-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const cleanupRuntime = () => {
+    if (scorePulseTimer) {
+      clearTimeout(scorePulseTimer);
+      scorePulseTimer = null;
+    }
+
+    if (roundSyncRetryTimer) {
+      clearTimeout(roundSyncRetryTimer);
+      roundSyncRetryTimer = null;
+    }
+
+    if (roundSyncHeartbeatTimer) {
+      clearInterval(roundSyncHeartbeatTimer);
+      roundSyncHeartbeatTimer = null;
+    }
+
+    while (removeRuntimeListeners.length) {
+      const remove = removeRuntimeListeners.pop();
+      try {
+        remove?.();
+      } catch (error) {
+        console.warn("[Golfers Nation] Failed to remove a runtime listener cleanly.", error);
+      }
+    }
+
+    try {
+      realtimeSession.disconnect();
+    } catch (error) {
+      console.warn("[Golfers Nation] Failed to disconnect realtime session cleanly.", error);
+    }
+  };
+
+  const clearBootGuards = () => {
+    if (bootWatchdog) {
+      clearTimeout(bootWatchdog);
+      bootWatchdog = null;
+    }
+
+    while (removeStartupGuards.length) {
+      const remove = removeStartupGuards.pop();
+      try {
+        remove?.();
+      } catch (error) {
+        console.warn("[Golfers Nation] Failed to remove a startup guard cleanly.", error);
+      }
+    }
+  };
+
+  const finalizeBoot = () => {
+    bootSettled = true;
+    clearBootGuards();
+  };
+
+  const failBoot = (stage, error) => {
+    if (bootFailed) {
+      return { status: "failed", stage, error };
+    }
+
+    bootFailed = true;
+    clearBootGuards();
+    removeBeforeUnload();
+    cleanupRuntime();
+    showBootRecoveryScreen(root, {
+      stage,
+      error,
+      locationRef,
+      storage: availableStorage,
+      onRetry: () => bootstrapApp({
+        root,
+        platformFactory,
+        createDefaultStateFn,
+        rendererFactory,
+        timeoutMs,
+        locationRef,
+        storage: availableStorage,
+      }),
+    });
+    return { status: "failed", stage, error };
+  };
+
+  if (typeof window !== "undefined") {
+    const handleStartupError = (event) => {
+      if (!bootSettled && !bootFailed) {
+        failBoot("window-error", event?.error || new Error(event?.message || "Unhandled startup error."));
+      }
+    };
+    const handleStartupRejection = (event) => {
+      if (!bootSettled && !bootFailed) {
+        const reason = event?.reason instanceof Error
+          ? event.reason
+          : new Error(String(event?.reason || "Unhandled startup rejection."));
+        failBoot("unhandled-rejection", reason);
+      }
+    };
+
+    window.addEventListener("error", handleStartupError);
+    window.addEventListener("unhandledrejection", handleStartupRejection);
+    removeStartupGuards.push(() => window.removeEventListener("error", handleStartupError));
+    removeStartupGuards.push(() => window.removeEventListener("unhandledrejection", handleStartupRejection));
+
+    if (timeoutMs > 0) {
+      bootWatchdog = window.setTimeout(() => {
+        if (!bootSettled && !bootFailed) {
+          failBoot("startup-timeout", new Error("Startup took too long to finish."));
+        }
+      }, timeoutMs);
+    }
+  }
+
+  let platform;
+  try {
+    platform = platformFactory();
+  } catch (error) {
+    return failBoot("platform-init", error);
+  }
+
+  let initialState;
+  try {
+    initialState = platform.data.loadInitialState(createDefaultStateFn);
+  } catch (error) {
+    console.error("[Golfers Nation] Failed to load stored app state.", error);
+    initialState = applyStartupWarning(
+      createDefaultStateFn(),
+      "Started with safe defaults",
+      "Saved app data could not be loaded, so Golfers Nation opened with a fresh local state."
+    );
+  }
+
+  try {
+    initialState = platform.auth.restoreSession(initialState);
+  } catch (error) {
+    console.error("[Golfers Nation] Failed to restore the last session.", error);
+    initialState = applyStartupWarning(
+      createDefaultStateFn(),
+      "Session restore skipped",
+      "Your last session could not be restored, so Golfers Nation opened at sign in."
+    );
+  }
+
+  const restoredActiveRound = initialState?.rounds?.find((round) => round.id === initialState?.session?.activeRoundId) || null;
+  if (initialState?.auth?.activeUserId && restoredActiveRound?.status === "active") {
+    initialState.session.activeView = "round";
+    initialState.session.previousView = "round";
+    initialState.session.transitionDirection = "steady";
+  }
+
+  let store;
+  try {
+    store = createStore(initialState);
+  } catch (error) {
+    return failBoot("store-init", error);
+  }
+
+  let render;
+  try {
+    render = rendererFactory(root);
+  } catch (error) {
+    return failBoot("renderer-init", error);
+  }
+
+  const safeRender = (state, stage = "render") => {
+    try {
+      render(state);
+      return true;
+    } catch (error) {
+      failBoot(stage, error);
+      return false;
+    }
+  };
+
+  try {
+    const createdSession = platform.realtime.createSession({ store });
+    if (createdSession) {
+      realtimeSession = {
+        ...createNoopRealtimeSession(),
+        ...createdSession,
+      };
+    }
+  } catch (error) {
+    console.error("[Golfers Nation] Failed to initialize realtime services.", error);
+    initialState = applyStartupWarning(
+      store.getState(),
+      "Live sync unavailable",
+      "Golfers Nation opened without live sync. Scoring and history still work on this device."
+    );
+  }
+
+  let deferredInstallPrompt = null;
+  let adminTapCount = 0;
+  let adminTapAt = 0;
+
+  const pulseScoreFeedback = (participantId, holeNumber) => {
+    if (!participantId) {
+      return;
+    }
+
+    store.setState((draft) => {
+      draft.session.lastScoredParticipantId = participantId;
+      draft.session.lastScoredHole = holeNumber || draft.session.selectedHole || 1;
+      draft.session.lastScorePulseAt = Date.now();
+      return draft;
+    }, { reason: "score-pulse" });
+
+    if (scorePulseTimer) {
+      clearTimeout(scorePulseTimer);
+    }
+
+    scorePulseTimer = window.setTimeout(() => {
+      store.setState((draft) => {
+        draft.session.lastScoredParticipantId = null;
+        draft.session.lastScoredHole = null;
+        draft.session.lastScorePulseAt = 0;
+        return draft;
+      }, { reason: "score-pulse-clear" });
+      scorePulseTimer = null;
+    }, 850);
+  };
+
+  const captureRoundAction = (draft, round, {
+    holeNumber,
+    participantId,
+    patch,
+    actionType = "",
+  }) => {
+    if (!round) {
+      return null;
+    }
+
+    ensureRoundSyncScaffold(round);
+    const event = createRoundActionEvent({
+      roundId: round.id,
+      participantId,
+      holeNumber,
+      patch,
+      actionType,
+      actorUserId: draft.currentUser?.id || null,
+      deviceId: localDeviceId,
+    });
+    const applied = applyRoundActionEvent(round, event);
+    if (!applied.applied) {
+      return null;
+    }
+
+    appendRoundAction(round, event);
+    round.sync.state = round.sync.transport === "local" ? "local" : (round.sync.state || "connected");
+    round.sync.note = round.sync.transport === "local"
+      ? "Scores are safe on this device first. If the original host leaves, any joined golfer can keep scoring on their copy."
+      : round.sync.note;
+    return event;
+  };
+
+  store.subscribe((state) => {
+    try {
+      platform.data.persist(platform.data.prepareForPersistence(state));
+    } catch (error) {
+      console.error("[Golfers Nation] Failed to persist app state.", error);
+    }
+    safeRender(state, "state-render");
+    applyAppearanceToDocument(state);
+    applyShellModeToDocument(state);
+  });
+
+  if (!safeRender(store.getState(), "initial-render")) {
+    return { status: "failed", stage: "initial-render" };
+  }
+  applyAppearanceToDocument(store.getState());
+  applyShellModeToDocument(store.getState());
+
+  try {
+    registerServiceWorker();
+  } catch (error) {
+    console.warn("[Golfers Nation] Service worker registration could not be started.", error);
+  }
+
+  try {
+    realtimeSession.connect();
+  } catch (error) {
+    console.error("[Golfers Nation] Realtime connect failed. Continuing in local-only mode.", error);
+    realtimeSession = createNoopRealtimeSession();
+    store.setState((draft) => {
+      setFeedback(
+        draft,
+        "warning",
+        "Live sync unavailable",
+        "Golfers Nation started in local-only mode. Scoring and round history still work on this device."
+      );
+      return draft;
+    }, { reason: "realtime-connect-failed" });
+  }
+
+  finalizeBoot();
+
+  const syncInstallState = () => {
+    const next = getInstallEnvironment(Boolean(deferredInstallPrompt));
+    store.setState((draft) => {
+      draft.session.standaloneMode = next.standaloneMode;
+      draft.session.installPromptAvailable = next.installPromptAvailable;
+      draft.session.installState = next.installState;
+      return draft;
+    }, { reason: "install-state-sync" });
+  };
+
+  syncInstallState();
+
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    syncInstallState();
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    store.setState((draft) => {
+      draft.session.installHintDismissed = true;
+      appendActivity(draft, "Golfers Nation was installed and is ready from the home screen.", "product");
+      setFeedback(draft, "success", "Installed", "Golfers Nation is now available from your home screen.");
+      return draft;
+    }, { reason: "app-installed" });
+    syncInstallState();
+  });
+
+  const displayModeMedia = typeof window.matchMedia === "function"
+    ? window.matchMedia("(display-mode: standalone)")
+    : null;
+  if (displayModeMedia && typeof displayModeMedia.addEventListener === "function") {
+    displayModeMedia.addEventListener("change", syncInstallState);
+  }
+
+  const appearanceMedia = typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-color-scheme: light)")
+    : null;
+  if (appearanceMedia && typeof appearanceMedia.addEventListener === "function") {
+    const handleAppearanceChange = () => applyAppearanceToDocument(store.getState());
+    appearanceMedia.addEventListener("change", handleAppearanceChange);
+    removeAppearanceListener = () => appearanceMedia.removeEventListener("change", handleAppearanceChange);
+  }
+
+  const hydrateRemoteAccount = async (userId, {
+    pendingLabel = "",
+    warningTitle = "Cloud sync unavailable",
+    warningMessage = "Your local cache is still available, but the cloud workspace could not be refreshed right now.",
+  } = {}) => {
+    if (!platform.data.hydrateAccountAsync || !userId) {
+      return { status: "skipped" };
+    }
+
+    if (pendingLabel) {
+      store.setState((draft) => {
+        draft.session.pendingLabel = pendingLabel;
+        return draft;
+      }, { reason: "hydrate-remote-pending" });
+    }
+
+    const result = await platform.data.hydrateAccountAsync(store, userId);
+    if (result?.error) {
+      console.warn("[Golfers Nation] Cloud workspace refresh failed.", result.error);
+      store.setState((draft) => {
+        draft.session.pendingLabel = "";
+        if (!draft.session.feedback || draft.session.feedback.tone !== "error") {
+          setFeedback(draft, "warning", warningTitle, warningMessage);
+        }
+        return draft;
+      }, { reason: "hydrate-remote-warning" });
+      return result;
+    }
+
+    store.setState((draft) => {
+      draft.session.pendingLabel = "";
+      if (result?.syncWarning && (!draft.session.feedback || draft.session.feedback.tone !== "error")) {
+        setFeedback(draft, "warning", warningTitle, warningMessage);
+      }
+      return draft;
+    }, { reason: "hydrate-remote-complete" });
+    return result;
+  };
+
+  const updateRoundSyncDraft = (draft, roundId, updater) => {
+    const round = findRound(draft, roundId);
+    if (!round) {
+      return null;
+    }
+
+    ensureRoundSyncScaffold(round);
+    updater(round);
+    return round;
+  };
+
+  const scheduleRoundSyncRetry = (delayMs = 5000) => {
+    if (roundSyncRetryTimer || typeof window === "undefined" || !window.setTimeout) {
+      return;
+    }
+
+    roundSyncRetryTimer = window.setTimeout(async () => {
+      roundSyncRetryTimer = null;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) {
+        scheduleRoundSyncRetry(5000);
+        return;
+      }
+
+      await runPendingRoundSync({ successFeedback: false });
+    }, delayMs);
+  };
+
+  const runPendingRoundSync = async ({
+    successFeedback = false,
+    userId = store.getState().auth.activeUserId || store.getState().currentUser?.id || null,
+  } = {}) => {
+    if (!platform.data.flushSyncAsync || !userId) {
+      return { status: "skipped" };
+    }
+
+    const pendingRounds = collectPendingRoundEvents(store.getState(), userId);
+    if (!pendingRounds.length) {
+      const cloudSync = store.getState().session?.cloudSync || {};
+      if (cloudSync.scope === "round-live" && cloudSync.userId === userId) {
+        store.setState((draft) => {
+          draft.session.pendingLabel = "";
+          resetCloudSyncState(draft);
+          return draft;
+        }, { reason: "round-live-sync-idle" });
+      }
+      return { status: "idle" };
+    }
+
+    if (roundSyncRequest) {
+      roundSyncRequest.needsAnotherPass = true;
+      return { status: "already-syncing" };
+    }
+
+    const syncStartedAt = Date.now();
+    const copy = getRoundEventSyncCopy(
+      pendingRounds.length === 1 ? findRound(store.getState(), pendingRounds[0].roundId) : null,
+      pendingRounds.reduce((sum, item) => sum + item.pendingCount, 0)
+    );
+    const queuedEventIds = pendingRounds.flatMap((item) => item.eventIds);
+    const queuedRoundIds = pendingRounds.map((item) => item.roundId);
+    const primaryRoundId = queuedRoundIds.length === 1 ? queuedRoundIds[0] : store.getState().session.activeRoundId || null;
+    roundSyncRequest = {
+      eventIds: queuedEventIds,
+      roundIds: queuedRoundIds,
+      userId,
+      needsAnotherPass: false,
+    };
+
+    store.setState((draft) => {
+      queuedRoundIds.forEach((roundId) => {
+        updateRoundSyncDraft(draft, roundId, (round) => {
+          markRoundEventsSyncing(
+            round,
+            pendingRounds.find((item) => item.roundId === roundId)?.eventIds || [],
+            syncStartedAt
+          );
+        });
+      });
+      draft.session.pendingLabel = copy.pendingLabel;
+      setCloudSyncState(draft, {
+        status: "syncing",
+        scope: "round-live",
+        roundId: primaryRoundId,
+        userId,
+        errorMessage: "",
+        lastAttemptAt: syncStartedAt,
+      });
+      return draft;
+    }, { reason: "round-live-sync-pending" });
+
+    const syncResult = await platform.data.flushSyncAsync(store.getState(), userId);
+    const finishedRequest = roundSyncRequest;
+    roundSyncRequest = null;
+
+    store.setState((draft) => {
+      draft.session.pendingLabel = "";
+
+      if (syncResult?.error) {
+        finishedRequest.roundIds.forEach((roundId) => {
+          updateRoundSyncDraft(draft, roundId, (round) => {
+            markRoundEventsRetryNeeded(
+              round,
+              finishedRequest.eventIds.filter((eventId) => round.eventLog.some((event) => event.id === eventId)),
+              syncResult.error.message || copy.failureMessage,
+              Date.now()
+            );
+          });
+        });
+        setCloudSyncState(draft, {
+          status: "failed",
+          scope: "round-live",
+          roundId: finishedRequest.roundIds.length === 1 ? finishedRequest.roundIds[0] : primaryRoundId,
+          userId,
+          errorMessage: syncResult.error.message || copy.failureMessage,
+          lastAttemptAt: Date.now(),
+          retryCount: (draft.session.cloudSync?.retryCount || 0) + 1,
+        });
+        setFeedback(
+          draft,
+          "warning",
+          copy.failureTitle,
+          `${copy.failureMessage} ${syncResult.error.message ? `Latest error: ${syncResult.error.message}` : ""}`.trim()
+        );
+        return draft;
+      }
+
+      finishedRequest.roundIds.forEach((roundId) => {
+        updateRoundSyncDraft(draft, roundId, (round) => {
+          markRoundEventsSynced(
+            round,
+            finishedRequest.eventIds.filter((eventId) => round.eventLog.some((event) => event.id === eventId)),
+            Date.now()
+          );
+        });
+      });
+      resetCloudSyncState(draft);
+      if (successFeedback) {
+        setFeedback(draft, "success", copy.successTitle, copy.successMessage);
+      }
+      return draft;
+    }, { reason: "round-live-sync-complete" });
+
+    if (syncResult?.error) {
+      scheduleRoundSyncRetry();
+      return syncResult;
+    }
+
+    if (finishedRequest.needsAnotherPass || hasPendingRoundSyncForUser(store.getState(), userId)) {
+      await runPendingRoundSync({ successFeedback: false, userId });
+    }
+
+    return syncResult;
+  };
+
+  const runCloudSave = async ({
+    scope = "workspace",
+    roundId = null,
+    userId = store.getState().auth.activeUserId || store.getState().currentUser?.id || null,
+    successFeedback = false,
+  } = {}) => {
+    if (!platform.data.flushSyncAsync || !userId) {
+      return { status: "skipped" };
+    }
+
+    const existingSync = store.getState().session?.cloudSync || {};
+    if (existingSync.status === "syncing"
+      && existingSync.userId === userId
+      && existingSync.scope === scope
+      && (existingSync.roundId || null) === (roundId || null)) {
+      return { status: "already-syncing" };
+    }
+
+    const copy = getCloudSyncCopy(scope, roundId);
+
+    store.setState((draft) => {
+      draft.session.pendingLabel = copy.pendingLabel;
+      setCloudSyncState(draft, {
+        status: "syncing",
+        scope,
+        roundId,
+        userId,
+        errorMessage: "",
+        lastAttemptAt: Date.now(),
+      });
+      return draft;
+    }, { reason: `${scope}-cloud-save-pending` });
+
+    const syncResult = await platform.data.flushSyncAsync(store.getState(), userId);
+
+    store.setState((draft) => {
+      draft.session.pendingLabel = "";
+      if (syncResult?.error) {
+        const nextRetryCount = (draft.session.cloudSync?.retryCount || 0) + 1;
+        if (scope === "round-finish" && roundId) {
+          updateRoundSyncDraft(draft, roundId, (round) => {
+            markRoundEventsRetryNeeded(
+              round,
+              getPendingRoundEvents(round).map((event) => event.id),
+              syncResult.error.message || copy.failureMessage,
+              Date.now()
+            );
+          });
+        }
+        setCloudSyncState(draft, {
+          status: "failed",
+          scope,
+          roundId,
+          userId,
+          errorMessage: syncResult.error.message || copy.failureMessage,
+          lastAttemptAt: Date.now(),
+          retryCount: nextRetryCount,
+        });
+        setFeedback(
+          draft,
+          "warning",
+          copy.failureTitle,
+          `${copy.failureMessage} ${syncResult.error.message ? `Latest error: ${syncResult.error.message}` : ""}`.trim()
+        );
+        return draft;
+      }
+
+      if (scope === "round-finish" && roundId) {
+        updateRoundSyncDraft(draft, roundId, (round) => {
+          markRoundEventsSynced(round, getPendingRoundEvents(round).map((event) => event.id), Date.now());
+          round.sync.saveState = "synced";
+          round.sync.note = "The finished round is safe on this device and backed up to your account.";
+        });
+      }
+
+      resetCloudSyncState(draft);
+      if (successFeedback) {
+        setFeedback(draft, "success", copy.successTitle, copy.successMessage);
+      }
+      return draft;
+    }, { reason: `${scope}-cloud-save-complete` });
+
+    return syncResult;
+  };
+
+  const retryPendingCloudSave = async (successFeedback = true) => {
+    const cloudSync = store.getState().session?.cloudSync || {};
+    if (cloudSync.scope === "round-live" || hasPendingRoundSyncForUser(store.getState(), cloudSync.userId || undefined)) {
+      return runPendingRoundSync({
+        successFeedback,
+        userId: cloudSync.userId || store.getState().auth.activeUserId || null,
+      });
+    }
+
+    if (!["failed", "syncing"].includes(cloudSync.status) || !cloudSync.userId) {
+      return { status: "skipped" };
+    }
+
+    return runCloudSave({
+      scope: cloudSync.scope || "workspace",
+      roundId: cloudSync.roundId || null,
+      userId: cloudSync.userId,
+      successFeedback,
+    });
+  };
+
+  if (typeof window !== "undefined") {
+    const handleOnline = () => {
+      void runPendingRoundSync({ successFeedback: false });
+    };
+
+    const handleOffline = () => {
+      const activeRoundId = store.getState().session?.activeRoundId || null;
+      if (!activeRoundId) {
+        return;
+      }
+
+      store.setState((draft) => {
+        updateRoundSyncDraft(draft, activeRoundId, (round) => {
+          ensureRoundSyncScaffold(round);
+          if (round.sync.pendingActionCount > 0) {
+            round.sync.saveState = "retry-needed";
+            round.sync.note = "Connection dropped. This live round is still safe on this device and will retry when service returns.";
+          } else {
+            round.sync.note = "Connection dropped. This live round is still safe on this device.";
+          }
+        });
+        return draft;
+      }, { reason: "network-offline" });
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    removeRuntimeListeners.push(() => window.removeEventListener("online", handleOnline));
+    removeRuntimeListeners.push(() => window.removeEventListener("offline", handleOffline));
+
+    if (window.setInterval) {
+      roundSyncHeartbeatTimer = window.setInterval(() => {
+        if ((typeof navigator === "undefined" || navigator.onLine !== false) && hasPendingRoundSyncForUser(store.getState())) {
+          void runPendingRoundSync({ successFeedback: false });
+        }
+      }, 15000);
+    }
+  }
+
+  const handleAsyncEmailSignUp = async (form, data) => {
+    store.setState((draft) => {
+      draft.auth.error = "";
+      draft.auth.notice = "";
+      draft.session.pendingLabel = "Creating your secure golfer account...";
+      return draft;
+    }, { reason: "auth-signup-pending" });
+
+    const result = await platform.auth.signUpWithEmailAsync(store.getState(), {
+      displayName: data.get("displayName"),
+      email: data.get("email"),
+      password: data.get("password"),
+    });
+
+    let committedAccountId = null;
+    store.setState((draft) => {
+      draft.session.pendingLabel = "";
+
+      if (result.error) {
+        draft.auth.error = result.error;
+        draft.auth.notice = "";
+        return draft;
+      }
+
+      const committed = platform.auth.commitAuthResult(draft, result);
+      if (committed.error) {
+        draft.auth.error = committed.error;
+        draft.auth.notice = "";
+        return draft;
+      }
+
+      if (committed.requiresConfirmation) {
+        setFeedback(draft, "info", "Check your email", result.notice || "Confirm your email, then sign in.");
+        return draft;
+      }
+
+      committedAccountId = committed.account.id;
+      draft.auth.mode = "login";
+      appendActivity(draft, `${draft.currentUser.displayName} created a new secure email account.`, "profile");
+      setFeedback(
+        draft,
+        "success",
+        "Account created",
+        `${draft.currentUser.displayName} is signed in with premium tester access, and Golden Nugget is ready as the easiest first course.`
+      );
+      return draft;
+    }, { reason: "auth-signup-async" });
+
+    form.reset();
+
+    if (committedAccountId) {
+      await hydrateRemoteAccount(committedAccountId, {
+        pendingLabel: "Loading your cloud workspace...",
+        warningTitle: "Cloud setup still finishing",
+        warningMessage: "Your golfer account is ready on this device. Cloud storage can retry automatically if the first sync takes a moment.",
+      });
+    }
+  };
+
+  const handleAsyncEmailLogin = async (form, data) => {
+    store.setState((draft) => {
+      draft.auth.error = "";
+      draft.auth.notice = "";
+      draft.session.pendingLabel = "Signing in and restoring your rounds...";
+      return draft;
+    }, { reason: "auth-login-pending" });
+
+    const result = await platform.auth.signInWithEmailAsync(store.getState(), {
+      email: data.get("email"),
+      password: data.get("password"),
+    });
+
+    let committedAccountId = null;
+    store.setState((draft) => {
+      draft.session.pendingLabel = "";
+
+      if (result.error) {
+        draft.auth.error = result.error;
+        draft.auth.notice = "";
+        return draft;
+      }
+
+      const committed = platform.auth.commitAuthResult(draft, result);
+      if (committed.error) {
+        draft.auth.error = committed.error;
+        draft.auth.notice = "";
+        return draft;
+      }
+
+      committedAccountId = committed.account.id;
+      appendActivity(draft, `${draft.currentUser.displayName} signed in with secure email auth.`, "profile");
+      setFeedback(
+        draft,
+        "success",
+        "Welcome back",
+        `${draft.currentUser.displayName}'s rounds, settings, and saved course history are restoring for this account.`
+      );
+      return draft;
+    }, { reason: "auth-login-async" });
+
+    form.reset();
+
+    if (committedAccountId) {
+      await hydrateRemoteAccount(committedAccountId, {
+        pendingLabel: "Refreshing your cloud rounds and stats...",
+        warningTitle: "Cloud restore delayed",
+        warningMessage: "You are signed in, and this device cache is ready. Cloud history can retry automatically if the network is slow.",
+      });
+    }
+  };
+
+  const handlePasswordReset = async (form, data) => {
+    const email = String(data.get("email") || "").trim().toLowerCase();
+    if (!email) {
+      store.setState((draft) => {
+        setFeedback(draft, "info", "Add your email first", "Enter the email tied to your golfer account, then send the reset link.");
+        return draft;
+      }, { reason: "auth-reset-missing-email" });
+      return;
+    }
+
+    store.setState((draft) => {
+      draft.auth.error = "";
+      draft.session.pendingLabel = "Sending your password reset email...";
+      return draft;
+    }, { reason: "auth-reset-pending" });
+
+    const result = await platform.auth.requestPasswordResetAsync(email);
+    store.setState((draft) => {
+      draft.session.pendingLabel = "";
+      if (result?.error) {
+        setFeedback(draft, "error", "Reset email failed", result.error);
+        return draft;
+      }
+
+      setFeedback(draft, "success", "Reset email sent", "Check your inbox for the Supabase password reset link.");
+      return draft;
+    }, { reason: "auth-reset-complete" });
+
+    form.reset();
+  };
+
+  const handleAsyncSignOut = async () => {
+    const activeUserId = store.getState().auth.activeUserId || null;
+    store.setState((draft) => {
+      draft.session.pendingLabel = "Signing out...";
+      return draft;
+    }, { reason: "sign-out-pending" });
+
+    try {
+      await platform.data.flushSyncAsync?.(store.getState(), activeUserId);
+    } catch (error) {
+      console.warn("[Golfers Nation] Final cloud sync before sign out failed.", error);
+    }
+
+    let remoteError = "";
+    try {
+      const result = await platform.auth.signOutAsync(store.getState());
+      remoteError = result?.error || "";
+    } catch (error) {
+      remoteError = error?.message || "The cloud session could not be cleared cleanly.";
+    }
+
+    store.setState((draft) => {
+      clearFeedback(draft);
+      draft.session.pendingLabel = "";
+      platform.auth.signOut(draft);
+      if (remoteError) {
+        setFeedback(draft, "warning", "Signed out on this device", "The remote session could not be cleared cleanly, but this tester device is signed out.");
+      }
+      return draft;
+    }, { reason: "sign-out-async" });
+  };
+
+  const bootActiveUserId = store.getState().auth.activeUserId;
+  if (bootActiveUserId) {
+    (async () => {
+      try {
+        await hydrateRemoteAccount(bootActiveUserId, {
+          pendingLabel: "",
+          warningTitle: "Cloud restore paused",
+          warningMessage: "Your local account cache opened normally, but the live Supabase workspace could not be refreshed yet.",
+        });
+        await retryPendingCloudSave(false);
+      } catch (error) {
+        console.warn("[Golfers Nation] Background cloud restore failed.", error);
+      }
+    })();
+  }
+
+  root.addEventListener("click", async (event) => {
+    const actionElement = event.target.closest("[data-action]");
+    if (!actionElement) {
+      return;
+    }
+
+    const action = actionElement.dataset.action;
+
+    if (action === "nav-view") {
+      store.setState((draft) => {
+        const nextView = actionElement.dataset.view;
+        if (nextView === "help") {
+          openHelpView(draft, actionElement.dataset.section);
+          return draft;
+        }
+
+        setActiveView(draft, nextView, "tab");
+        return draft;
+      }, { reason: "nav-view" });
+      return;
+    }
+
+    if (action === "open-help-section") {
+      store.setState((draft) => {
+        openHelpView(draft, actionElement.dataset.section);
+        return draft;
+      }, { reason: "open-help-section" });
+      return;
+    }
+
+    if (action === "close-help") {
+      store.setState((draft) => {
+        closeHelpView(draft);
+        return draft;
+      }, { reason: "close-help" });
+      return;
+    }
+
+    if (action === "open-settings") {
+      store.setState((draft) => {
+        openSettingsView(draft, actionElement.dataset.section);
+        return draft;
+      }, { reason: "open-settings" });
+      return;
+    }
+
+    if (action === "close-settings") {
+      store.setState((draft) => {
+        closeSettingsView(draft);
+        return draft;
+      }, { reason: "close-settings" });
+      return;
+    }
+
+    if (action === "set-settings-section") {
+      store.setState((draft) => {
+        draft.session.settingsSection = actionElement.dataset.section || draft.session.settingsSection || "account";
+        return draft;
+      }, { reason: "set-settings-section" });
+      return;
+    }
+
+    if (action === "apply-course-search") {
+      const searchShell = actionElement.closest("[data-course-search-shell]");
+      const searchInput = searchShell?.querySelector('[data-course-search-input]');
+      const nextQuery = String(searchInput?.value || "").trim();
+
+      store.setState((draft) => {
+        draft.session.roundSetup = {
+          ...getRoundSetupState(draft),
+          courseQuery: nextQuery,
+        };
+        return draft;
+      }, { reason: "apply-course-search" });
+      return;
+    }
+
+    if (action === "clear-course-search") {
+      store.setState((draft) => {
+        draft.session.roundSetup = {
+          ...getDefaultRoundSetup(),
+        };
+        return draft;
+      }, { reason: "clear-course-search" });
+      return;
+    }
+
+    if (action === "select-course") {
+      store.setState((draft) => {
+        setSelectedCourse(draft, actionElement.dataset.courseId, actionElement.dataset.teeBoxId || "");
+        return draft;
+      }, { reason: "select-course" });
+      return;
+    }
+
+    if (action === "clear-selected-course") {
+      store.setState((draft) => {
+        draft.session.roundSetup = {
+          ...getRoundSetupState(draft),
+          selectedCourseId: "",
+          selectedTeeBoxId: "",
+        };
+        return draft;
+      }, { reason: "clear-selected-course" });
+      return;
+    }
+
+    if (action === "admin-secret-tap") {
+      const now = Date.now();
+      adminTapCount = now - adminTapAt > 1400 ? 1 : adminTapCount + 1;
+      adminTapAt = now;
+
+      if (adminTapCount < 5) {
+        return;
+      }
+
+      adminTapCount = 0;
+      store.setState((draft) => {
+        const result = platform.auth.togglePremiumForTesting(draft);
+        if (result.error) {
+          draft.auth.notice = "Sign in first, then use the hidden admin toggle again.";
+          return draft;
+        }
+        const account = result.account;
+
+        syncCurrentUserProfile(draft);
+        refreshProfileSnapshots(draft);
+        appendActivity(draft, `${draft.currentUser.displayName} switched to ${account.subscription.tier} access through the hidden admin toggle.`, "premium");
+        setFeedback(
+          draft,
+          "success",
+          "Plan switched",
+          `${draft.currentUser.displayName} now has ${account.subscription.tier} access for testing.`
+        );
+        return draft;
+      }, { reason: "admin-secret-toggle" });
+      return;
+    }
+
+    if (action === "dismiss-feedback") {
+      store.setState((draft) => {
+        clearFeedback(draft);
+        return draft;
+      }, { reason: "dismiss-feedback" });
+      return;
+    }
+
+    if (action === "retry-cloud-save") {
+      await retryPendingCloudSave(true);
+      return;
+    }
+
+    if (action === "select-hole") {
+      store.setState((draft) => {
+        draft.session.selectedHole = Number(actionElement.dataset.hole);
+        return draft;
+      }, { reason: "select-hole" });
+      return;
+    }
+
+    if (action === "step-hole") {
+      store.setState((draft) => {
+        const current = draft.session.selectedHole;
+        const direction = Number(actionElement.dataset.direction);
+        draft.session.selectedHole = Math.max(1, Math.min(18, current + direction));
+        return draft;
+      }, { reason: "step-hole" });
+      return;
+    }
+
+    if (action === "jump-next-open") {
+      store.setState((draft) => {
+        draft.session.selectedHole = Number(actionElement.dataset.hole) || draft.session.selectedHole;
+        return draft;
+      }, { reason: "jump-next-open" });
+      return;
+    }
+
+    if (action === "quick-score") {
+      let pulseParticipantId = null;
+      let pulseHoleNumber = null;
+      store.setState((draft) => {
+        const round = findRound(draft, draft.session.activeRoundId);
+        if (!round) {
+          return draft;
+        }
+
+        const holeNumber = Number(actionElement.dataset.hole);
+        const participantId = actionElement.dataset.participantId;
+        const strokes = Number(actionElement.dataset.strokes);
+        const hole = round.holes.find((item) => item.number === holeNumber);
+        if (!hole) {
+          return draft;
+        }
+
+        pulseParticipantId = participantId;
+        pulseHoleNumber = holeNumber;
+
+        const defaultPutts = Math.max(1, Math.min(3, strokes - (hole.par - 2)));
+        captureRoundAction(draft, round, {
+          holeNumber,
+          participantId,
+          actionType: "score-set",
+          patch: {
+          strokes,
+          putts: defaultPutts,
+          fairwayHit: hole.par > 3 ? strokes <= hole.par : false,
+          gir: strokes <= hole.par,
+          },
+        });
+        draft.session.selectedHole = getNextIncompleteHoleNumber(round, participantId, holeNumber);
+        appendActivity(draft, `${round.courseName} quick-scored hole ${holeNumber}.`, "round");
+        return draft;
+      }, { reason: "quick-score" });
+      pulseScoreFeedback(pulseParticipantId, pulseHoleNumber);
+      realtimeSession.publishRoundUpdate(store.getState().session.activeRoundId);
+      void runPendingRoundSync({ successFeedback: false });
+      return;
+    }
+
+    if (action === "toggle-flag") {
+      store.setState((draft) => {
+        const round = findRound(draft, draft.session.activeRoundId);
+        if (!round) {
+          return draft;
+        }
+
+        const holeNumber = Number(actionElement.dataset.hole);
+        const participantId = actionElement.dataset.participantId;
+        const field = actionElement.dataset.field;
+        const hole = round.holes.find((item) => item.number === holeNumber);
+        const entry = hole?.entries.find((item) => item.participantId === participantId);
+        if (!entry) {
+          return draft;
+        }
+
+        captureRoundAction(draft, round, {
+          holeNumber,
+          participantId,
+          actionType: "stat-toggle-changed",
+          patch: {
+            [field]: !entry[field],
+          },
+        });
+        appendActivity(draft, `${round.courseName} updated hole ${holeNumber}.`, "round");
+        return draft;
+      }, { reason: "toggle-flag" });
+      realtimeSession.publishRoundUpdate(store.getState().session.activeRoundId);
+      void runPendingRoundSync({ successFeedback: false });
+      return;
+    }
+
+    if (action === "finish-round") {
+      const currentSync = store.getState().session?.cloudSync || {};
+      const requestedRoundId = actionElement.dataset.roundId || null;
+      if (currentSync.status === "syncing"
+        && currentSync.scope === "round-finish"
+        && (currentSync.roundId || null) === requestedRoundId) {
+        store.setState((draft) => {
+          setFeedback(
+            draft,
+            "info",
+            "Save already in progress",
+            "Stay on this screen for a moment while Golfers Nation finishes backing up the round."
+          );
+          return draft;
+        }, { reason: "finish-round-duplicate-blocked" });
+        return;
+      }
+
+      let completedRoundId = null;
+      store.setState((draft) => {
+        completedRoundId = finishRound(draft, actionElement.dataset.roundId, platform.data);
+        return draft;
+      }, { reason: "finish-round" });
+
+      if (completedRoundId && platform.data.flushSyncAsync) {
+        await runCloudSave({
+          scope: "round-finish",
+          roundId: completedRoundId,
+          successFeedback: true,
+        });
+      }
+      return;
+    }
+
+    if (action === "host-active-round") {
+      store.setState((draft) => {
+        const round = findRound(draft, draft.session.activeRoundId);
+        if (!round) {
+          setFeedback(draft, "info", "Start a round first", "Create or join a round before trying to host a live room.");
+          return draft;
+        }
+
+        const existing = draft.groups.find((group) => group.roundId === round.id);
+        if (existing) {
+          round.inviteCode = existing.inviteCode;
+          round.sync.transport = "invite";
+          round.sync.label = "Invite code";
+          round.sync.state = "hosting";
+          round.sync.lastEventAt = Date.now();
+          round.sync.note = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
+          appendActivity(draft, `${round.courseName} is already live with code ${existing.inviteCode}.`, "sync");
+          setFeedback(draft, "info", "Invite code ready", `This round is already hosted. Share code ${existing.inviteCode} with the group.`);
+          return draft;
+        }
+
+        const hosted = hostRoundGroup({ state: draft, round });
+        round.inviteCode = hosted.inviteCode;
+        round.groupId = hosted.group.id;
+        round.sync.transport = "invite";
+        round.sync.label = "Invite code";
+        round.sync.state = "hosting";
+        round.sync.lastEventAt = Date.now();
+        round.sync.note = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
+        draft.groups.unshift(hosted.group);
+        appendActivity(draft, `${round.courseName} is now hosted with invite code ${hosted.inviteCode}.`, "sync");
+        setFeedback(draft, "success", "Round hosted", `Invite code ${hosted.inviteCode} is ready to share.`);
+        setActiveView(draft, "community", "tab");
+        return draft;
+      }, { reason: "host-active-round" });
+      return;
+    }
+
+    if (action === "enable-nearby") {
+      const { session } = store.getState();
+      const roundId = session.activeRoundId;
+      if (!roundId) {
+        store.setState((draft) => {
+          setFeedback(draft, "info", "No round to sync", "Start or join a round before turning on nearby sync.");
+          return draft;
+        }, { reason: "enable-nearby-missing-round" });
+        return;
+      }
+      realtimeSession.enableNearbySync(roundId);
+      return;
+    }
+
+    if (action === "enable-bluetooth") {
+      const { session } = store.getState();
+      const roundId = session.activeRoundId;
+      if (!roundId) {
+        store.setState((draft) => {
+          setFeedback(draft, "info", "No round to sync", "Start or join a round before testing Bluetooth sync.");
+          return draft;
+        }, { reason: "enable-bluetooth-missing-round" });
+        return;
+      }
+      await realtimeSession.enableBluetoothSync(roundId);
+      return;
+    }
+
+    if (action === "view-summary") {
+      store.setState((draft) => {
+        draft.session.summaryRoundId = actionElement.dataset.roundId;
+        setActiveView(draft, "stats", "tab");
+        return draft;
+      }, { reason: "view-summary" });
+      return;
+    }
+
+    if (action === "dismiss-summary") {
+      store.setState((draft) => {
+        draft.session.summaryRoundId = null;
+        return draft;
+      }, { reason: "dismiss-summary" });
+      return;
+    }
+
+    if (action === "resume-round") {
+      store.setState((draft) => {
+        draft.session.activeRoundId = actionElement.dataset.roundId;
+        setActiveView(draft, "round", "focus-round");
+        draft.session.selectedProfileId = draft.currentUser.profileId;
+        draft.session.selectedHole = 1;
+        return draft;
+      }, { reason: "resume-round" });
+      return;
+    }
+
+    if (action === "quick-join-code") {
+      const code = actionElement.dataset.code;
+      store.setState((draft) => {
+        const joined = joinByInviteCode({ code, state: draft });
+        if (!joined) {
+          appendActivity(draft, `Invite code ${code} was not found.`, "sync");
+          setFeedback(draft, "error", "Code not found", `Invite code ${code} did not match an active round.`);
+          return draft;
+        }
+
+        if (joined.source === "seeded") {
+          draft.rounds.unshift(joined.round);
+          draft.groups.unshift(joined.group);
+        }
+
+        joined.round.sync.lastEventAt = Date.now();
+        joined.round.sync.state = "connected";
+        joined.round.sync.transport = joined.source === "local" ? "invite" : "cloud";
+        joined.round.sync.label = joined.source === "local" ? "Invite code" : "Mock cloud sync";
+        joined.round.sync.note = "This device now carries its own safe copy of the live round, even if the original host leaves.";
+        draft.session.activeRoundId = joined.round.id;
+        draft.session.selectedProfileId = draft.currentUser.profileId;
+        draft.session.selectedHole = 1;
+        setActiveView(draft, "round", "focus-round");
+        refreshProfileSnapshots(draft);
+        appendActivity(draft, joined.notice, "sync");
+        setFeedback(draft, "success", "Round joined", `${joined.round.courseName} is now open and ready for scoring.`);
+        return draft;
+      }, { reason: "quick-join" });
+      return;
+    }
+
+    if (action === "start-tournament-round") {
+      store.setState((draft) => {
+        const tournament = draft.tournaments.find((item) => item.id === actionElement.dataset.tournamentId);
+        if (!tournament) {
+          return draft;
+        }
+
+        const round = createRound({
+          currentUser: draft.currentUser,
+          courseName: tournament.courseName,
+          teeBox: "Blue",
+          weather: "Tournament setup",
+          mode: tournament.mode,
+          players: ensureProfilesForNames(draft, [draft.currentUser.name, "Maya Chen", "Theo Grant", "Jordan Wells"]),
+          tournamentId: tournament.id,
+        });
+        draft.rounds.unshift(round);
+        tournament.linkedRoundId = round.id;
+        tournament.status = "live";
+        draft.session.activeRoundId = round.id;
+        draft.session.selectedProfileId = draft.currentUser.profileId;
+        setActiveView(draft, "round", "focus-round");
+        draft.session.selectedHole = 1;
+        refreshProfileSnapshots(draft);
+        appendActivity(draft, `${tournament.name} launched a linked round at ${round.courseName}.`, "tournament");
+        setFeedback(draft, "success", "Tournament round started", `${tournament.name} is now live at ${round.courseName}.`);
+        return draft;
+      }, { reason: "start-tournament-round" });
+      return;
+    }
+
+    if (action === "toggle-gear-packed") {
+      store.setState((draft) => {
+        const item = draft.gear.items.find((gear) => gear.id === actionElement.dataset.gearId);
+        if (!item) {
+          return draft;
+        }
+
+        item.packed = !item.packed;
+        appendActivity(draft, `${item.name} marked as ${item.packed ? "packed" : "not packed"}.`, "gear");
+        return draft;
+      }, { reason: "toggle-gear-packed" });
+      return;
+    }
+
+    if (action === "select-profile-preview") {
+      store.setState((draft) => {
+        draft.session.selectedProfileId = actionElement.dataset.profileId || draft.session.selectedProfileId;
+        return draft;
+      }, { reason: "select-profile-preview" });
+      return;
+    }
+
+    if (action === "open-current-profile") {
+      store.setState((draft) => {
+        draft.session.selectedProfileId = draft.currentUser.profileId;
+        setActiveView(draft, "stats", "tab");
+        return draft;
+      }, { reason: "open-current-profile" });
+      return;
+    }
+
+    if (action === "set-auth-mode") {
+      store.setState((draft) => {
+        draft.auth.mode = actionElement.dataset.mode || "login";
+        draft.auth.error = "";
+        draft.auth.notice = "";
+        return draft;
+      }, { reason: "set-auth-mode" });
+      return;
+    }
+
+    if (action === "use-review-account") {
+      store.setState((draft) => {
+        if (draft.auth.activeUserId) {
+          platform.data.saveWorkspace(draft, draft.auth.activeUserId);
+        }
+
+        const accountId = actionElement.dataset.userId;
+        const result = platform.auth.useReviewAccount(draft, accountId);
+        if (result.error) {
+          draft.auth.error = result.error;
+          return draft;
+        }
+
+        appendActivity(draft, `${draft.currentUser.displayName} signed in through review access.`, "profile");
+        setFeedback(
+          draft,
+          "success",
+          "Signed in",
+          `${draft.currentUser.displayName} is ready with ${draft.currentUser.subscription?.tier === "premium" ? "premium" : "free"} access.`
+        );
+        return draft;
+      }, { reason: "use-review-account" });
+      return;
+    }
+
+    if (action === "continue-provider-login") {
+      store.setState((draft) => {
+        if (draft.auth.activeUserId) {
+          platform.data.saveWorkspace(draft, draft.auth.activeUserId);
+        }
+
+        const result = platform.auth.signInWithProvider(draft, actionElement.dataset.provider);
+        if (result.error) {
+          draft.auth.error = result.error;
+          return draft;
+        }
+
+        appendActivity(draft, `${draft.currentUser.displayName} signed in with ${result.account.provider}.`, "profile");
+        setFeedback(draft, "success", "Signed in", `${draft.currentUser.displayName} entered through ${result.account.provider}.`);
+        return draft;
+      }, { reason: "continue-provider-login" });
+      return;
+    }
+
+    if (action === "sign-out") {
+      if (platform.auth.signOutAsync) {
+        await handleAsyncSignOut();
+        return;
+      }
+
+      store.setState((draft) => {
+        clearFeedback(draft);
+        platform.auth.signOut(draft);
+        return draft;
+      }, { reason: "sign-out" });
+      return;
+    }
+
+    if (action === "prompt-install") {
+      store.setState((draft) => {
+        draft.session.pendingLabel = "Opening your install prompt...";
+        return draft;
+      }, { reason: "prompt-install-pending" });
+      if (deferredInstallPrompt) {
+        await deferredInstallPrompt.prompt();
+        const choice = await deferredInstallPrompt.userChoice.catch(() => null);
+        deferredInstallPrompt = null;
+        store.setState((draft) => {
+          draft.session.installHintDismissed = Boolean(choice && choice.outcome === "dismissed");
+          if (choice?.outcome === "accepted") {
+            appendActivity(draft, "Install started from the in-app prompt.", "product");
+            setFeedback(draft, "success", "Install started", "Use your browser or phone prompt to finish adding Golfers Nation to your home screen.");
+          } else {
+            draft.session.pendingLabel = "";
+          }
+          return draft;
+        }, { reason: "prompt-install" });
+        syncInstallState();
+        return;
+      }
+
+      store.setState((draft) => {
+        draft.session.installHintDismissed = false;
+        draft.session.pendingLabel = "";
+        return draft;
+      }, { reason: "prompt-install-fallback" });
+      return;
+    }
+
+    if (action === "dismiss-install-card") {
+      store.setState((draft) => {
+        draft.session.installHintDismissed = true;
+        draft.session.pendingLabel = "";
+        return draft;
+      }, { reason: "dismiss-install-card" });
+      return;
+    }
+
+    if (action === "invite-friends") {
+      store.setState((draft) => {
+        setFeedback(
+          draft,
+          "success",
+          "Invite flow ready",
+          "Invite-code rounds are the current friend path. Start or host a round, then share the code with your group."
+        );
+        return draft;
+      }, { reason: "invite-friends" });
+      return;
+    }
+
+    if (action === "share-profile-placeholder") {
+      store.setState((draft) => {
+        if (draft.currentUser.social?.allowProfileSharing === false) {
+          setFeedback(draft, "info", "Profile sharing is off", "Turn on profile sharing in Social settings first if you want this account to share a public player card.");
+          return draft;
+        }
+
+        setFeedback(
+          draft,
+          "success",
+          "Profile share scaffold",
+          `${draft.currentUser.displayName}'s public player card is ready for future share links and in-app profile sends.`
+        );
+        return draft;
+      }, { reason: "share-profile-placeholder" });
+      return;
+    }
+
+    if (action === "share-round-summary-placeholder") {
+      store.setState((draft) => {
+        if (draft.currentUser.social?.allowRoundSharing === false) {
+          setFeedback(draft, "info", "Round sharing is off", "Turn on round sharing in Social settings first if you want to share finished round summaries.");
+          return draft;
+        }
+
+        const completedRound = draft.rounds.find((round) => round.id === draft.session.summaryRoundId)
+          || draft.rounds.find((round) => round.status === "completed");
+
+        if (!completedRound) {
+          setFeedback(draft, "info", "Finish a round first", "Round summary sharing becomes useful after you finish at least one round on this account.");
+          return draft;
+        }
+
+        setFeedback(
+          draft,
+          "success",
+          "Round summary ready",
+          `${completedRound.courseName} is ready for future sharing links and mobile share sheets.`
+        );
+        return draft;
+      }, { reason: "share-round-summary-placeholder" });
+      return;
+    }
+
+    if (action === "show-policy-placeholder") {
+      const docLabel = actionElement.dataset.doc === "terms" ? "Terms of Service" : "Privacy Policy";
+      store.setState((draft) => {
+        setFeedback(
+          draft,
+          "info",
+          docLabel,
+          `${docLabel} is scaffolded for production submission. Replace this placeholder with the hosted legal document when launch materials are ready.`
+        );
+        return draft;
+      }, { reason: "show-policy-placeholder" });
+      return;
+    }
+
+    if (action === "contact-support-placeholder") {
+      store.setState((draft) => {
+        setFeedback(
+          draft,
+          "info",
+          "Support placeholder",
+          "Support will route through a real help email or ticket flow in production. For now, use Help Center and demo accounts for testing."
+        );
+        return draft;
+      }, { reason: "contact-support-placeholder" });
+      return;
+    }
+
+    if (action === "reset-local-data") {
+      try {
+        availableStorage?.removeItem(STORAGE_KEY);
+      } catch (error) {
+        console.warn("[Golfers Nation] Failed to reset local app data.", error);
+      }
+
+      renderStartupShell(root, "Resetting local app data and reopening Golfers Nation.");
+      if (locationRef && typeof locationRef.reload === "function") {
+        locationRef.reload();
+      }
+      return;
+    }
+  });
+
+  root.addEventListener("change", (event) => {
+    const appearanceInput = event.target.closest('[data-appearance-input]');
+    if (appearanceInput) {
+      previewAppearanceFromForm(appearanceInput.form);
+      return;
+    }
+
+    const courseTeeInput = event.target.closest("[data-course-tee-select]");
+    if (courseTeeInput) {
+      store.setState((draft) => {
+        draft.session.roundSetup = {
+          ...getRoundSetupState(draft),
+          selectedTeeBoxId: String(courseTeeInput.value || ""),
+        };
+        return draft;
+      }, { reason: "select-course-tee" });
+      return;
+    }
+
+    const input = event.target.closest("[data-score-field]");
+    if (!input) {
+      return;
+    }
+
+    const participantId = input.dataset.participantId;
+    const holeNumber = Number(input.dataset.hole);
+    store.setState((draft) => {
+      const round = findRound(draft, draft.session.activeRoundId);
+      if (!round) {
+        return draft;
+      }
+
+      captureRoundAction(draft, round, {
+        holeNumber,
+        participantId,
+        patch: {
+          [input.dataset.scoreField]: input.value === "" ? null : Number(input.value),
+        },
+      });
+      round.sync.lastEventAt = Date.now();
+      return draft;
+    }, { reason: "score-change" });
+    pulseScoreFeedback(participantId, holeNumber);
+    realtimeSession.publishRoundUpdate(store.getState().session.activeRoundId);
+    void runPendingRoundSync({ successFeedback: false });
+  });
+
+  root.addEventListener("submit", async (event) => {
+    const form = event.target.closest("[data-form]");
+    if (!form) {
+      return;
+    }
+
+    event.preventDefault();
+    const data = new FormData(form);
+    const formName = form.dataset.form;
+
+    if (formName === "auth-signup") {
+      if (platform.auth.signUpWithEmailAsync && platform.auth.commitAuthResult) {
+        await handleAsyncEmailSignUp(form, data);
+        return;
+      }
+
+      store.setState((draft) => {
+        const result = platform.auth.signUpWithEmail(draft, {
+          displayName: data.get("displayName"),
+          email: data.get("email"),
+          password: data.get("password"),
+        });
+
+        if (result.error) {
+          draft.auth.error = result.error;
+          draft.auth.notice = "";
+          return draft;
+        }
+
+        draft.auth.mode = "login";
+        draft.auth.notice = `${draft.currentUser.displayName} created an account and entered the app.`;
+        appendActivity(draft, `${draft.currentUser.displayName} created a new email account.`, "profile");
+        setFeedback(
+          draft,
+          "success",
+          "Account created",
+          `${draft.currentUser.displayName} is signed in with premium tester access, and Golden Nugget is ready as the easiest first course.`
+        );
+        return draft;
+      }, { reason: "auth-signup" });
+      form.reset();
+      return;
+    }
+
+    if (formName === "auth-login") {
+      if (platform.auth.signInWithEmailAsync && platform.auth.commitAuthResult) {
+        await handleAsyncEmailLogin(form, data);
+        return;
+      }
+
+      store.setState((draft) => {
+        if (draft.auth.activeUserId) {
+          platform.data.saveWorkspace(draft, draft.auth.activeUserId);
+        }
+
+        const result = platform.auth.signInWithEmail(draft, {
+          email: data.get("email"),
+          password: data.get("password"),
+        });
+
+        if (result.error) {
+          draft.auth.error = result.error;
+          draft.auth.notice = "";
+          return draft;
+        }
+
+        appendActivity(draft, `${draft.currentUser.displayName} signed in with email.`, "profile");
+        setFeedback(
+          draft,
+          "success",
+          "Welcome back",
+          `${draft.currentUser.displayName}'s rounds, settings, and saved course history are restored for this account.`
+        );
+        return draft;
+      }, { reason: "auth-login" });
+      form.reset();
+      return;
+    }
+
+    if (formName === "auth-password-reset") {
+      if (platform.auth.requestPasswordResetAsync) {
+        await handlePasswordReset(form, data);
+        return;
+      }
+
+      store.setState((draft) => {
+        setFeedback(draft, "info", "Password reset placeholder", "Password reset email will be available when cloud auth is connected.");
+        return draft;
+      }, { reason: "auth-password-reset-placeholder" });
+      form.reset();
+      return;
+    }
+
+    if (formName === "save-account-settings") {
+      store.setState((draft) => {
+        const nextDisplayName = String(data.get("displayName") || "").trim() || draft.currentUser.displayName || draft.currentUser.name;
+        const nextEmail = String(data.get("email") || "").trim().toLowerCase() || draft.currentUser.email;
+        const conflictingAccount = draft.accounts.find((account) => account.email === nextEmail && account.id !== draft.currentUser.id);
+
+        if (conflictingAccount) {
+          setFeedback(draft, "error", "Email already in use", "That email is already attached to another golfer account on this device.");
+          return draft;
+        }
+
+        const previousName = draft.currentUser.name;
+        draft.currentUser.name = nextDisplayName;
+        draft.currentUser.displayName = nextDisplayName;
+        draft.currentUser.username = normalizeUsernameInput(data.get("username"), nextDisplayName);
+        draft.currentUser.email = nextEmail;
+        draft.currentUser.avatarLabel = normalizeAvatarLabel(data.get("avatarLabel"), nextDisplayName);
+
+        syncIdentityAcrossRecords(draft);
+        syncCurrentUserProfile(draft);
+        refreshProfileSnapshots(draft);
+
+        if (previousName !== draft.currentUser.name) {
+          appendActivity(draft, `Account identity updated from ${previousName} to ${draft.currentUser.name}.`, "profile");
+        }
+
+        appendActivity(draft, `${draft.currentUser.name}'s account settings were updated.`, "profile");
+        setFeedback(draft, "success", "Account saved", "Display name, username, email, and avatar are updated for this golfer.");
+        return draft;
+      }, { reason: "save-account-settings" });
+      return;
+    }
+
+    if (formName === "change-password-settings") {
+      store.setState((draft) => {
+        const account = draft.accounts.find((entry) => entry.id === draft.currentUser.id);
+        const provider = draft.currentUser.providerType || draft.currentUser.provider || "email";
+        if (!account || provider !== "email") {
+          setFeedback(draft, "info", "Password managed by provider", `${provider} sign-in accounts will use the real provider flow when backend auth is connected.`);
+          return draft;
+        }
+
+        const currentPassword = String(data.get("currentPassword") || "");
+        const newPassword = String(data.get("newPassword") || "");
+        const confirmPassword = String(data.get("confirmPassword") || "");
+
+        if (!currentPassword || !newPassword || !confirmPassword) {
+          setFeedback(draft, "info", "Complete all password fields", "Enter the current password plus the new password twice to update it.");
+          return draft;
+        }
+
+        if (account.password !== currentPassword) {
+          setFeedback(draft, "error", "Current password is incorrect", "The current password did not match this email account.");
+          return draft;
+        }
+
+        if (newPassword.length < 6) {
+          setFeedback(draft, "error", "Choose a stronger password", "Use at least 6 characters for the new password in this local test build.");
+          return draft;
+        }
+
+        if (newPassword !== confirmPassword) {
+          setFeedback(draft, "error", "Passwords do not match", "Make sure the new password and confirmation match exactly.");
+          return draft;
+        }
+
+        account.password = newPassword;
+        appendActivity(draft, `${draft.currentUser.displayName} updated the local password scaffold.`, "profile");
+        setFeedback(draft, "success", "Password updated", "The email password scaffold has been updated for this golfer on this device.");
+        return draft;
+      }, { reason: "change-password-settings" });
+      form.reset();
+      return;
+    }
+
+    if (formName === "save-golf-profile") {
+      store.setState((draft) => {
+        const handicapValue = String(data.get("handicap") || "").trim();
+        draft.currentUser.homeCourse = String(data.get("homeCourse") || "").trim() || "";
+        draft.currentUser.handicap = handicapValue === "" || Number.isNaN(Number(handicapValue))
+          ? null
+          : Number(handicapValue);
+        draft.currentUser.handedness = String(data.get("handedness") || "").trim();
+        draft.currentUser.bio = String(data.get("bio") || "").trim();
+        draft.currentUser.privacy = {
+          ...(draft.currentUser.privacy || {}),
+          profileVisibility: String(data.get("profileVisibility") || "friends"),
+          showHomeCourse: data.get("showHomeCourse") === "on",
+          showHandicap: data.get("showHandicap") === "on",
+          showBio: data.get("showBio") === "on",
+          showRecentForm: data.get("showRecentForm") === "on",
+          showHeadToHead: data.get("showHeadToHead") === "on",
+        };
+
+        syncCurrentUserProfile(draft);
+        refreshProfileSnapshots(draft);
+        appendActivity(draft, `${draft.currentUser.displayName}'s golf profile was updated.`, "profile");
+        setFeedback(draft, "success", "Golf profile saved", "Home course, handicap, bio, handedness, and visibility are updated.");
+        return draft;
+      }, { reason: "save-golf-profile" });
+      return;
+    }
+
+    if (formName === "save-appearance-settings") {
+      store.setState((draft) => {
+        draft.currentUser.appearance = {
+          ...(draft.currentUser.appearance || {}),
+          colorMode: String(data.get("colorMode") || "system"),
+          themeId: String(data.get("themeId") || "forest"),
+          textScale: String(data.get("textScale") || "standard"),
+          compactMode: data.get("compactMode") === "on",
+          contrastMode: data.get("contrastMode") === "high" ? "high" : "standard",
+        };
+        appendActivity(draft, `${draft.currentUser.displayName} updated appearance preferences.`, "product");
+        setFeedback(draft, "success", "Appearance saved", "Theme and appearance mode now follow this golfer account.");
+        return draft;
+      }, { reason: "save-appearance-settings" });
+      return;
+    }
+
+    if (formName === "save-social-settings") {
+      store.setState((draft) => {
+        draft.currentUser.social = {
+          ...(draft.currentUser.social || {}),
+          handles: {
+            ...(draft.currentUser.social?.handles || {}),
+            instagram: String(data.get("instagram") || "").trim(),
+            x: String(data.get("x") || "").trim(),
+            ghin: String(data.get("ghin") || "").trim(),
+          },
+          allowFriendConnections: data.get("allowFriendConnections") === "on",
+          allowProfileSharing: data.get("allowProfileSharing") === "on",
+          allowRoundSharing: data.get("allowRoundSharing") === "on",
+        };
+        appendActivity(draft, `${draft.currentUser.displayName} updated social settings.`, "profile");
+        setFeedback(draft, "success", "Social settings saved", "Invite, sharing, and handle preferences are saved for this golfer.");
+        return draft;
+      }, { reason: "save-social-settings" });
+      return;
+    }
+
+    if (formName === "submit-tester-feedback") {
+      const currentState = store.getState();
+      const payload = {
+        "form-name": NETLIFY_FEEDBACK_FORM_NAME,
+        "bot-field": String(data.get("bot-field") || ""),
+        testerName: String(data.get("testerName") || currentState.currentUser?.displayName || "").trim(),
+        email: String(data.get("email") || currentState.currentUser?.email || "").trim(),
+        feedbackArea: String(data.get("feedbackArea") || "other"),
+        rating: String(data.get("rating") || "3"),
+        feedbackMessage: String(data.get("feedbackMessage") || "").trim(),
+        appVersion: String(data.get("appVersion") || APP_VERSION),
+        planTier: String(data.get("planTier") || currentState.currentUser?.subscription?.tier || "free"),
+        installState: String(data.get("installState") || currentState.session?.installState || "browser"),
+        appearanceMode: String(data.get("appearanceMode") || currentState.currentUser?.appearance?.colorMode || "system"),
+        themeId: String(data.get("themeId") || currentState.currentUser?.appearance?.themeId || "forest"),
+        contextView: String(data.get("contextView") || currentState.session?.settingsReturnView || currentState.session?.activeView || "settings"),
+        recentActivity: String(data.get("recentActivity") || ""),
+        userAgent: String(data.get("userAgent") || (typeof navigator === "undefined" ? "" : navigator.userAgent || "")),
+      };
+
+      if (!payload.feedbackMessage) {
+        store.setState((draft) => {
+          setFeedback(draft, "info", "Add a quick note", "Type a short message so the tester feedback has something useful to review.");
+          return draft;
+        }, { reason: "submit-tester-feedback-empty" });
+        return;
+      }
+
+      store.setState((draft) => {
+        draft.session.pendingLabel = "Sending tester feedback...";
+        return draft;
+      }, { reason: "submit-tester-feedback-pending" });
+
+      const submitFeedback = typeof fetch === "function" ? fetch.bind(globalThis) : null;
+      if (!submitFeedback) {
+        store.setState((draft) => {
+          setFeedback(draft, "info", "Feedback ready", "This form is designed for the Netlify test build. Deploy the site on Netlify to collect submissions in the Forms tab.");
+          return draft;
+        }, { reason: "submit-tester-feedback-unavailable" });
+        return;
+      }
+
+      submitFeedback("/", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: encodeFormPayload(payload),
+      })
+        .then(() => {
+          store.setState((draft) => {
+            appendActivity(draft, `Tester feedback was sent from ${payload.contextView}.`, "product");
+            setFeedback(draft, "success", "Feedback sent", "Thanks. On the Netlify test build, this note should appear in the site Forms tab for review.");
+            return draft;
+          }, { reason: "submit-tester-feedback-success" });
+          form.reset();
+        })
+        .catch((error) => {
+          console.warn("[Golfers Nation] Tester feedback submission failed.", error);
+          store.setState((draft) => {
+            setFeedback(draft, "warning", "Feedback not sent", "The feedback form could not submit right now. On Netlify, check form detection and redeploy if needed.");
+            return draft;
+          }, { reason: "submit-tester-feedback-error" });
+        });
+      return;
+    }
+
+    if (formName === "create-round") {
+      const submitter = event.submitter;
+      const intent = submitter?.value || "local";
+
+      store.setState((draft) => {
+        const roundSetup = getRoundSetupState(draft);
+        const playerSetup = parsePlayers(String(data.get("players") || ""), draft.currentUser.name);
+        const playerProfiles = ensureProfilesForNames(
+          draft,
+          playerSetup.names
+        );
+        const selectedCourseId = String(roundSetup.selectedCourseId || data.get("selectedCourseId") || "");
+        const selectedTeeBoxId = String(roundSetup.selectedTeeBoxId || data.get("selectedTeeBoxId") || "");
+        const selectedCourse = createRoundCourseSelection(
+          selectedCourseId,
+          selectedTeeBoxId
+        );
+        const manualCourse = createManualCourseSelection(
+          String(data.get("courseName") || "").trim(),
+          String(data.get("teeBox") || "").trim()
+        );
+        const courseSelection = selectedCourse || manualCourse;
+        const round = createRound({
+          currentUser: draft.currentUser,
+          courseId: courseSelection.courseId,
+          courseName: courseSelection.courseName,
+          courseCity: courseSelection.city,
+          courseState: courseSelection.state,
+          courseRegion: courseSelection.region,
+          courseLatitude: courseSelection.latitude,
+          courseLongitude: courseSelection.longitude,
+          courseSource: courseSelection.source,
+          courseSeeded: courseSelection.seeded,
+          teeBox: courseSelection.teeBoxName,
+          teeBoxId: courseSelection.teeBoxId,
+          courseRating: courseSelection.rating,
+          courseSlope: courseSelection.slope,
+          holesTemplate: courseSelection.holes,
+          weather: String(data.get("weather") || "").trim(),
+          mode: String(data.get("mode") || "stroke"),
+          players: playerProfiles,
+          syncTransport: intent === "host" ? "invite" : "local",
+        });
+
+        draft.rounds.unshift(round);
+        draft.session.activeRoundId = round.id;
+        draft.session.selectedHole = 1;
+        draft.session.selectedProfileId = draft.currentUser.profileId;
+        setActiveView(draft, "round", "focus-round");
+        appendActivity(draft, `${round.courseName} started in ${round.mode} mode.`, "round");
+        setFeedback(
+          draft,
+          "success",
+          intent === "host" ? "Round hosted" : "Round started",
+          intent === "host"
+            ? `${round.courseName} is ready and an invite code will be shown in Community.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
+            : `${round.courseName} is ready for live scoring.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
+        );
+
+        if (intent === "host") {
+          const hosted = hostRoundGroup({ state: draft, round });
+          round.inviteCode = hosted.inviteCode;
+          round.groupId = hosted.group.id;
+          round.sync.transport = "invite";
+          round.sync.label = "Invite code";
+          round.sync.state = "hosting";
+          round.sync.lastEventAt = Date.now();
+          round.sync.note = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
+          draft.groups.unshift(hosted.group);
+          appendActivity(draft, `${round.courseName} hosted with code ${hosted.inviteCode}.`, "sync");
+          setFeedback(
+            draft,
+            "success",
+            "Round hosted",
+            `Invite code ${hosted.inviteCode} is ready to share.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
+          );
+        }
+
+        if (playerSetup.note) {
+          appendActivity(draft, playerSetup.note, "round");
+        }
+
+        resetRoundSetup(draft);
+        refreshProfileSnapshots(draft);
+        return draft;
+      }, { reason: "create-round" });
+      return;
+    }
+
+    if (formName === "join-code") {
+      const code = String(data.get("inviteCode") || "").trim().toUpperCase();
+      store.setState((draft) => {
+        if (!code) {
+          setFeedback(draft, "info", "Enter an invite code", "Ask the host for the round code, then enter it here to join the same live card.");
+          return draft;
+        }
+
+        const joined = joinByInviteCode({ code, state: draft });
+        if (!joined) {
+          appendActivity(draft, `Invite code ${code || "blank"} did not match a game.`, "sync");
+          setFeedback(draft, "error", "Couldn't join round", "Check the invite code and try again.");
+          return draft;
+        }
+
+        if (joined.source === "seeded") {
+          draft.rounds.unshift(joined.round);
+          draft.groups.unshift(joined.group);
+        }
+
+        joined.round.sync.lastEventAt = Date.now();
+        joined.round.sync.note = "This device now carries its own safe copy of the live round, even if the original host leaves.";
+        draft.session.activeRoundId = joined.round.id;
+        draft.session.selectedHole = 1;
+        draft.session.selectedProfileId = draft.currentUser.profileId;
+        setActiveView(draft, "round", "focus-round");
+        refreshProfileSnapshots(draft);
+        appendActivity(draft, joined.notice, "sync");
+        setFeedback(draft, "success", "Joined round", `${joined.round.courseName} is ready for scoring.`);
+        return draft;
+      }, { reason: "join-code" });
+      form.reset();
+      return;
+    }
+
+    if (formName === "save-profile") {
+      store.setState((draft) => {
+        const previousName = draft.currentUser.name;
+        const handicapValue = String(data.get("handicap") || "").trim();
+        draft.currentUser.name = String(data.get("name") || "").trim() || draft.currentUser.name;
+        draft.currentUser.displayName = draft.currentUser.name;
+        draft.currentUser.username = String(data.get("username") || "").trim() || draft.currentUser.username;
+        draft.currentUser.email = String(data.get("email") || "").trim() || draft.currentUser.email;
+        draft.currentUser.avatarLabel = String(data.get("avatarLabel") || "").trim() || draft.currentUser.avatarLabel;
+        draft.currentUser.homeCourse = String(data.get("homeCourse") || "").trim() || draft.currentUser.homeCourse;
+        draft.currentUser.handicap = handicapValue === "" || Number.isNaN(Number(handicapValue))
+          ? null
+          : Number(handicapValue);
+        draft.currentUser.bio = String(data.get("bio") || "").trim() || draft.currentUser.bio;
+        draft.currentUser.city = String(data.get("city") || "").trim() || draft.currentUser.city;
+        draft.currentUser.seasonGoal = String(data.get("seasonGoal") || "").trim() || draft.currentUser.seasonGoal;
+        draft.currentUser.privacy = {
+          ...(draft.currentUser.privacy || {}),
+          showHomeCourse: data.get("showHomeCourse") === "on",
+          showHandicap: data.get("showHandicap") === "on",
+          showBio: data.get("showBio") === "on",
+          showRecentForm: data.get("showRecentForm") === "on",
+          showHeadToHead: data.get("showHeadToHead") === "on",
+        };
+
+        draft.rounds.forEach((round) => {
+          round.players.forEach((player) => {
+            if (player.userId === draft.currentUser.id || player.profileId === draft.currentUser.profileId) {
+              player.name = draft.currentUser.name;
+              player.username = draft.currentUser.username;
+              player.avatarLabel = draft.currentUser.avatarLabel;
+            }
+          });
+
+          round.sides.forEach((side) => {
+            side.playerNames = side.playerIds.map((playerId) => {
+              const player = round.players.find((item) => item.id === playerId);
+              return player ? player.name : "";
+            });
+          });
+        });
+
+        draft.groups.forEach((group) => {
+          group.members.forEach((member) => {
+            if (member.userId === draft.currentUser.id || member.profileId === draft.currentUser.profileId) {
+              member.displayName = draft.currentUser.name;
+              member.username = draft.currentUser.username;
+              member.avatarLabel = draft.currentUser.avatarLabel;
+            }
+          });
+        });
+
+        syncCurrentUserProfile(draft);
+        refreshProfileSnapshots(draft);
+
+        if (previousName !== draft.currentUser.name) {
+          appendActivity(draft, `Profile identity updated from ${previousName} to ${draft.currentUser.name}.`, "profile");
+        }
+
+        appendActivity(draft, `${draft.currentUser.name}'s profile was updated.`, "profile");
+        setFeedback(draft, "success", "Profile saved", "Your player profile, privacy settings, and public card are updated.");
+        return draft;
+      }, { reason: "save-profile" });
+      return;
+    }
+
+    if (formName === "create-tournament") {
+      store.setState((draft) => {
+        draft.tournaments.unshift(
+          createTournament({
+            name: String(data.get("name") || "").trim(),
+            courseName: String(data.get("courseName") || "").trim(),
+            date: new Date(String(data.get("date"))).toISOString(),
+            mode: String(data.get("mode") || "stroke"),
+            fieldSize: Number(data.get("fieldSize") || 16),
+            status: "planning",
+          })
+        );
+        appendActivity(draft, `Tournament ${String(data.get("name") || "").trim()} was created.`, "tournament");
+        setFeedback(draft, "success", "Tournament created", `${String(data.get("name") || "").trim()} is ready in Community.`);
+        return draft;
+      }, { reason: "create-tournament" });
+      form.reset();
+      return;
+    }
+
+    if (formName === "add-gear") {
+      store.setState((draft) => {
+        draft.gear.items.unshift(
+          createGearItem({
+            category: String(data.get("category") || "accessory"),
+            name: String(data.get("name") || "").trim(),
+            notes: String(data.get("notes") || "").trim(),
+            weatherUse: String(data.get("weatherUse") || "").trim(),
+          })
+        );
+        appendActivity(draft, `${String(data.get("name") || "").trim()} added to gear inventory.`, "gear");
+        setFeedback(draft, "success", "Gear saved", `${String(data.get("name") || "").trim()} was added to this golfer's kit.`);
+        return draft;
+      }, { reason: "add-gear" });
+      form.reset();
+    }
+  });
+
+  if (typeof window !== "undefined") {
+    const handleBeforeUnload = (event) => {
+      const cloudSync = store.getState().session?.cloudSync || {};
+      if (["syncing", "failed"].includes(cloudSync.status) || hasPendingRoundSyncForUser(store.getState())) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+      cleanupRuntime();
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    removeBeforeUnload = () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      removeAppearanceListener();
+    };
+  }
+
+  return {
+    status: "ready",
+    store,
+    platform,
+    destroy() {
+      removeBeforeUnload();
+      removeAppearanceListener();
+      clearBootGuards();
+      cleanupRuntime();
+    },
+  };
+}
+
+export function startApp(options = {}) {
+  if (typeof document === "undefined") {
+    return { status: "no-document" };
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      bootstrapApp(options);
+    }, { once: true });
+    return { status: "waiting-for-dom" };
+  }
+
+  return bootstrapApp(options);
+}
+
+```
+
+## `src/services/account-service.js`
+
+```js
+import { createActivity, createGearItem, createPlayerProfile, createRound, createTournament } from "../domain/factories.js";
+import { applyHoleUpdate, getParticipantTotals } from "../domain/scoring.js";
+import { FEATURED_COURSE_ID, TESTER_DEFAULT_SUBSCRIPTION_TIER } from "../config.js";
+import { findCourseById, getDefaultTeeBox } from "./course-library.js";
+import { average, cloneData } from "../utils/formatters.js";
+
+const DEFAULT_PASSWORD = "fairway123";
+
+function normalizeUsername(value) {
+  const base = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 16);
+  return base ? `@${base}` : "@golfer";
+}
+
+function avatarFromName(value) {
+  return String(value || "")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || "GN";
+}
+
+function createSubscription(tier = "free") {
+  return {
+    tier,
+    planName: tier === "premium" ? "Premium" : "Free",
+    status: "active",
+    billingReady: true,
+    renewalAt: null,
+    trialAvailable: tier !== "premium",
+  };
+}
+
+function createPrivacySettings(overrides = {}) {
+  return {
+    showHomeCourse: true,
+    showHandicap: true,
+    showBio: true,
+    showRecentForm: true,
+    showHeadToHead: false,
+    showEmail: false,
+    profileVisibility: "friends",
+    ...cloneData(overrides || {}),
+  };
+}
+
+function createAppearanceSettings(overrides = {}) {
+  return {
+    colorMode: "system",
+    themeId: "forest",
+    textScale: "standard",
+    compactMode: false,
+    contrastMode: "standard",
+    ...cloneData(overrides || {}),
+  };
+}
+
+function createSocialSettings(overrides = {}) {
+  const next = cloneData(overrides || {});
+  return {
+    handles: {
+      instagram: "",
+      x: "",
+      ghin: "",
+      ...(next.handles || {}),
+    },
+    allowFriendConnections: true,
+    allowProfileSharing: true,
+    allowRoundSharing: true,
+    inviteFriendsReady: true,
+    ...next,
+  };
+}
+
+function formatRecentFormLabel(result) {
+  if (!result) {
+    return "First round pending";
+  }
+
+  return `${result.courseName} ${result.toPar > 0 ? `+${result.toPar}` : result.toPar}`;
+}
+
+function createDefaultRoundSetup() {
+  const featuredCourse = findCourseById(FEATURED_COURSE_ID);
+  const defaultTeeBox = featuredCourse ? getDefaultTeeBox(featuredCourse) : null;
+
+  return {
+    courseQuery: "",
+    selectedCourseId: featuredCourse?.id || "",
+    selectedTeeBoxId: defaultTeeBox?.id || "",
+  };
+}
+
+function buildAccountSummary(account, workspace) {
+  const completedRounds = (workspace?.rounds || [])
+    .filter((round) => round.status === "completed")
+    .map((round) => {
+      const participant = round.players.find((entry) => entry.userId === account.id || entry.profileId === account.profileId);
+      if (!participant) {
+        return null;
+      }
+
+      const totals = getParticipantTotals(round, participant.id);
+      if (!totals.holesPlayed) {
+        return null;
+      }
+
+      return {
+        courseName: round.courseName,
+        completedAt: round.completedAt || round.updatedAt || round.createdAt,
+        totalStrokes: totals.totalStrokes,
+        toPar: totals.toPar,
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => (right.completedAt || 0) - (left.completedAt || 0));
+
+  return {
+    roundsPlayed: completedRounds.length,
+    averageScore: average(completedRounds.map((entry) => entry.totalStrokes)),
+    bestRound: completedRounds.length ? Math.min(...completedRounds.map((entry) => entry.totalStrokes)) : null,
+    recentFormSummary: formatRecentFormLabel(completedRounds[0] || null),
+  };
+}
+
+function syncAccountSummary(account, workspace) {
+  const summary = buildAccountSummary(account, workspace);
+  account.roundsPlayed = summary.roundsPlayed;
+  account.averageScore = summary.averageScore;
+  account.bestRound = summary.bestRound;
+  account.recentFormSummary = summary.recentFormSummary;
+  return summary;
+}
+
+function createSeedProfile(overrides) {
+  const profile = createPlayerProfile(overrides);
+  if (overrides?.id) {
+    profile.id = overrides.id;
+  }
+  return profile;
+}
+
+function profilePlayer(profile) {
+  return {
+    profileId: profile.id,
+    userId: profile.userId,
+    displayName: profile.publicProfile.displayName,
+    username: profile.publicProfile.username,
+    avatarLabel: profile.publicProfile.avatarLabel,
+  };
+}
+
+function createSelfProfile(account) {
+  return createSeedProfile({
+    id: account.profileId,
+    userId: account.id,
+    displayName: account.displayName,
+    username: account.username,
+    avatarLabel: account.avatarLabel,
+    email: account.email,
+    homeCourse: account.homeCourse,
+    handicap: account.handicap,
+    bio: account.bio,
+    createdAt: account.createdAt,
+    premiumStatus: account.subscription.tier,
+    privacy: createPrivacySettings(account.privacy),
+  });
+}
+
+function createPeerProfiles() {
+  return [
+    createSeedProfile({
+      id: "profile-maya",
+      displayName: "Maya Chen",
+      username: "@mayachen",
+      avatarLabel: "MC",
+      homeCourse: "National Pines",
+      handicap: 5.2,
+      bio: "Strong iron player and dependable weekend match partner.",
+      publicStats: {
+        roundsPlayed: 14,
+        averageScore: 78.9,
+        bestRound: 74,
+        recentFormSummary: "Two top rounds in the last three cards",
+      },
+    }),
+    createSeedProfile({
+      id: "profile-theo",
+      displayName: "Theo Grant",
+      username: "@theogrant",
+      avatarLabel: "TG",
+      homeCourse: "Shadow Ridge",
+      handicap: 9.8,
+      bio: "Steady fairway finder with a strong closing stretch.",
+      publicStats: {
+        roundsPlayed: 11,
+        averageScore: 82.3,
+        bestRound: 77,
+        recentFormSummary: "Trending steady across the last two weeks",
+      },
+    }),
+    createSeedProfile({
+      id: "profile-jordan",
+      displayName: "Jordan Wells",
+      username: "@jordanwells",
+      avatarLabel: "JW",
+      homeCourse: "Prairie Lake",
+      handicap: 7.1,
+      bio: "Competitive group golfer who loves live leaderboards.",
+      publicStats: {
+        roundsPlayed: 9,
+        averageScore: 79.8,
+        bestRound: 75,
+        recentFormSummary: "Fresh off a strong scramble weekend",
+      },
+    }),
+  ];
+}
+
+function seedRoundPerformance(round, participantId, adjustments) {
+  round.holes.forEach((hole, index) => {
+    const delta = adjustments[index];
+    const strokes = hole.par + delta;
+    const gir = delta <= 0;
+    const fairwayHit = hole.par > 3 ? delta <= 0 : false;
+    const penalties = delta > 0 && hole.par > 3 && index % 5 === 0 ? 1 : 0;
+    const upAndDown = !gir && (delta <= 0 || index % 4 === 0);
+    const sandSave = upAndDown && !gir && hole.par !== 5 && index % 6 === 0;
+
+    applyHoleUpdate(round, hole.number, participantId, {
+      strokes,
+      putts: Math.max(1, Math.min(3, 2 + Math.sign(delta))),
+      penalties,
+      fairwayHit,
+      gir,
+      upAndDown: sandSave ? true : upAndDown,
+      sandSave,
+    });
+  });
+}
+
+function createCompletedSeedRound({ currentUser, courseName, weather, mode, players, localAdjustments, remotePatterns }) {
+  const round = createRound({
+    currentUser,
+    courseName,
+    teeBox: "Blue",
+    weather,
+    mode,
+    players,
+    status: "completed",
+  });
+
+  const participants = round.mode === "stroke" ? round.players : round.sides;
+  participants.forEach((participant, index) => {
+    const adjustments = index === 0 ? localAdjustments : remotePatterns[(index - 1) % remotePatterns.length];
+    seedRoundPerformance(round, participant.id, adjustments);
+  });
+  round.completedAt = Date.now() - 1000 * 60 * 60 * (participants.length + 12);
+  round.updatedAt = round.completedAt;
+  return round;
+}
+
+function createSeededWorkspace(account, options = {}) {
+  const profiles = [createSelfProfile(account), ...createPeerProfiles()];
+  const premiumMode = options.premiumMode || "stroke";
+  const activeRound = createRound({
+    currentUser: account,
+    courseName: premiumMode === "stroke" ? "National Pines" : "North Point",
+    teeBox: "Blue",
+    weather: premiumMode === "stroke" ? "Windy 68F" : "Clear 70F",
+    mode: premiumMode,
+    players: premiumMode === "scramble"
+      ? [profiles[0], profiles[3], profiles[1], profiles[2]].map(profilePlayer)
+      : profiles.map(profilePlayer),
+  });
+
+  const completedStroke = createCompletedSeedRound({
+    currentUser: account,
+    courseName: "Shadow Ridge",
+    weather: "Clear 72F",
+    mode: "stroke",
+    players: profiles.slice(0, 3).map(profilePlayer),
+    localAdjustments: [0, -1, 0, 1, 0, -1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, -1, 0],
+    remotePatterns: [
+      [1, 0, 0, 1, 0, 0, -1, 1, 0, 1, 0, 0, 1, 0, 0, 1, -1, 0],
+      [0, 0, 1, 0, 0, -1, 0, 1, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0],
+    ],
+  });
+
+  const completedScramble = createCompletedSeedRound({
+    currentUser: account,
+    courseName: "Prairie Lake",
+    weather: "Warm 76F",
+    mode: "scramble",
+    players: [profiles[0], profiles[3], profiles[1], profiles[2]].map(profilePlayer),
+    localAdjustments: [0, -1, -1, 0, 0, -1, 0, 0, -1, 0, -1, 0, 0, 0, -1, 0, -1, 0],
+    remotePatterns: [[1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0]],
+  });
+
+  return {
+    profiles,
+    rounds: [activeRound, completedStroke, completedScramble],
+    groups: [],
+    tournaments: [
+      createTournament({
+        name: "Great Lakes Weekend Cup",
+        courseName: "National Pines",
+        date: new Date(Date.now() + 1000 * 60 * 60 * 24 * 8).toISOString(),
+        mode: "stroke",
+        fieldSize: 24,
+        status: "open",
+      }),
+      createTournament({
+        name: "Twilight Match Series",
+        courseName: "North Point",
+        date: new Date(Date.now() + 1000 * 60 * 60 * 24 * 15).toISOString(),
+        mode: account.subscription.tier === "premium" ? "match" : "stroke",
+        fieldSize: 8,
+        status: "planning",
+      }),
+    ],
+    gear: {
+      items: [
+        createGearItem({ category: "club", name: "TSR3 Driver", notes: "Trusted fairway finder", packed: true }),
+        createGearItem({ category: "club", name: "56 Degree Wedge", notes: "Preferred bunker club", packed: true }),
+        createGearItem({ category: "apparel", name: "Wind shell", notes: "Use for gusty afternoon rounds", packed: false, weatherUse: "wind" }),
+        createGearItem({ category: "accessory", name: "Rangefinder", notes: "Battery charged", packed: true }),
+      ],
+    },
+    social: {
+      activity: [
+        createActivity({
+          type: "profile",
+          message: `${account.displayName}'s account is linked to profile, stats, and round history.`,
+        }),
+        createActivity({
+          type: "sync",
+          message: "Invite code and offline-first sync are the primary phase-1 multiplayer path.",
+        }),
+        createActivity({
+          type: "premium",
+          message: account.subscription.tier === "premium"
+            ? "Premium account access is active for advanced modes, stats, and tournament tools."
+            : "Free account access is active. Premium tools stay cleanly locked until upgrade.",
+        }),
+      ],
+    },
+    userSession: {
+      activeRoundId: activeRound.id,
+      selectedHole: 1,
+      summaryRoundId: completedStroke.id,
+      selectedProfileId: account.profileId,
+      roundSetup: createDefaultRoundSetup(),
+    },
+  };
+}
+
+export function createEmptyWorkspace(account) {
+  const selfProfile = createSelfProfile(account);
+
+  return {
+    profiles: [selfProfile],
+    rounds: [],
+    groups: [],
+    tournaments: [],
+    gear: { items: [] },
+    social: {
+      activity: [
+        createActivity({
+          type: "profile",
+          message: `${account.displayName} created a Golfers Nation account.`,
+        }),
+      ],
+    },
+    userSession: {
+      activeRoundId: null,
+      selectedHole: 1,
+      summaryRoundId: null,
+      selectedProfileId: account.profileId,
+      roundSetup: createDefaultRoundSetup(),
+    },
+  };
+}
+
+function moveAccountVaultEntry(draft, previousId, nextId) {
+  if (!draft.accountVault?.[previousId] || previousId === nextId) {
+    return;
+  }
+
+  draft.accountVault[nextId] = draft.accountVault[previousId];
+  delete draft.accountVault[previousId];
+}
+
+function remapWorkspaceIdentity(workspace, previousId, nextAccount) {
+  if (!workspace || previousId === nextAccount.id) {
+    return;
+  }
+
+  const previousProfileId = `profile-${String(previousId).replace(/^user-/, "")}`;
+  const nextProfileId = nextAccount.profileId;
+  const nextName = nextAccount.displayName;
+  const nextUsername = nextAccount.username;
+  const nextAvatarLabel = nextAccount.avatarLabel;
+
+  (workspace.profiles || []).forEach((profile) => {
+    if (profile.userId === previousId || profile.id === previousProfileId) {
+      profile.userId = nextAccount.id;
+      profile.id = nextProfileId;
+      profile.publicProfile = {
+        ...(profile.publicProfile || {}),
+        displayName: nextName,
+        username: nextUsername,
+        avatarLabel: nextAvatarLabel,
+      };
+    }
+  });
+
+  (workspace.rounds || []).forEach((round) => {
+    (round.players || []).forEach((player) => {
+      if (player.userId === previousId || player.profileId === previousProfileId) {
+        player.userId = nextAccount.id;
+        player.profileId = nextProfileId;
+        player.name = nextName;
+        player.displayName = nextName;
+        player.username = nextUsername;
+        player.avatarLabel = nextAvatarLabel;
+      }
+    });
+  });
+
+  (workspace.groups || []).forEach((group) => {
+    (group.members || []).forEach((member) => {
+      if (member.userId === previousId || member.profileId === previousProfileId) {
+        member.userId = nextAccount.id;
+        member.profileId = nextProfileId;
+        member.displayName = nextName;
+        member.username = nextUsername;
+        member.avatarLabel = nextAvatarLabel;
+      }
+    });
+  });
+
+  if (workspace.userSession?.selectedProfileId === previousProfileId) {
+    workspace.userSession.selectedProfileId = nextProfileId;
+  }
+}
+
+function sanitizeCurrentUser(account) {
+  return {
+    id: account.id,
+    name: account.name,
+    displayName: account.displayName,
+    username: account.username,
+    profileId: account.profileId,
+    avatarLabel: account.avatarLabel,
+    avatar: account.avatarLabel,
+    avatarUrl: account.avatarUrl || "",
+    email: account.email,
+    provider: account.provider,
+    providerType: account.provider,
+    homeCourse: account.homeCourse,
+    handicap: account.handicap,
+    handedness: account.handedness || "",
+    bio: account.bio,
+    seasonGoal: account.seasonGoal,
+    city: account.city,
+    createdAt: account.createdAt,
+    premiumStatus: account.subscription.tier,
+    privacy: createPrivacySettings(account.privacy),
+    appearance: createAppearanceSettings(account.appearance),
+    social: createSocialSettings(account.social),
+    seededDemo: Boolean(account.seededDemo),
+    subscription: cloneData(account.subscription),
+    roundsPlayed: account.roundsPlayed || 0,
+    averageScore: account.averageScore ?? null,
+    bestRound: account.bestRound ?? null,
+    recentFormSummary: account.recentFormSummary || "First round pending",
+  };
+}
+
+function mergeCurrentUserIntoAccount(account, currentUser, auth) {
+  account.name = currentUser.name;
+  account.displayName = currentUser.displayName || currentUser.name;
+  account.username = currentUser.username;
+  account.profileId = currentUser.profileId;
+  account.avatarLabel = currentUser.avatarLabel;
+  account.avatarUrl = currentUser.avatarUrl || account.avatarUrl || "";
+  account.email = currentUser.email;
+  account.provider = currentUser.provider || currentUser.providerType || auth?.provider || account.provider;
+  account.homeCourse = currentUser.homeCourse;
+  account.handicap = currentUser.handicap;
+  account.handedness = currentUser.handedness || "";
+  account.bio = currentUser.bio;
+  account.seasonGoal = currentUser.seasonGoal;
+  account.city = currentUser.city;
+  account.createdAt = currentUser.createdAt;
+  account.privacy = createPrivacySettings(currentUser.privacy || {});
+  account.appearance = createAppearanceSettings(currentUser.appearance || account.appearance);
+  account.social = createSocialSettings(currentUser.social || account.social);
+  account.subscription = cloneData(currentUser.subscription || account.subscription);
+  account.premiumStatus = account.subscription.tier;
+  account.roundsPlayed = currentUser.roundsPlayed ?? account.roundsPlayed ?? 0;
+  account.averageScore = currentUser.averageScore ?? account.averageScore ?? null;
+  account.bestRound = currentUser.bestRound ?? account.bestRound ?? null;
+  account.recentFormSummary = currentUser.recentFormSummary || account.recentFormSummary || "First round pending";
+}
+
+function getUserSession(state) {
+  return {
+    activeRoundId: state.session.activeRoundId || null,
+    selectedHole: state.session.selectedHole || 1,
+    summaryRoundId: state.session.summaryRoundId || null,
+    selectedProfileId: state.session.selectedProfileId || state.currentUser?.profileId || null,
+    roundSetup: {
+      courseQuery: state.session.roundSetup?.courseQuery || "",
+      selectedCourseId: state.session.roundSetup?.selectedCourseId || "",
+      selectedTeeBoxId: state.session.roundSetup?.selectedTeeBoxId || "",
+    },
+  };
+}
+
+export function createAccountRecord({
+  id,
+  displayName,
+  email,
+  password = DEFAULT_PASSWORD,
+  provider = "email",
+  tier = "free",
+  seededDemo = false,
+  city = "Chicago, IL",
+  homeCourse = "",
+  handicap = null,
+  handedness = "",
+  bio = "",
+  seasonGoal = "Track better golf all season",
+  createdAt = Date.now(),
+  appearance = {},
+  social = {},
+}) {
+  const safeDisplayName = String(displayName || "").trim() || "Golfer";
+  const username = normalizeUsername(safeDisplayName);
+  const avatarLabel = avatarFromName(safeDisplayName);
+  const safeId = id || `user-${username.replace("@", "")}-${Date.now().toString(36)}`;
+
+  return {
+    id: safeId,
+    name: safeDisplayName,
+    displayName: safeDisplayName,
+    username,
+    profileId: `profile-${safeId.replace(/^user-/, "")}`,
+    avatarLabel,
+    avatarUrl: "",
+    email: String(email || "").trim().toLowerCase(),
+    password,
+    provider,
+    providerType: provider,
+    seededDemo,
+    city,
+    homeCourse,
+    handicap,
+    handedness,
+    bio,
+    seasonGoal,
+    createdAt,
+    privacy: createPrivacySettings(),
+    appearance: createAppearanceSettings(appearance),
+    social: createSocialSettings(social),
+    subscription: createSubscription(tier),
+    premiumStatus: tier,
+    roundsPlayed: 0,
+    averageScore: null,
+    bestRound: null,
+    recentFormSummary: "First round pending",
+  };
+}
+
+export function ensureAccountWorkspace(draft, userId) {
+  const account = draft.accounts?.find((entry) => entry.id === userId);
+  if (!account) {
+    return null;
+  }
+
+  if (!draft.accountVault?.[userId]) {
+    draft.accountVault = {
+      ...(draft.accountVault || {}),
+      [userId]: createEmptyWorkspace(account),
+    };
+  }
+
+  syncAccountSummary(account, draft.accountVault[userId]);
+  return draft.accountVault[userId];
+}
+
+export function replaceAccountWorkspace(draft, userId, workspace = null) {
+  const account = draft.accounts?.find((entry) => entry.id === userId);
+  if (!account) {
+    return null;
+  }
+
+  const fallback = createEmptyWorkspace(account);
+  draft.accountVault = {
+    ...(draft.accountVault || {}),
+    [userId]: {
+      profiles: cloneData(workspace?.profiles || fallback.profiles),
+      rounds: cloneData(workspace?.rounds || fallback.rounds),
+      groups: cloneData(workspace?.groups || fallback.groups),
+      tournaments: cloneData(workspace?.tournaments || fallback.tournaments),
+      gear: cloneData(workspace?.gear || fallback.gear),
+      social: cloneData(workspace?.social || fallback.social),
+      userSession: {
+        ...fallback.userSession,
+        ...(workspace?.userSession || {}),
+        roundSetup: {
+          ...fallback.userSession.roundSetup,
+          ...(workspace?.userSession?.roundSetup || {}),
+        },
+      },
+    },
+  };
+
+  syncAccountSummary(account, draft.accountVault[userId]);
+  return draft.accountVault[userId];
+}
+
+export function upsertRemoteAccount(draft, fields = {}) {
+  const nextEmail = String(fields.email || "").trim().toLowerCase();
+  if (!nextEmail || !fields.id) {
+    return null;
+  }
+
+  let account = draft.accounts?.find((entry) => entry.id === fields.id)
+    || draft.accounts?.find((entry) => !entry.seededDemo && entry.email === nextEmail)
+    || null;
+
+  const previousId = account?.id || null;
+  const nextDisplayName = String(fields.displayName || "").trim() || account?.displayName || "Golfer";
+  const nextProvider = String(fields.provider || account?.provider || "email");
+  const nextCreatedAt = fields.createdAt || account?.createdAt || Date.now();
+  const nextTier = fields.tier || account?.subscription?.tier || TESTER_DEFAULT_SUBSCRIPTION_TIER;
+
+  if (!account) {
+    account = createAccountRecord({
+      id: fields.id,
+      displayName: nextDisplayName,
+      email: nextEmail,
+      password: "",
+      provider: nextProvider,
+      tier: nextTier,
+      seededDemo: false,
+      city: fields.city || "",
+      homeCourse: fields.homeCourse || "",
+      handicap: typeof fields.handicap === "number" ? fields.handicap : null,
+      handedness: fields.handedness || "",
+      bio: fields.bio || "",
+      seasonGoal: fields.seasonGoal || "Finish your first round",
+      createdAt: nextCreatedAt,
+      appearance: fields.appearance || {},
+      social: fields.social || {},
+    });
+    draft.accounts.push(account);
+  } else {
+    account.id = fields.id;
+    account.name = nextDisplayName;
+    account.displayName = nextDisplayName;
+    account.email = nextEmail;
+    account.provider = nextProvider;
+    account.providerType = nextProvider;
+    account.avatarLabel = fields.avatarLabel || avatarFromName(nextDisplayName);
+    account.avatarUrl = fields.avatarUrl || account.avatarUrl || "";
+    account.homeCourse = fields.homeCourse ?? account.homeCourse ?? "";
+    account.handicap = typeof fields.handicap === "number" ? fields.handicap : account.handicap ?? null;
+    account.handedness = fields.handedness ?? account.handedness ?? "";
+    account.bio = fields.bio ?? account.bio ?? "";
+    account.city = fields.city ?? account.city ?? "";
+    account.seasonGoal = fields.seasonGoal ?? account.seasonGoal ?? "Finish your first round";
+    account.createdAt = nextCreatedAt;
+    account.appearance = createAppearanceSettings(fields.appearance || account.appearance);
+    account.social = createSocialSettings(fields.social || account.social);
+    account.privacy = createPrivacySettings(fields.privacy || account.privacy);
+    account.subscription = createSubscription(nextTier);
+    account.premiumStatus = nextTier;
+    account.seededDemo = false;
+  }
+
+  account.profileId = `profile-${String(account.id).replace(/^user-/, "")}`;
+  account.username = fields.username || normalizeUsername(nextDisplayName);
+  account.avatarLabel = fields.avatarLabel || account.avatarLabel || avatarFromName(nextDisplayName);
+
+  if (previousId && previousId !== account.id) {
+    moveAccountVaultEntry(draft, previousId, account.id);
+    remapWorkspaceIdentity(draft.accountVault?.[account.id], previousId, account);
+    if (draft.previewAccountId === previousId) {
+      draft.previewAccountId = account.id;
+    }
+  }
+
+  ensureAccountWorkspace(draft, account.id);
+  return account;
+}
+
+export function createDefaultAccountState() {
+  const freeDemo = createAccountRecord({
+    id: "user-demo-free",
+    displayName: "Avery Brooks",
+    email: "free@golfersnation.demo",
+    password: DEFAULT_PASSWORD,
+    provider: "email",
+    tier: "free",
+    seededDemo: true,
+    city: "Chicago, IL",
+    homeCourse: "Whispering Pines",
+    handicap: 8.4,
+    bio: "Competitive weekend golfer building a better multi-state season.",
+    seasonGoal: "Break 80 in three new states",
+    createdAt: Date.now() - 1000 * 60 * 60 * 24 * 160,
+  });
+
+  const premiumDemo = createAccountRecord({
+    id: "user-demo-premium",
+    displayName: "Maya Chen",
+    email: "premium@golfersnation.demo",
+    password: DEFAULT_PASSWORD,
+    provider: "email",
+    tier: "premium",
+    seededDemo: true,
+    city: "Seattle, WA",
+    homeCourse: "National Pines",
+    handicap: 5.2,
+    bio: "Competitive player using premium analytics and live group tools.",
+    seasonGoal: "Win three weekend events this season",
+    createdAt: Date.now() - 1000 * 60 * 60 * 24 * 220,
+  });
+
+  const googleDemo = createAccountRecord({
+    id: "user-google-review",
+    displayName: "Riley Stone",
+    email: "google@golfersnation.demo",
+    password: "",
+    provider: "google",
+    tier: "free",
+    seededDemo: true,
+    city: "Austin, TX",
+    homeCourse: "Blue River",
+    handicap: 10.1,
+    bio: "Google mock sign-in account for review flows.",
+  });
+
+  const appleDemo = createAccountRecord({
+    id: "user-apple-review",
+    displayName: "Parker Cole",
+    email: "apple@golfersnation.demo",
+    password: "",
+    provider: "apple",
+    tier: "premium",
+    seededDemo: true,
+    city: "Scottsdale, AZ",
+    homeCourse: "North Point",
+    handicap: 6.8,
+    bio: "Apple mock sign-in account with premium access for review flows.",
+  });
+
+  const accounts = [freeDemo, premiumDemo, googleDemo, appleDemo];
+  const accountVault = {
+    [freeDemo.id]: createSeededWorkspace(freeDemo),
+    [premiumDemo.id]: createSeededWorkspace(premiumDemo, { premiumMode: "scramble" }),
+    [googleDemo.id]: createEmptyWorkspace(googleDemo),
+    [appleDemo.id]: createSeededWorkspace(appleDemo, { premiumMode: "match" }),
+  };
+
+  accounts.forEach((account) => {
+    syncAccountSummary(account, accountVault[account.id]);
+  });
+
+  return {
+    accounts,
+    accountVault,
+    activeAccountId: null,
+    previewAccountId: freeDemo.id,
+  };
+}
+
+export function prepareStateForPersistence(state) {
+  const snapshot = cloneData(state);
+  const userId = snapshot.auth?.activeUserId || snapshot.currentUser?.id || null;
+
+  if (snapshot.session) {
+    snapshot.session.feedback = null;
+    snapshot.session.pendingLabel = "";
+    snapshot.session.lastScoredParticipantId = null;
+    snapshot.session.lastScoredHole = null;
+    snapshot.session.lastScorePulseAt = 0;
+  }
+
+  if (!userId) {
+    return snapshot;
+  }
+
+  saveWorkspaceToVault(snapshot, userId);
+  return snapshot;
+}
+
+export function hydrateActiveAccountState(state) {
+  const next = cloneData(state);
+  const activeUserId = next.auth?.activeUserId;
+
+  if (!activeUserId) {
+    return next;
+  }
+
+  const restored = loadAccountIntoState(next, activeUserId);
+  if (restored) {
+    const activeRound = next.rounds?.find((round) => round.id === next.session?.activeRoundId) || null;
+    if (activeRound?.status === "active") {
+      next.session.activeView = "round";
+      next.session.previousView = "round";
+      next.session.transitionDirection = "steady";
+    }
+    return next;
+  }
+
+  const previewAccountId = next.previewAccountId || next.accounts?.[0]?.id || null;
+  const previewAccount = next.accounts?.find((entry) => entry.id === previewAccountId) || null;
+  const previewWorkspace = previewAccount ? next.accountVault?.[previewAccount.id] : null;
+
+  if (previewAccount && previewWorkspace) {
+    syncAccountSummary(previewAccount, previewWorkspace);
+    next.currentUser = sanitizeCurrentUser(previewAccount);
+    next.profiles = cloneData(previewWorkspace.profiles || []);
+    next.rounds = cloneData(previewWorkspace.rounds || []);
+    next.groups = cloneData(previewWorkspace.groups || []);
+    next.tournaments = cloneData(previewWorkspace.tournaments || []);
+    next.gear = cloneData(previewWorkspace.gear || { items: [] });
+    next.social = cloneData(previewWorkspace.social || { activity: [] });
+    next.session.activeRoundId = previewWorkspace.userSession?.activeRoundId || null;
+    next.session.selectedHole = previewWorkspace.userSession?.selectedHole || 1;
+    next.session.summaryRoundId = previewWorkspace.userSession?.summaryRoundId || null;
+    next.session.selectedProfileId = previewWorkspace.userSession?.selectedProfileId || previewAccount.profileId;
+    next.session.roundSetup = {
+      ...(next.session.roundSetup || {}),
+      ...(previewWorkspace.userSession?.roundSetup || {}),
+    };
+  }
+
+  next.auth.activeUserId = null;
+  next.auth.status = "signed_out";
+  next.auth.provider = null;
+  next.auth.error = "";
+  next.auth.notice = "We couldn't restore your last session. Sign in again or use a demo account.";
+  next.auth.mode = "login";
+  next.session.activeView = "home";
+  next.session.previousView = "home";
+  next.session.transitionDirection = "steady";
+
+  return next;
+}
+
+export function saveWorkspaceToVault(draft, userId = draft.auth?.activeUserId || draft.currentUser?.id) {
+  if (!userId) {
+    return;
+  }
+
+  const account = draft.accounts?.find((entry) => entry.id === userId);
+  if (!account) {
+    return;
+  }
+
+  mergeCurrentUserIntoAccount(account, draft.currentUser, draft.auth);
+  draft.accountVault = {
+    ...(draft.accountVault || {}),
+    [userId]: {
+      profiles: cloneData(draft.profiles || []),
+      rounds: cloneData(draft.rounds || []),
+      groups: cloneData(draft.groups || []),
+      tournaments: cloneData(draft.tournaments || []),
+      gear: cloneData(draft.gear || { items: [] }),
+      social: cloneData(draft.social || { activity: [] }),
+      userSession: getUserSession(draft),
+    },
+  };
+  const summary = syncAccountSummary(account, draft.accountVault[userId]);
+  draft.currentUser.roundsPlayed = summary.roundsPlayed;
+  draft.currentUser.averageScore = summary.averageScore;
+  draft.currentUser.bestRound = summary.bestRound;
+  draft.currentUser.recentFormSummary = summary.recentFormSummary;
+}
+
+export function loadAccountIntoState(draft, userId) {
+  const account = draft.accounts?.find((entry) => entry.id === userId);
+  const workspace = draft.accountVault?.[userId];
+
+  if (!account || !workspace) {
+    return false;
+  }
+
+  syncAccountSummary(account, workspace);
+  draft.currentUser = sanitizeCurrentUser(account);
+  draft.profiles = cloneData(workspace.profiles || []);
+  draft.rounds = cloneData(workspace.rounds || []);
+  draft.groups = cloneData(workspace.groups || []);
+  draft.tournaments = cloneData(workspace.tournaments || []);
+  draft.gear = cloneData(workspace.gear || { items: [] });
+  draft.social = cloneData(workspace.social || { activity: [] });
+  draft.auth.activeUserId = userId;
+  draft.auth.lastUserId = userId;
+  draft.auth.status = "authenticated";
+  draft.auth.provider = account.provider;
+  draft.auth.error = "";
+  draft.auth.notice = account.subscription?.tier === "premium"
+    ? `${account.displayName} is ready. Premium tester access, rounds, and settings are loaded.`
+    : `${account.displayName} is ready. Rounds, stats, and plan access are loaded.`;
+  draft.auth.linkedProviders = [...new Set([...(draft.auth.linkedProviders || []), account.provider])];
+  draft.session.activeRoundId = workspace.userSession?.activeRoundId || null;
+  draft.session.selectedHole = workspace.userSession?.selectedHole || 1;
+  draft.session.summaryRoundId = workspace.userSession?.summaryRoundId || null;
+  draft.session.selectedProfileId = workspace.userSession?.selectedProfileId || account.profileId;
+  draft.session.roundSetup = {
+    ...(draft.session.roundSetup || {}),
+    ...(workspace.userSession?.roundSetup || {}),
+  };
+  draft.session.activeView = "home";
+  draft.session.previousView = "home";
+  draft.session.transitionDirection = "steady";
+  return true;
+}
+
+export function signOutAccount(draft) {
+  const activeUserId = draft.auth?.activeUserId || draft.currentUser?.id || null;
+  const activeAccount = draft.accounts?.find((entry) => entry.id === activeUserId) || null;
+
+  if (activeUserId) {
+    saveWorkspaceToVault(draft, activeUserId);
+  }
+
+  draft.auth.lastUserId = activeUserId;
+  draft.auth.activeUserId = null;
+  draft.auth.status = "signed_out";
+  draft.auth.provider = null;
+  draft.auth.error = "";
+  draft.auth.notice = activeAccount
+    ? `${activeAccount.displayName} logged out. Log in below to return to your golfer account.`
+    : "You were logged out. Log in below to return to your golfer account.";
+  draft.auth.mode = "login";
+  draft.session.activeView = "home";
+  draft.session.previousView = "home";
+  draft.session.transitionDirection = "steady";
+  draft.session.helpReturnView = "auth";
+  draft.session.settingsReturnView = "auth";
+  draft.session.settingsSection = "account";
+  draft.session.activeRoundId = null;
+  draft.session.summaryRoundId = null;
+  draft.session.selectedHole = 1;
+  draft.session.selectedProfileId = null;
+  draft.session.roundSetup = {
+    ...(draft.session.roundSetup || {}),
+    ...createDefaultRoundSetup(),
+  };
+}
+
+export function findAccountByEmail(state, email) {
+  const normalized = String(email || "").trim().toLowerCase();
+  return state.accounts?.find((account) => account.email === normalized) || null;
+}
+
+export function createEmailAccount(draft, fields) {
+  const email = String(fields.email || "").trim().toLowerCase();
+  const displayName = String(fields.displayName || "").trim();
+  const password = String(fields.password || "");
+
+  if (!email || !displayName || !password) {
+    return { error: "Enter a name, email, and password to create an account." };
+  }
+
+  if (findAccountByEmail(draft, email)) {
+    return { error: "That email already has an account. Try logging in instead." };
+  }
+
+  const account = createAccountRecord({
+    displayName,
+    email,
+    password,
+    provider: "email",
+    tier: TESTER_DEFAULT_SUBSCRIPTION_TIER,
+    city: "Your city",
+    homeCourse: "",
+    handicap: null,
+    bio: "",
+    seasonGoal: "Finish your first round",
+  });
+
+  draft.accounts.push(account);
+  draft.accountVault[account.id] = createEmptyWorkspace(account);
+  return { account };
+}
+
+export function authenticateEmailAccount(state, fields) {
+  const email = String(fields.email || "").trim().toLowerCase();
+  const password = String(fields.password || "");
+  const account = findAccountByEmail(state, email);
+
+  if (!account || account.provider !== "email") {
+    return { error: "No email account matches those details." };
+  }
+
+  if (account.password !== password) {
+    return { error: "That password does not match this account." };
+  }
+
+  return { account };
+}
+
+export function signInWithMockProvider(draft, provider) {
+  const providerId = provider === "apple" ? "user-apple-review" : "user-google-review";
+  const account = draft.accounts.find((entry) => entry.id === providerId);
+
+  if (!account) {
+    return { error: "That provider demo account is not available." };
+  }
+
+  return { account };
+}
+
+export function togglePremiumAccessForUser(draft, userId = draft.auth?.activeUserId || draft.currentUser?.id) {
+  if (!userId) {
+    return null;
+  }
+
+  const account = draft.accounts?.find((entry) => entry.id === userId);
+  if (!account) {
+    return null;
+  }
+
+  const nextTier = account.subscription?.tier === "premium" ? "free" : "premium";
+  account.subscription = createSubscription(nextTier);
+  account.premiumStatus = nextTier;
+
+  if (draft.currentUser?.id === userId) {
+    draft.currentUser.subscription = cloneData(account.subscription);
+    draft.currentUser.premiumStatus = nextTier;
+  }
+
+  const profile = draft.profiles?.find((entry) => entry.userId === userId || entry.id === account.profileId);
+  if (profile) {
+    profile.account = {
+      ...profile.account,
+      premiumStatus: nextTier,
+    };
+  }
+
+  return account;
+}
+
+export function getReviewAccounts(state) {
+  return (state.accounts || [])
+    .filter((account) => account.seededDemo && account.provider === "email")
+    .map((account) => ({
+      id: account.id,
+      displayName: account.displayName,
+      email: account.email,
+      tier: account.subscription.tier,
+      provider: account.provider,
+    }));
+}
+
+```
+
+## `src/services/auth-gateway.js`
+
+```js
+import {
+  authenticateEmailAccount,
+  createEmailAccount,
+  ensureAccountWorkspace,
+  getReviewAccounts,
+  hydrateActiveAccountState,
+  loadAccountIntoState,
+  signInWithMockProvider,
+  signOutAccount,
+  togglePremiumAccessForUser,
+  upsertRemoteAccount,
+} from "./account-service.js";
+
+function getProviderFromSupabaseUser(user = {}) {
+  return user?.app_metadata?.provider
+    || user?.identities?.[0]?.provider
+    || user?.user_metadata?.provider
+    || "email";
+}
+
+function mapSupabaseUserToAccountFields(user = {}, overrides = {}) {
+  const metadata = user?.user_metadata || {};
+  const displayName = overrides.displayName
+    || metadata.display_name
+    || metadata.full_name
+    || String(user?.email || "").split("@")[0]
+    || "Golfer";
+  const provider = overrides.provider || getProviderFromSupabaseUser(user);
+
+  return {
+    id: user.id,
+    displayName,
+    email: user.email || overrides.email || "",
+    provider,
+    avatarUrl: metadata.avatar_url || "",
+    createdAt: user.created_at ? Date.parse(user.created_at) : Date.now(),
+    homeCourse: metadata.home_course || "",
+    handicap: typeof metadata.handicap === "number" ? metadata.handicap : null,
+    handedness: metadata.handedness || "",
+    bio: metadata.bio || "",
+    city: metadata.city || "",
+    seasonGoal: metadata.season_goal || "Finish your first round",
+  };
+}
+
+async function ensureResolvedUser(bridge, result) {
+  if (result?.user?.id) {
+    return result;
+  }
+
+  const current = await bridge.getCurrentUser();
+  if (current.error) {
+    return current;
+  }
+
+  return {
+    ...result,
+    user: current.user,
+    session: result?.session || current.session || null,
+  };
+}
+
+export function createLocalAuthGateway() {
+  return {
+    mode: "local-auth-adapter",
+    backendReady: true,
+    oauthProviders: ["google", "apple"],
+    restoreSession(state) {
+      return hydrateActiveAccountState(state);
+    },
+    signUpWithEmail(draft, fields) {
+      const result = createEmailAccount(draft, fields);
+      if (result.error) {
+        return { error: result.error };
+      }
+
+      loadAccountIntoState(draft, result.account.id);
+      return { account: result.account };
+    },
+    signInWithEmail(draft, fields) {
+      const result = authenticateEmailAccount(draft, fields);
+      if (result.error) {
+        return { error: result.error };
+      }
+
+      loadAccountIntoState(draft, result.account.id);
+      return { account: result.account };
+    },
+    signInWithProvider(draft, provider) {
+      const result = signInWithMockProvider(draft, provider);
+      if (result.error) {
+        return { error: result.error };
+      }
+
+      loadAccountIntoState(draft, result.account.id);
+      return { account: result.account };
+    },
+    signOut(draft) {
+      signOutAccount(draft);
+      return { status: "signed_out" };
+    },
+    useReviewAccount(draft, userId) {
+      const loaded = loadAccountIntoState(draft, userId);
+      if (!loaded) {
+        return { error: "That review account is unavailable." };
+      }
+
+      return {
+        account: draft.accounts.find((entry) => entry.id === userId) || null,
+      };
+    },
+    togglePremiumForTesting(draft, userId) {
+      const account = togglePremiumAccessForUser(draft, userId);
+      if (!account) {
+        return { error: "No active account is available." };
+      }
+
+      return { account };
+    },
+    listReviewAccounts(state) {
+      return getReviewAccounts(state);
+    },
+  };
+}
+
+export function createSupabaseAuthGateway({ bridge, fallback = createLocalAuthGateway() } = {}) {
+  return {
+    ...fallback,
+    mode: "supabase-auth-adapter",
+    restoreSession(state) {
+      const next = hydrateActiveAccountState(state);
+      const storedSession = bridge?.readStoredSession?.();
+      if (!storedSession?.user?.id) {
+        return next;
+      }
+
+      const account = upsertRemoteAccount(next, mapSupabaseUserToAccountFields(storedSession.user));
+      if (!account) {
+        return next;
+      }
+
+      ensureAccountWorkspace(next, account.id);
+      loadAccountIntoState(next, account.id);
+      next.auth.notice = `${account.displayName} restored from secure sign-in.`;
+      return next;
+    },
+    async signUpWithEmailAsync(state, fields) {
+      const result = await bridge.signUpWithEmail(fields);
+      if (result.error) {
+        return {
+          error: result.error.message || "Account creation failed.",
+        };
+      }
+
+      const resolved = await ensureResolvedUser(bridge, result);
+      if (resolved.error) {
+        return {
+          error: resolved.error.message || "Account creation failed.",
+        };
+      }
+
+      return {
+        accountFields: mapSupabaseUserToAccountFields(resolved.user, {
+          displayName: fields.displayName,
+          email: fields.email,
+          provider: "email",
+        }),
+        requiresConfirmation: !resolved.session,
+        notice: resolved.session
+          ? ""
+          : "Account created. Check your email to confirm the account before logging in, or disable email confirmations in Supabase for tester builds.",
+      };
+    },
+    async signInWithEmailAsync(state, fields) {
+      const result = await bridge.signInWithEmail(fields);
+      if (result.error) {
+        return {
+          error: result.error.message || "Login failed.",
+        };
+      }
+
+      const resolved = await ensureResolvedUser(bridge, result);
+      if (resolved.error) {
+        return {
+          error: resolved.error.message || "Login failed.",
+        };
+      }
+
+      return {
+        accountFields: mapSupabaseUserToAccountFields(resolved.user, {
+          email: fields.email,
+          provider: "email",
+        }),
+        requiresConfirmation: false,
+        notice: "",
+      };
+    },
+    commitAuthResult(draft, result) {
+      if (result?.error) {
+        return { error: result.error };
+      }
+
+      if (result?.requiresConfirmation) {
+        draft.auth.mode = "login";
+        draft.auth.error = "";
+        draft.auth.notice = result.notice;
+        return { account: null, requiresConfirmation: true };
+      }
+
+      const account = upsertRemoteAccount(draft, result.accountFields);
+      if (!account) {
+        return { error: "We could not prepare the signed-in golfer account." };
+      }
+
+      ensureAccountWorkspace(draft, account.id);
+      loadAccountIntoState(draft, account.id);
+      return { account };
+    },
+    async requestPasswordResetAsync(email) {
+      const result = await bridge.requestPasswordReset(email);
+      if (result.error) {
+        return {
+          error: result.error.message || "Password reset could not be started.",
+        };
+      }
+
+      return {
+        status: "sent",
+      };
+    },
+    async signOutAsync() {
+      const result = await bridge.signOut();
+      if (result?.error) {
+        return { error: result.error.message || "Sign out failed." };
+      }
+
+      return { status: "signed_out" };
+    },
+  };
+}
+
+```
+
+## `src/services/backend-models.js`
+
+```js
+import { cloneData } from "../utils/formatters.js";
+
+function toIsoTimestamp(value) {
+  if (!value) {
+    return null;
+  }
+
+  return new Date(value).toISOString();
+}
+
+function normalizePrivacy(privacy = {}) {
+  return {
+    show_home_course: Boolean(privacy.showHomeCourse),
+    show_handicap: Boolean(privacy.showHandicap),
+    show_bio: Boolean(privacy.showBio),
+    show_recent_form: Boolean(privacy.showRecentForm),
+    show_head_to_head: Boolean(privacy.showHeadToHead),
+    show_email: Boolean(privacy.showEmail),
+  };
+}
+
+export function toBackendAccountRecord(account) {
+  if (!account) {
+    return null;
+  }
+
+  return {
+    id: account.id,
+    profile_id: account.profileId,
+    display_name: account.displayName || account.name,
+    username: account.username,
+    email: account.email,
+    provider: account.provider || account.providerType || "email",
+    avatar_label: account.avatarLabel || "GN",
+    avatar_url: account.avatarUrl || null,
+    city: account.city || null,
+    home_course: account.homeCourse || null,
+    handicap: typeof account.handicap === "number" ? account.handicap : null,
+    bio: account.bio || "",
+    season_goal: account.seasonGoal || "",
+    subscription_tier: account.subscription?.tier || account.premiumStatus || "free",
+    subscription_status: account.subscription?.status || "active",
+    billing_ready: Boolean(account.subscription?.billingReady),
+    rounds_played: account.roundsPlayed || 0,
+    average_score: typeof account.averageScore === "number" ? account.averageScore : null,
+    best_round: typeof account.bestRound === "number" ? account.bestRound : null,
+    recent_form_summary: account.recentFormSummary || "First round pending",
+    privacy: normalizePrivacy(account.privacy),
+    appearance: cloneData(account.appearance || {}),
+    social_settings: cloneData(account.social || {}),
+    seeded_demo: Boolean(account.seededDemo),
+    created_at: toIsoTimestamp(account.createdAt),
+    updated_at: toIsoTimestamp(Date.now()),
+  };
+}
+
+export function toBackendProfileRecord(profile) {
+  if (!profile) {
+    return null;
+  }
+
+  return {
+    id: profile.id,
+    user_id: profile.userId || null,
+    display_name: profile.publicProfile?.displayName || "",
+    username: profile.publicProfile?.username || "",
+    avatar_label: profile.publicProfile?.avatarLabel || "GN",
+    home_course: profile.publicProfile?.homeCourse || null,
+    handicap: typeof profile.publicProfile?.handicap === "number" ? profile.publicProfile.handicap : null,
+    bio: profile.publicProfile?.bio || "",
+    rounds_played: profile.publicStats?.roundsPlayed || 0,
+    average_score: typeof profile.publicStats?.averageScore === "number" ? profile.publicStats.averageScore : null,
+    best_round: typeof profile.publicStats?.bestRound === "number" ? profile.publicStats.bestRound : null,
+    recent_form_summary: profile.publicStats?.recentFormSummary || "First round pending",
+    premium_status: profile.account?.premiumStatus || "free",
+    privacy: normalizePrivacy(profile.privacy),
+    created_at: toIsoTimestamp(profile.account?.createdAt || profile.createdAt),
+    updated_at: toIsoTimestamp(Date.now()),
+  };
+}
+
+export function toBackendRoundRecord(round, userId = null) {
+  if (!round) {
+    return null;
+  }
+
+  return {
+    id: round.id,
+    owner_user_id: userId,
+    group_id: round.groupId || null,
+    tournament_id: round.tournamentId || null,
+    invite_code: round.inviteCode || null,
+    course_id: round.courseId || null,
+    course_name: round.courseName,
+    course_city: round.courseCity || null,
+    course_state: round.courseState || null,
+    course_region: round.courseRegion || null,
+    course_latitude: typeof round.courseLatitude === "number" ? round.courseLatitude : null,
+    course_longitude: typeof round.courseLongitude === "number" ? round.courseLongitude : null,
+    course_source: round.courseSource || null,
+    course_seeded: Boolean(round.courseSeeded),
+    tee_box: round.teeBox,
+    tee_box_id: round.teeBoxId || null,
+    course_rating: typeof round.courseRating === "number" ? round.courseRating : null,
+    course_slope: typeof round.courseSlope === "number" ? round.courseSlope : null,
+    weather: round.weather,
+    mode: round.mode,
+    status: round.status,
+    current_hole: round.currentHole || 1,
+    sync: cloneData(round.sync || {}),
+    event_log: cloneData(round.eventLog || []),
+    conflict_strategy: round.sync?.conflictStrategy || "latest-write-wins",
+    players: cloneData(round.players || []),
+    sides: cloneData(round.sides || []),
+    holes: cloneData(round.holes || []),
+    created_at: toIsoTimestamp(round.createdAt),
+    updated_at: toIsoTimestamp(round.updatedAt),
+    completed_at: toIsoTimestamp(round.completedAt),
+  };
+}
+
+export function toBackendGroupRecord(group, userId = null) {
+  if (!group) {
+    return null;
+  }
+
+  return {
+    id: group.id,
+    owner_user_id: userId,
+    round_id: group.roundId,
+    invite_code: group.inviteCode,
+    transport: group.transport,
+    status: group.status,
+    members: cloneData(group.members || []),
+    feed: cloneData(group.feed || []),
+    created_at: toIsoTimestamp(group.createdAt),
+    updated_at: toIsoTimestamp(group.updatedAt),
+  };
+}
+
+export function toBackendTournamentRecord(tournament, userId = null) {
+  if (!tournament) {
+    return null;
+  }
+
+  return {
+    id: tournament.id,
+    owner_user_id: userId,
+    linked_round_id: tournament.linkedRoundId || null,
+    name: tournament.name,
+    course_name: tournament.courseName,
+    mode: tournament.mode,
+    field_size: tournament.fieldSize,
+    status: tournament.status,
+    start_date: tournament.date,
+    created_at: toIsoTimestamp(tournament.createdAt),
+    updated_at: toIsoTimestamp(tournament.updatedAt),
+  };
+}
+
+export function toBackendGearRecord(item, userId = null) {
+  if (!item) {
+    return null;
+  }
+
+  return {
+    id: item.id,
+    owner_user_id: userId,
+    category: item.category,
+    name: item.name,
+    notes: item.notes || "",
+    weather_use: item.weatherUse || "",
+    packed: Boolean(item.packed),
+    created_at: toIsoTimestamp(item.createdAt),
+    updated_at: toIsoTimestamp(item.updatedAt),
+  };
+}
+
+export function toBackendWorkspaceSnapshot(state, userId = state.auth?.activeUserId || state.currentUser?.id || null) {
+  const account = (state.accounts || []).find((entry) => entry.id === userId) || state.currentUser || null;
+
+  return {
+    auth_user: toBackendAccountRecord(account),
+    profiles: (state.profiles || []).map((profile) => toBackendProfileRecord(profile)).filter(Boolean),
+    rounds: (state.rounds || []).map((round) => toBackendRoundRecord(round, userId)).filter(Boolean),
+    groups: (state.groups || []).map((group) => toBackendGroupRecord(group, userId)).filter(Boolean),
+    tournaments: (state.tournaments || []).map((tournament) => toBackendTournamentRecord(tournament, userId)).filter(Boolean),
+    gear_items: (state.gear?.items || []).map((item) => toBackendGearRecord(item, userId)).filter(Boolean),
+    social_activity: cloneData(state.social?.activity || []),
+    session: {
+      active_round_id: state.session?.activeRoundId || null,
+      selected_hole: state.session?.selectedHole || 1,
+      summary_round_id: state.session?.summaryRoundId || null,
+      selected_profile_id: state.session?.selectedProfileId || null,
+      updated_at: toIsoTimestamp(Date.now()),
+    },
+  };
+}
+
+```
+
+## `src/services/course-library.js`
+
+```js
+import { COURSE_TEMPLATE, FEATURED_COURSE_ID } from "../config.js";
+import { cloneData } from "../utils/formatters.js";
+
+function roundToFive(value) {
+  return Math.max(70, Math.round(value / 5) * 5);
+}
+
+function createHole(number, par, yards) {
+  return {
+    number,
+    par,
+    yards,
+  };
+}
+
+function createTeeBox({
+  id,
+  name,
+  holes,
+  slope = null,
+  rating = null,
+}) {
+  return {
+    id,
+    name,
+    totalPar: holes.reduce((sum, hole) => sum + hole.par, 0),
+    totalYardage: holes.reduce((sum, hole) => sum + hole.yards, 0),
+    slope,
+    rating,
+    holes,
+  };
+}
+
+function scaleHoles(baseHoles, factor) {
+  return baseHoles.map((hole) => createHole(hole.number, hole.par, roundToFive(hole.yards * factor)));
+}
+
+function createCourse({
+  id,
+  name,
+  city,
+  state,
+  region,
+  featured = false,
+  latitude = null,
+  longitude = null,
+  source = "seeded-curated-demo",
+  seeded = true,
+  teeBoxes,
+}) {
+  return {
+    id,
+    name,
+    city,
+    state,
+    region,
+    featured,
+    latitude,
+    longitude,
+    source,
+    seeded,
+    teeBoxes,
+  };
+}
+
+function createSeededCourse({
+  id,
+  name,
+  city,
+  state,
+  region,
+  latitude,
+  longitude,
+  basePars,
+  championshipYards,
+  championshipName = "Blue",
+  championshipSlope = null,
+  championshipRating = null,
+  memberName = "White",
+  memberFactor = 0.92,
+  memberSlope = null,
+  memberRating = null,
+}) {
+  const championshipHoles = basePars.map((par, index) => createHole(index + 1, par, championshipYards[index]));
+  const memberHoles = scaleHoles(championshipHoles, memberFactor);
+
+  return createCourse({
+    id,
+    name,
+    city,
+    state,
+    region,
+    latitude,
+    longitude,
+    teeBoxes: [
+      createTeeBox({
+        id: `${id}-${championshipName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+        name: championshipName,
+        holes: championshipHoles,
+        slope: championshipSlope,
+        rating: championshipRating,
+      }),
+      createTeeBox({
+        id: `${id}-${memberName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+        name: memberName,
+        holes: memberHoles,
+        slope: memberSlope,
+        rating: memberRating,
+      }),
+    ],
+  });
+}
+
+const SEEDED_COURSES = [
+  createCourse({
+    id: FEATURED_COURSE_ID,
+    name: "The Country Club at Golden Nugget",
+    city: "Lake Charles",
+    state: "LA",
+    region: "Lake Charles / Louisiana",
+    featured: true,
+    latitude: 30.1869,
+    longitude: -93.2754,
+    source: "https://www.goldennugget.com/lake-charles/amenities/golf/tour-the-golf-course/",
+    teeBoxes: [
+      createTeeBox({
+        id: `${FEATURED_COURSE_ID}-tee-1`,
+        name: "Tee 1",
+        slope: null,
+        rating: null,
+        holes: [
+          createHole(1, 5, 501), createHole(2, 4, 435), createHole(3, 4, 394), createHole(4, 3, 207),
+          createHole(5, 5, 535), createHole(6, 4, 464), createHole(7, 3, 173), createHole(8, 4, 458),
+          createHole(9, 4, 390), createHole(10, 4, 300), createHole(11, 4, 467), createHole(12, 5, 520),
+          createHole(13, 4, 329), createHole(14, 3, 170), createHole(15, 4, 357), createHole(16, 3, 169),
+          createHole(17, 4, 459), createHole(18, 5, 581),
+        ],
+      }),
+      createTeeBox({
+        id: `${FEATURED_COURSE_ID}-tee-2`,
+        name: "Tee 2",
+        slope: null,
+        rating: null,
+        holes: [
+          createHole(1, 5, 477), createHole(2, 4, 407), createHole(3, 4, 362), createHole(4, 3, 186),
+          createHole(5, 5, 506), createHole(6, 4, 404), createHole(7, 3, 147), createHole(8, 4, 432),
+          createHole(9, 4, 366), createHole(10, 4, 296), createHole(11, 4, 437), createHole(12, 5, 494),
+          createHole(13, 4, 304), createHole(14, 3, 163), createHole(15, 4, 326), createHole(16, 3, 154),
+          createHole(17, 4, 424), createHole(18, 5, 574),
+        ],
+      }),
+      createTeeBox({
+        id: `${FEATURED_COURSE_ID}-tee-3`,
+        name: "Tee 3",
+        slope: null,
+        rating: null,
+        holes: [
+          createHole(1, 5, 460), createHole(2, 4, 374), createHole(3, 4, 350), createHole(4, 3, 160),
+          createHole(5, 5, 485), createHole(6, 4, 390), createHole(7, 3, 140), createHole(8, 4, 393),
+          createHole(9, 4, 360), createHole(10, 4, 290), createHole(11, 4, 418), createHole(12, 5, 475),
+          createHole(13, 4, 285), createHole(14, 3, 140), createHole(15, 4, 315), createHole(16, 3, 135),
+          createHole(17, 4, 410), createHole(18, 5, 525),
+        ],
+      }),
+      createTeeBox({
+        id: `${FEATURED_COURSE_ID}-tee-4`,
+        name: "Tee 4",
+        slope: null,
+        rating: null,
+        holes: [
+          createHole(1, 5, 423), createHole(2, 4, 317), createHole(3, 4, 290), createHole(4, 3, 113),
+          createHole(5, 5, 455), createHole(6, 4, 343), createHole(7, 3, 112), createHole(8, 4, 336),
+          createHole(9, 4, 318), createHole(10, 4, 241), createHole(11, 4, 390), createHole(12, 5, 435),
+          createHole(13, 4, 271), createHole(14, 3, 94), createHole(15, 4, 275), createHole(16, 3, 101),
+          createHole(17, 4, 357), createHole(18, 5, 445),
+        ],
+      }),
+    ],
+  }),
+  createSeededCourse({
+    id: "the-country-club-brookline",
+    name: "The Country Club",
+    city: "Brookline",
+    state: "MA",
+    region: "Boston / Massachusetts",
+    latitude: 42.3317,
+    longitude: -71.1398,
+    basePars: [4, 4, 4, 3, 5, 4, 4, 4, 4, 4, 3, 4, 4, 4, 5, 3, 4, 4],
+    championshipYards: [425, 392, 471, 151, 548, 179, 373, 392, 458, 502, 131, 482, 440, 465, 625, 171, 437, 443],
+    championshipName: "Championship",
+    championshipSlope: 145,
+    championshipRating: 75.2,
+    memberName: "Member",
+    memberFactor: 0.915,
+    memberSlope: 136,
+    memberRating: 72.1,
+  }),
+  createSeededCourse({
+    id: "granite-links-quincy",
+    name: "Granite Links",
+    city: "Quincy",
+    state: "MA",
+    region: "Boston / Massachusetts",
+    latitude: 42.2281,
+    longitude: -71.0204,
+    basePars: [4, 3, 5, 4, 4, 3, 4, 5, 4, 4, 4, 3, 5, 4, 4, 3, 5, 4],
+    championshipYards: [431, 189, 552, 446, 404, 202, 438, 561, 417, 409, 461, 182, 548, 423, 439, 192, 573, 431],
+    championshipName: "Black",
+    championshipSlope: 142,
+    championshipRating: 74.6,
+    memberName: "Blue",
+    memberFactor: 0.925,
+    memberSlope: 135,
+    memberRating: 71.9,
+  }),
+  createSeededCourse({
+    id: "east-lake-atlanta",
+    name: "East Lake Golf Club",
+    city: "Atlanta",
+    state: "GA",
+    region: "Georgia",
+    latitude: 33.7454,
+    longitude: -84.3184,
+    basePars: [4, 3, 4, 4, 4, 5, 4, 4, 5, 4, 4, 5, 3, 4, 3, 4, 4, 5],
+    championshipYards: [455, 214, 397, 479, 442, 525, 434, 235, 600, 469, 438, 547, 212, 520, 211, 435, 421, 590],
+    championshipName: "Tournament",
+    championshipSlope: 148,
+    championshipRating: 76.1,
+    memberName: "Club",
+    memberFactor: 0.905,
+    memberSlope: 139,
+    memberRating: 72.8,
+  }),
+  createSeededCourse({
+    id: "sea-island-seaside",
+    name: "Sea Island Golf Club - Seaside Course",
+    city: "St. Simons Island",
+    state: "GA",
+    region: "Georgia",
+    latitude: 31.1544,
+    longitude: -81.3916,
+    basePars: [4, 4, 3, 4, 4, 4, 5, 3, 4, 4, 4, 4, 5, 4, 4, 3, 4, 5],
+    championshipYards: [410, 425, 188, 472, 417, 409, 557, 204, 435, 418, 437, 429, 559, 442, 404, 168, 429, 562],
+    championshipName: "Seaside",
+    championshipSlope: 141,
+    championshipRating: 74.5,
+    memberName: "Resort",
+    memberFactor: 0.91,
+    memberSlope: 133,
+    memberRating: 71.3,
+  }),
+  createSeededCourse({
+    id: "tpc-louisiana-avondale",
+    name: "TPC Louisiana",
+    city: "Avondale",
+    state: "LA",
+    region: "Louisiana",
+    latitude: 29.9113,
+    longitude: -90.1896,
+    basePars: [4, 5, 3, 4, 4, 4, 5, 4, 3, 4, 5, 4, 3, 4, 4, 4, 3, 5],
+    championshipYards: [441, 548, 221, 482, 476, 476, 585, 399, 207, 472, 575, 437, 215, 491, 471, 452, 215, 585],
+    championshipName: "Tournament",
+    championshipSlope: 149,
+    championshipRating: 76.4,
+    memberName: "Blue",
+    memberFactor: 0.91,
+    memberSlope: 140,
+    memberRating: 73.2,
+  }),
+  createSeededCourse({
+    id: "english-turn-new-orleans",
+    name: "English Turn Golf & Country Club",
+    city: "New Orleans",
+    state: "LA",
+    region: "Louisiana",
+    latitude: 29.8823,
+    longitude: -89.9488,
+    basePars: [4, 4, 3, 5, 4, 4, 4, 3, 5, 4, 4, 5, 3, 4, 4, 4, 3, 5],
+    championshipYards: [419, 444, 196, 541, 451, 407, 433, 212, 566, 428, 412, 557, 186, 446, 421, 439, 173, 547],
+    championshipName: "Championship",
+    championshipSlope: 143,
+    championshipRating: 74.2,
+    memberName: "Member",
+    memberFactor: 0.918,
+    memberSlope: 135,
+    memberRating: 71.4,
+  }),
+  createSeededCourse({
+    id: "shadow-creek-las-vegas",
+    name: "Shadow Creek Golf Course",
+    city: "North Las Vegas",
+    state: "NV",
+    region: "Las Vegas / Nevada",
+    latitude: 36.2021,
+    longitude: -115.1822,
+    basePars: [4, 4, 5, 3, 4, 4, 5, 3, 4, 4, 4, 5, 3, 4, 4, 3, 5, 4],
+    championshipYards: [439, 489, 577, 209, 462, 443, 589, 196, 448, 471, 460, 576, 235, 460, 457, 183, 622, 454],
+    championshipName: "Back",
+    championshipSlope: 150,
+    championshipRating: 77.1,
+    memberName: "Member",
+    memberFactor: 0.9,
+    memberSlope: 142,
+    memberRating: 73.9,
+  }),
+  createSeededCourse({
+    id: "paiute-wolf-las-vegas",
+    name: "Paiute Golf Resort - Wolf Course",
+    city: "Las Vegas",
+    state: "NV",
+    region: "Las Vegas / Nevada",
+    latitude: 36.3115,
+    longitude: -115.3898,
+    basePars: [4, 4, 3, 5, 4, 4, 5, 3, 4, 4, 5, 4, 3, 4, 4, 3, 5, 4],
+    championshipYards: [478, 471, 210, 603, 463, 442, 604, 241, 430, 458, 576, 485, 236, 494, 448, 193, 604, 468],
+    championshipName: "Wolf",
+    championshipSlope: 154,
+    championshipRating: 78.0,
+    memberName: "Silver",
+    memberFactor: 0.89,
+    memberSlope: 145,
+    memberRating: 74.6,
+  }),
+  createSeededCourse({
+    id: "pebble-beach-california",
+    name: "Pebble Beach Golf Links",
+    city: "Pebble Beach",
+    state: "CA",
+    region: "California",
+    latitude: 36.5683,
+    longitude: -121.9482,
+    basePars: [4, 5, 4, 4, 3, 5, 3, 4, 4, 4, 4, 3, 4, 5, 4, 4, 3, 5],
+    championshipYards: [381, 511, 390, 331, 192, 503, 106, 428, 446, 495, 390, 202, 407, 580, 396, 403, 208, 543],
+    championshipName: "Championship",
+    championshipSlope: 144,
+    championshipRating: 75.5,
+    memberName: "Resort",
+    memberFactor: 0.91,
+    memberSlope: 136,
+    memberRating: 72.4,
+  }),
+  createSeededCourse({
+    id: "torrey-pines-south",
+    name: "Torrey Pines Golf Course - South",
+    city: "La Jolla",
+    state: "CA",
+    region: "California",
+    latitude: 32.9044,
+    longitude: -117.2519,
+    basePars: [4, 4, 3, 4, 4, 5, 4, 3, 5, 4, 3, 4, 5, 4, 4, 3, 4, 5],
+    championshipYards: [454, 389, 198, 488, 454, 564, 462, 177, 615, 454, 225, 505, 614, 437, 480, 227, 443, 570],
+    championshipName: "South Tournament",
+    championshipSlope: 148,
+    championshipRating: 77.7,
+    memberName: "South Blue",
+    memberFactor: 0.9,
+    memberSlope: 140,
+    memberRating: 74.5,
+  }),
+];
+
+function normalizeQuery(value = "") {
+  return String(value || "").trim().toLowerCase();
+}
+
+function createSearchText(course) {
+  return normalizeQuery(`${course.name} ${course.city} ${course.state} ${course.region}`);
+}
+
+function compareCourses(left, right) {
+  if (left.id === FEATURED_COURSE_ID && right.id !== FEATURED_COURSE_ID) {
+    return -1;
+  }
+
+  if (right.id === FEATURED_COURSE_ID && left.id !== FEATURED_COURSE_ID) {
+    return 1;
+  }
+
+  return left.name.localeCompare(right.name);
+}
+
+export function listSeededCourses() {
+  return cloneData(SEEDED_COURSES);
+}
+
+export function findCourseById(courseId) {
+  const found = SEEDED_COURSES.find((course) => course.id === courseId);
+  return found ? cloneData(found) : null;
+}
+
+export function getDefaultTeeBox(course) {
+  return course?.teeBoxes?.[0] ? cloneData(course.teeBoxes[0]) : null;
+}
+
+export function findTeeBox(course, teeBoxId) {
+  if (!course?.teeBoxes?.length) {
+    return null;
+  }
+
+  const found = course.teeBoxes.find((teeBox) => teeBox.id === teeBoxId);
+  return cloneData(found || course.teeBoxes[0]);
+}
+
+export function searchCourseLibrary(query = "") {
+  const normalized = normalizeQuery(query);
+  const courses = SEEDED_COURSES.map((course) => ({
+    ...course,
+    searchText: createSearchText(course),
+  }));
+
+  const filtered = normalized
+    ? courses.filter((course) => course.searchText.includes(normalized))
+    : courses;
+
+  return filtered
+    .sort(compareCourses)
+    .map(({ searchText, ...course }) => cloneData(course));
+}
+
+export function getRoundSetupCourses(query = "", limit = 8) {
+  return searchCourseLibrary(query).slice(0, limit);
+}
+
+export function createManualCourseSelection(courseName = "", teeBox = "") {
+  return {
+    courseId: null,
+    courseName: courseName || "National Pines",
+    teeBoxId: null,
+    teeBoxName: teeBox || "Blue",
+    holes: cloneData(COURSE_TEMPLATE),
+    city: "",
+    state: "",
+    region: "",
+    latitude: null,
+    longitude: null,
+    source: "manual-template",
+    seeded: false,
+    totalPar: COURSE_TEMPLATE.reduce((sum, hole) => sum + hole.par, 0),
+    totalYardage: COURSE_TEMPLATE.reduce((sum, hole) => sum + hole.yards, 0),
+    slope: null,
+    rating: null,
+  };
+}
+
+export function createRoundCourseSelection(courseId, teeBoxId = "") {
+  const course = findCourseById(courseId);
+  if (!course) {
+    return null;
+  }
+
+  const teeBox = findTeeBox(course, teeBoxId);
+  if (!teeBox) {
+    return null;
+  }
+
+  return {
+    courseId: course.id,
+    courseName: course.name,
+    teeBoxId: teeBox.id,
+    teeBoxName: teeBox.name,
+    holes: cloneData(teeBox.holes),
+    city: course.city,
+    state: course.state,
+    region: course.region,
+    latitude: course.latitude,
+    longitude: course.longitude,
+    source: course.source,
+    seeded: Boolean(course.seeded),
+    totalPar: teeBox.totalPar,
+    totalYardage: teeBox.totalYardage,
+    slope: teeBox.slope ?? null,
+    rating: teeBox.rating ?? null,
+  };
+}
+
+```
+
+## `src/services/data-gateway.js`
+
+```js
+import {
+  ensureAccountWorkspace,
+  loadAccountIntoState,
+  prepareStateForPersistence,
+  replaceAccountWorkspace,
+  saveWorkspaceToVault,
+  upsertRemoteAccount,
+} from "./account-service.js";
+import { workspaceHasPendingRoundSync } from "../domain/round-sync.js";
+import { toBackendAccountRecord, toBackendWorkspaceSnapshot } from "./backend-models.js";
+import { loadStoredState, persistState as persistLocalState } from "./storage-service.js";
+
+function getSnapshotUserId(snapshot) {
+  return snapshot.auth?.activeUserId || snapshot.currentUser?.id || null;
+}
+
+export function createLocalDataGateway() {
+  return {
+    mode: "local-device-adapter",
+    backendReady: true,
+    loadInitialState(createDefaultState) {
+      return loadStoredState(createDefaultState);
+    },
+    prepareForPersistence(state) {
+      return prepareStateForPersistence(state);
+    },
+    persist(snapshot) {
+      persistLocalState(snapshot);
+      return snapshot;
+    },
+    saveWorkspace(draft, userId) {
+      saveWorkspaceToVault(draft, userId);
+      return draft;
+    },
+    exportWorkspaceSnapshot(state, userId) {
+      return toBackendWorkspaceSnapshot(state, userId);
+    },
+  };
+}
+
+export function createSupabaseDataGateway({ bridge, fallback = createLocalDataGateway() } = {}) {
+  let syncTimer = null;
+  let pendingSync = null;
+
+  async function writeRemoteSnapshot(snapshot, userId) {
+    if (!bridge?.isConfigured?.() || !userId) {
+      return { status: "skipped" };
+    }
+
+    const account = (snapshot.accounts || []).find((entry) => entry.id === userId) || snapshot.currentUser || null;
+    const workspace = snapshot.accountVault?.[userId] || null;
+
+    if (!account || !workspace) {
+      return { status: "skipped" };
+    }
+
+    const profileResult = await bridge.upsertProfile(toBackendAccountRecord(account));
+    if (profileResult?.error) {
+      return profileResult;
+    }
+
+    const workspaceResult = await bridge.upsertWorkspace(userId, workspace);
+    if (workspaceResult?.error) {
+      return workspaceResult;
+    }
+
+    return { status: "synced" };
+  }
+
+  function scheduleRemoteSync(snapshot, userId = getSnapshotUserId(snapshot)) {
+    if (!bridge?.isConfigured?.() || !userId) {
+      return;
+    }
+
+    pendingSync = {
+      snapshot,
+      userId,
+    };
+
+    if (syncTimer) {
+      return;
+    }
+
+    syncTimer = setTimeout(async () => {
+      const queued = pendingSync;
+      pendingSync = null;
+      syncTimer = null;
+
+      if (!queued) {
+        return;
+      }
+
+      const result = await writeRemoteSnapshot(queued.snapshot, queued.userId);
+      if (result?.error) {
+        console.warn("[Golfers Nation] Supabase workspace sync failed.", result.error);
+      }
+    }, 350);
+  }
+
+  return {
+    mode: "supabase-cloud-adapter",
+    backendReady: true,
+    loadInitialState(createDefaultState) {
+      return fallback.loadInitialState(createDefaultState);
+    },
+    prepareForPersistence(state) {
+      return fallback.prepareForPersistence(state);
+    },
+    persist(snapshot) {
+      fallback.persist(snapshot);
+      scheduleRemoteSync(snapshot);
+      return snapshot;
+    },
+    saveWorkspace(draft, userId) {
+      fallback.saveWorkspace(draft, userId);
+      scheduleRemoteSync(fallback.prepareForPersistence(draft), userId);
+      return draft;
+    },
+    exportWorkspaceSnapshot(state, userId) {
+      return fallback.exportWorkspaceSnapshot(state, userId);
+    },
+    async hydrateAccountAsync(store, userId = store.getState().auth?.activeUserId || store.getState().currentUser?.id) {
+      if (!bridge?.isConfigured?.() || !userId) {
+        return { status: "skipped" };
+      }
+
+      const remote = await bridge.fetchWorkspace(userId);
+      if (remote?.error) {
+        return remote;
+      }
+
+      const currentState = store.getState();
+      const pendingCloudSync = currentState.session?.cloudSync || {};
+      const preserveLocalWorkspace = pendingCloudSync.userId === userId
+        && ["syncing", "failed"].includes(pendingCloudSync.status)
+        || workspaceHasPendingRoundSync({
+          rounds: currentState.rounds,
+        });
+
+      store.setState((draft) => {
+        if (remote.profile) {
+          upsertRemoteAccount(draft, {
+            id: remote.profile.id,
+            displayName: remote.profile.display_name,
+            username: remote.profile.username,
+            email: remote.profile.email,
+            provider: remote.profile.provider,
+            avatarLabel: remote.profile.avatar_label,
+            avatarUrl: remote.profile.avatar_url,
+            city: remote.profile.city,
+            homeCourse: remote.profile.home_course,
+            handicap: typeof remote.profile.handicap === "number" ? remote.profile.handicap : null,
+            bio: remote.profile.bio,
+            seasonGoal: remote.profile.season_goal,
+            createdAt: remote.profile.created_at ? Date.parse(remote.profile.created_at) : Date.now(),
+            tier: remote.profile.subscription_tier || "free",
+            appearance: remote.profile.appearance || {},
+            social: remote.profile.social_settings || {},
+            privacy: remote.profile.privacy || {},
+          });
+        } else {
+          ensureAccountWorkspace(draft, userId);
+        }
+
+        if (preserveLocalWorkspace) {
+          saveWorkspaceToVault(draft, userId);
+        }
+
+        if (remote.workspace && !preserveLocalWorkspace) {
+          replaceAccountWorkspace(draft, userId, remote.workspace);
+        } else {
+          ensureAccountWorkspace(draft, userId);
+        }
+
+        loadAccountIntoState(draft, userId);
+        return draft;
+      }, { reason: "hydrate-supabase-account" });
+
+      let syncWarning = null;
+      if (!remote.workspace || preserveLocalWorkspace) {
+        const bootstrapSync = await this.flushSyncAsync(store.getState(), userId);
+        if (bootstrapSync?.error) {
+          syncWarning = bootstrapSync.error;
+        }
+      }
+
+      return syncWarning
+        ? { status: "ready", syncWarning, preservedLocalWorkspace: preserveLocalWorkspace }
+        : { status: "ready", preservedLocalWorkspace: preserveLocalWorkspace };
+    },
+    async flushSyncAsync(state, userId = getSnapshotUserId(state)) {
+      if (syncTimer) {
+        clearTimeout(syncTimer);
+        syncTimer = null;
+      }
+
+      if (pendingSync && !state) {
+        const queued = pendingSync;
+        pendingSync = null;
+        return writeRemoteSnapshot(queued.snapshot, queued.userId);
+      }
+
+      const prepared = state ? fallback.prepareForPersistence(state) : null;
+      pendingSync = null;
+      return writeRemoteSnapshot(prepared, userId);
+    },
+  };
+}
+
+```
+
+## `src/services/mock-api.js`
+
+```js
+import { CONNECTION_COPY, GAME_MODES } from "../config.js";
+import { createGroup, createRound } from "../domain/factories.js";
+import { ensureProfilesForNames } from "./player-service.js";
+
+const seededRooms = [
+  {
+    inviteCode: "WIND7",
+    title: "Saturday Wind Game",
+    courseName: "Lakeview Downs",
+    weather: "Windy 64F",
+    mode: "stroke",
+    players: [
+      { displayName: "Reese Hall", username: "@reesehall", avatarLabel: "RH" },
+      { displayName: "Maya Chen", username: "@mayachen", avatarLabel: "MC" },
+      { displayName: "Theo Grant", username: "@theogrant", avatarLabel: "TG" },
+    ],
+    distance: "2.8 mi",
+  },
+  {
+    inviteCode: "MATCH9",
+    title: "Twilight Match",
+    courseName: "North Point",
+    weather: "Clear 70F",
+    mode: "match",
+    players: [
+      { displayName: "Jordan Wells", username: "@jordanwells", avatarLabel: "JW" },
+      { displayName: "Parker Cole", username: "@parkercole", avatarLabel: "PC" },
+      { displayName: "Emery Shaw", username: "@emeryshaw", avatarLabel: "ES" },
+      { displayName: "Drew Cain", username: "@drewcain", avatarLabel: "DC" },
+    ],
+    distance: "6.1 mi",
+  },
+  {
+    inviteCode: "SCRAM8",
+    title: "Sunday Scramble",
+    courseName: "Red Cedar Club",
+    weather: "Warm 78F",
+    mode: "scramble",
+    players: [
+      { displayName: "Cameron Vale", username: "@cameronvale", avatarLabel: "CV" },
+      { displayName: "Skye Rivers", username: "@skyerivers", avatarLabel: "SR" },
+      { displayName: "Luca Gray", username: "@lucagray", avatarLabel: "LG" },
+      { displayName: "Noah Kane", username: "@noahkane", avatarLabel: "NK" },
+    ],
+    distance: "9.4 mi",
+  },
+];
+
+function generateInviteCode(existingCodes) {
+  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+
+  while (!code || existingCodes.has(code)) {
+    code = Array.from({ length: 6 }, () => letters[Math.floor(Math.random() * letters.length)]).join("");
+  }
+
+  return code;
+}
+
+export function hostRoundGroup({ state, round }) {
+  const existingCodes = new Set(state.groups.map((group) => group.inviteCode));
+  const inviteCode = generateInviteCode(existingCodes);
+  const group = createGroup({
+    round,
+    currentUser: state.currentUser,
+    inviteCode,
+    transport: "invite",
+    status: "hosting",
+  });
+
+  return { inviteCode, group };
+}
+
+export function joinByInviteCode({ code, state }) {
+  const normalized = String(code || "").trim().toUpperCase();
+  if (!normalized) {
+    return null;
+  }
+
+  const localGroup = state.groups.find((group) => group.inviteCode === normalized);
+  if (localGroup) {
+    const round = state.rounds.find((item) => item.id === localGroup.roundId);
+    return {
+      source: "local",
+      group: localGroup,
+      round,
+      notice: `Joined ${localGroup.title} from local device storage.`,
+    };
+  }
+
+  const seeded = seededRooms.find((room) => room.inviteCode === normalized);
+  if (!seeded) {
+    return null;
+  }
+
+  const remoteRound = createRound({
+    currentUser: state.currentUser,
+    courseName: seeded.courseName,
+    teeBox: "Blue",
+    weather: seeded.weather,
+    mode: seeded.mode,
+    players: ensureProfilesForNames(state, [state.currentUser.displayName || state.currentUser.name, ...seeded.players]),
+    syncTransport: "cloud",
+  });
+  remoteRound.inviteCode = seeded.inviteCode;
+  remoteRound.sync = {
+    state: "connected",
+    transport: "cloud",
+    label: CONNECTION_COPY.cloud,
+    lastEventAt: Date.now(),
+    note: "Joined devices keep their own safe local card even if the original host leaves.",
+    hostRequired: false,
+    hostOptional: true,
+    saveState: "saved-local",
+    pendingActionCount: 0,
+    lastLocalSaveAt: Date.now(),
+    lastSyncedAt: 0,
+    lastSyncError: "",
+    conflictStrategy: "latest-write-wins",
+  };
+
+  const group = createGroup({
+    round: remoteRound,
+    currentUser: state.currentUser,
+    inviteCode: seeded.inviteCode,
+    transport: "cloud",
+    status: "joined",
+  });
+  group.title = seeded.title;
+  group.members.forEach((member) => {
+    member.connectionState = member.role === "host" ? "connected" : "connected";
+  });
+
+  return {
+    source: "seeded",
+    group,
+    round: remoteRound,
+    notice: `Joined ${seeded.title} via invite code.`,
+  };
+}
+
+export function listNearbyGames(state) {
+  const localCards = state.groups
+    .map((group) => {
+      const round = state.rounds.find((item) => item.id === group.roundId);
+      if (!round || round.status !== "active") {
+        return null;
+      }
+
+      return {
+        inviteCode: group.inviteCode,
+        title: group.title,
+        courseName: round.courseName,
+        modeLabel: GAME_MODES[round.mode].label,
+        transport: CONNECTION_COPY[group.transport] || CONNECTION_COPY.invite,
+        distance: "On device",
+        source: "local",
+      };
+    })
+    .filter(Boolean);
+
+  const seededCards = seededRooms.map((room) => ({
+    inviteCode: room.inviteCode,
+    title: room.title,
+    courseName: room.courseName,
+    modeLabel: GAME_MODES[room.mode].label,
+    transport: CONNECTION_COPY.cloud,
+    distance: room.distance,
+    source: "seeded",
+  }));
+
+  return [...localCards, ...seededCards];
+}
+
+export function getGearRecommendations(weather) {
+  const lower = String(weather || "").toLowerCase();
+  const recommendations = [
+    "Rangefinder",
+    "Alignment sticks",
+    "Microfiber towel",
+  ];
+
+  if (lower.includes("wind")) {
+    recommendations.push("Wind shell", "Low-spin ball sleeve");
+  }
+
+  if (lower.includes("rain")) {
+    recommendations.push("Rain gloves", "Umbrella");
+  }
+
+  if (lower.includes("cold")) {
+    recommendations.push("Quarter zip", "Hand warmers");
+  }
+
+  if (lower.includes("warm") || lower.includes("hot")) {
+    recommendations.push("Cooling polo", "Electrolyte bottle");
+  }
+
+  return recommendations;
+}
+
+```
+
+## `src/services/player-service.js`
+
+```js
+import { createPlayerProfile } from "../domain/factories.js";
+import {
+  buildPerformanceInsights,
+  calculateHandicapScaffold,
+  getParticipantTotals,
+  getRecentTrend,
+} from "../domain/scoring.js";
+import { average } from "../utils/formatters.js";
+
+function avatarFromName(displayName) {
+  return String(displayName || "")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || "GN";
+}
+
+function normalizeUsername(displayName) {
+  const base = String(displayName || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 18);
+  return base ? `@${base}` : "@golfer";
+}
+
+function percentage(value, total) {
+  return total ? Math.round((value / total) * 100) : 0;
+}
+
+function roundValue(value, digits = 1) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Number(value.toFixed(digits))
+    : null;
+}
+
+function createEmptyParType(par) {
+  return {
+    par,
+    holes: 0,
+    totalStrokes: 0,
+    totalPar: 0,
+    averageScore: null,
+    toPar: 0,
+  };
+}
+
+function mergeParTypeScoring(collection) {
+  const merged = {
+    3: createEmptyParType(3),
+    4: createEmptyParType(4),
+    5: createEmptyParType(5),
+  };
+
+  collection.forEach((entry) => {
+    [3, 4, 5].forEach((par) => {
+      const source = entry?.[par];
+      if (!source) {
+        return;
+      }
+
+      merged[par].holes += source.holes || 0;
+      merged[par].totalStrokes += source.totalStrokes || 0;
+      merged[par].totalPar += source.totalPar || 0;
+    });
+  });
+
+  [3, 4, 5].forEach((par) => {
+    const bucket = merged[par];
+    bucket.averageScore = bucket.holes ? roundValue(bucket.totalStrokes / bucket.holes, 2) : null;
+    bucket.toPar = bucket.totalStrokes - bucket.totalPar;
+  });
+
+  return merged;
+}
+
+function buildRecentFormSummary(recentForm) {
+  return recentForm.length
+    ? `${recentForm[0].courseName} ${recentForm[0].toPar > 0 ? `+${recentForm[0].toPar}` : recentForm[0].toPar}`
+    : "First round pending";
+}
+
+function getScoringParticipantId(round, profileId) {
+  const player = round.players.find((entry) => entry.profileId === profileId);
+  if (!player) {
+    return null;
+  }
+
+  if (round.mode === "stroke") {
+    return player.id;
+  }
+
+  return round.sides.find((side) => side.playerIds.includes(player.id))?.id || null;
+}
+
+function mergeWithStoredProfileStats(profile, derivedStats, currentUserId) {
+  const stored = profile?.publicProfile || {};
+  const preferStored = Boolean(
+    profile
+    && profile.userId !== currentUserId
+    && (stored.roundsPlayed || 0) > (derivedStats.roundsPlayed || 0)
+  );
+
+  if (preferStored) {
+    return {
+      ...derivedStats,
+      roundsPlayed: stored.roundsPlayed ?? derivedStats.roundsPlayed,
+      averageScore: stored.averageScore ?? derivedStats.averageScore,
+      bestRound: stored.bestRound ?? derivedStats.bestRound,
+      recentFormSummary: stored.recentFormSummary || derivedStats.recentFormSummary,
+      fairwayPercentage: stored.fairwayPercentage ?? derivedStats.fairwayPercentage,
+      girPercentage: stored.girPercentage ?? derivedStats.girPercentage,
+      averagePutts: stored.averagePutts ?? derivedStats.averagePutts,
+      penaltiesAverage: stored.penaltiesAverage ?? derivedStats.penaltiesAverage,
+      upAndDownRate: stored.upAndDownRate ?? derivedStats.upAndDownRate,
+      sandSaveCount: stored.sandSaveCount ?? derivedStats.sandSaveCount,
+      scoringByParType: stored.scoringByParType || derivedStats.scoringByParType,
+      hardestHoles: stored.hardestHoles?.length ? stored.hardestHoles : derivedStats.hardestHoles,
+      bestHoles: stored.bestHoles?.length ? stored.bestHoles : derivedStats.bestHoles,
+      strokesGained: stored.strokesGained || derivedStats.strokesGained,
+      formLabel: stored.formLabel || derivedStats.formLabel,
+      trendSummary: stored.trendSummary || derivedStats.trendSummary,
+      handicapIndex: stored.handicapIndex ?? derivedStats.handicapIndex,
+      smartInsights: stored.smartInsights?.length ? stored.smartInsights : derivedStats.smartInsights,
+      recentForm: stored.recentForm?.length ? stored.recentForm : derivedStats.recentForm,
+    };
+  }
+
+  return {
+    ...derivedStats,
+    fairwayPercentage: derivedStats.fairwayPercentage ?? stored.fairwayPercentage ?? 0,
+    girPercentage: derivedStats.girPercentage ?? stored.girPercentage ?? 0,
+    averagePutts: derivedStats.averagePutts ?? stored.averagePutts ?? null,
+    penaltiesAverage: derivedStats.penaltiesAverage ?? stored.penaltiesAverage ?? 0,
+    upAndDownRate: derivedStats.upAndDownRate ?? stored.upAndDownRate ?? 0,
+    sandSaveCount: derivedStats.sandSaveCount ?? stored.sandSaveCount ?? 0,
+    scoringByParType: derivedStats.scoringByParType || stored.scoringByParType || {},
+    hardestHoles: derivedStats.hardestHoles?.length ? derivedStats.hardestHoles : (stored.hardestHoles || []),
+    bestHoles: derivedStats.bestHoles?.length ? derivedStats.bestHoles : (stored.bestHoles || []),
+    strokesGained: derivedStats.strokesGained || stored.strokesGained || null,
+    formLabel: derivedStats.formLabel || stored.formLabel || "Stable",
+    trendSummary: derivedStats.trendSummary || stored.trendSummary || "Building a trend",
+    handicapIndex: derivedStats.handicapIndex ?? stored.handicapIndex ?? null,
+    smartInsights: derivedStats.smartInsights?.length ? derivedStats.smartInsights : (stored.smartInsights || []),
+  };
+}
+
+function buildDerivedStatsFromAppearances(appearances) {
+  const totalFairwaysHit = appearances.reduce((sum, entry) => sum + entry.fairwaysHit, 0);
+  const totalFairwayOpportunities = appearances.reduce((sum, entry) => sum + entry.fairwayOpportunities, 0);
+  const totalGreensHit = appearances.reduce((sum, entry) => sum + entry.greensHit, 0);
+  const totalGirOpportunities = appearances.reduce((sum, entry) => sum + entry.girOpportunities, 0);
+  const totalPutts = appearances.reduce((sum, entry) => sum + entry.totalPutts, 0);
+  const totalPlayedHoles = appearances.reduce((sum, entry) => sum + entry.holesPlayed, 0);
+  const totalPenalties = appearances.reduce((sum, entry) => sum + entry.totalPenalties, 0);
+  const totalUpAndDowns = appearances.reduce((sum, entry) => sum + entry.upAndDownSuccesses, 0);
+  const totalUpAndDownOpportunities = appearances.reduce((sum, entry) => sum + entry.upAndDownOpportunities, 0);
+  const totalSandSaves = appearances.reduce((sum, entry) => sum + entry.sandSaveCount, 0);
+  const scoringByParType = mergeParTypeScoring(appearances.map((entry) => entry.scoringByParType));
+  const holeMap = new Map();
+
+  appearances.forEach((entry) => {
+    (entry.holeDetails || []).forEach((hole) => {
+      const existing = holeMap.get(hole.holeNumber) || {
+        holeNumber: hole.holeNumber,
+        par: hole.par,
+        rounds: 0,
+        totalToPar: 0,
+        totalStrokes: 0,
+      };
+      existing.rounds += 1;
+      existing.totalToPar += hole.toPar;
+      existing.totalStrokes += hole.strokes;
+      holeMap.set(hole.holeNumber, existing);
+    });
+  });
+  const recentTrend = getRecentTrend(appearances.map((entry) => ({
+    totalStrokes: entry.totalStrokes,
+  })));
+  const handicapIndex = calculateHandicapScaffold(appearances.map((entry) => ({
+    totalStrokes: entry.totalStrokes,
+    totalPar: entry.totalPar,
+  })));
+  const recentForm = appearances.slice(0, 3).map((entry) => ({
+    roundId: entry.roundId,
+    courseName: entry.courseName,
+    totalStrokes: entry.totalStrokes,
+    toPar: entry.toPar,
+    completedAt: entry.completedAt,
+  }));
+  const hardestHoles = [...holeMap.values()]
+    .map((entry) => ({
+      holeNumber: entry.holeNumber,
+      par: entry.par,
+      averageScore: roundValue(entry.totalStrokes / entry.rounds, 2),
+      averageToPar: roundValue(entry.totalToPar / entry.rounds, 2),
+      rounds: entry.rounds,
+    }))
+    .sort((left, right) => (right.averageToPar ?? -999) - (left.averageToPar ?? -999) || left.holeNumber - right.holeNumber)
+    .slice(0, 3);
+  const bestHoles = [...holeMap.values()]
+    .map((entry) => ({
+      holeNumber: entry.holeNumber,
+      par: entry.par,
+      averageScore: roundValue(entry.totalStrokes / entry.rounds, 2),
+      averageToPar: roundValue(entry.totalToPar / entry.rounds, 2),
+      rounds: entry.rounds,
+    }))
+    .sort((left, right) => (left.averageToPar ?? 999) - (right.averageToPar ?? 999) || left.holeNumber - right.holeNumber)
+    .slice(0, 3);
+  const strokesGained = ["driving", "approach", "putting"].reduce((result, key) => {
+    const values = appearances
+      .map((entry) => entry.strokesGained?.[key]?.value)
+      .filter((value) => typeof value === "number");
+    const averageValue = values.length ? roundValue(average(values), 1) || 0 : 0;
+    result[key] = {
+      value: averageValue,
+      label: averageValue >= 0.6 ? "Gaining" : averageValue <= -0.6 ? "Losing" : "Neutral",
+    };
+    return result;
+  }, {});
+  const rankedGains = Object.entries(strokesGained).sort((left, right) => right[1].value - left[1].value);
+
+  const derived = {
+    roundsPlayed: appearances.length,
+    averageScore: average(appearances.map((entry) => entry.totalStrokes).filter(Boolean)),
+    bestRound: appearances.length ? Math.min(...appearances.map((entry) => entry.totalStrokes).filter(Boolean)) : null,
+    recentForm,
+    recentFormSummary: buildRecentFormSummary(recentForm),
+    fairwayPercentage: percentage(totalFairwaysHit, totalFairwayOpportunities),
+    girPercentage: percentage(totalGreensHit, totalGirOpportunities),
+    averagePutts: totalPlayedHoles ? roundValue(totalPutts / totalPlayedHoles, 2) : null,
+    penaltiesAverage: appearances.length ? roundValue(totalPenalties / appearances.length, 2) : 0,
+    upAndDownRate: percentage(totalUpAndDowns, totalUpAndDownOpportunities),
+    sandSaveCount: totalSandSaves,
+    scoringByParType,
+    hardestHoles,
+    bestHoles,
+    recentTrend,
+    formLabel: recentTrend.label,
+    trendSummary: recentTrend.summary,
+    handicapIndex,
+    strokesGained: {
+      ...strokesGained,
+      total: roundValue(
+        (strokesGained.driving?.value || 0)
+        + (strokesGained.approach?.value || 0)
+        + (strokesGained.putting?.value || 0),
+        1
+      ) || 0,
+      bestCategory: rankedGains[0]?.[0] || "driving",
+      weakestCategory: rankedGains[rankedGains.length - 1]?.[0] || "putting",
+    },
+  };
+
+  return {
+    ...derived,
+    smartInsights: buildPerformanceInsights({
+      fairwayPercentage: derived.fairwayPercentage,
+      girPercentage: derived.girPercentage,
+      averagePutts: derived.averagePutts,
+      penaltiesAverage: derived.penaltiesAverage,
+      upAndDownRate: derived.upAndDownRate,
+      scoringByParType: derived.scoringByParType,
+      hardestHoles: derived.hardestHoles,
+      recentTrend: derived.recentTrend,
+      formLabel: derived.formLabel,
+      strokesGained: derived.strokesGained,
+    }),
+  };
+}
+
+export function getProfileById(state, profileId) {
+  return state.profiles?.find((profile) => profile.id === profileId) || null;
+}
+
+export function getCurrentProfile(state) {
+  return getProfileById(state, state.currentUser.profileId);
+}
+
+export function getProfileForPlayer(state, player) {
+  return player?.profileId ? getProfileById(state, player.profileId) : null;
+}
+
+export function buildProfileRoundStats(state, profileId) {
+  const profile = getProfileById(state, profileId);
+  const appearances = state.rounds
+    .filter((round) => round.status === "completed")
+    .map((round) => {
+      const participantId = getScoringParticipantId(round, profileId);
+      if (!participantId) {
+        return null;
+      }
+
+      const totals = getParticipantTotals(round, participantId);
+      return {
+        roundId: round.id,
+        courseName: round.courseName,
+        completedAt: round.completedAt || round.updatedAt || round.createdAt,
+        totalStrokes: totals.totalStrokes,
+        totalPar: totals.totalPar,
+        toPar: totals.toPar,
+        fairwaysHit: totals.fairwaysHit,
+        fairwayOpportunities: totals.fairwayOpportunities,
+        greensHit: totals.greensHit,
+        girOpportunities: totals.girOpportunities,
+        totalPutts: totals.totalPutts,
+        holesPlayed: totals.holesPlayed,
+        totalPenalties: totals.totalPenalties,
+        upAndDownSuccesses: totals.upAndDownSuccesses,
+        upAndDownOpportunities: totals.upAndDownOpportunities,
+        sandSaveCount: totals.sandSaveCount,
+        scoringByParType: totals.scoringByParType,
+        holeDetails: totals.holeDetails,
+        strokesGained: totals.strokesGained,
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => (right.completedAt || 0) - (left.completedAt || 0));
+
+  const derived = buildDerivedStatsFromAppearances(appearances);
+  return profile ? mergeWithStoredProfileStats(profile, derived, state.currentUser.id) : derived;
+}
+
+export function buildCompetitivePreview(state, profileId, opponentProfileId = null) {
+  const profile = getProfileById(state, profileId);
+  if (!profile) {
+    return null;
+  }
+
+  const stats = buildProfileRoundStats(state, profileId);
+  const headToHeadRounds = opponentProfileId
+    ? state.rounds.filter((round) => {
+        const profileIds = new Set(round.players.map((player) => player.profileId));
+        return profileIds.has(profileId) && profileIds.has(opponentProfileId);
+      }).length
+    : 0;
+
+  return {
+    profileId: profile.id,
+    displayName: profile.publicProfile.displayName,
+    username: profile.publicProfile.username,
+    avatarLabel: profile.publicProfile.avatarLabel,
+    roundsPlayed: stats.roundsPlayed,
+    averageScore: stats.averageScore,
+    bestRound: stats.bestRound,
+    recentFormSummary: stats.recentFormSummary,
+    recentForm: profile.privateProfile.privacy.showRecentForm ? stats.recentForm : [],
+    fairwayPercentage: stats.fairwayPercentage,
+    girPercentage: stats.girPercentage,
+    averagePutts: stats.averagePutts,
+    penaltiesAverage: stats.penaltiesAverage,
+    upAndDownRate: stats.upAndDownRate,
+    sandSaveCount: stats.sandSaveCount,
+    scoringByParType: stats.scoringByParType,
+    hardestHoles: stats.hardestHoles,
+    bestHoles: stats.bestHoles,
+    strokesGained: stats.strokesGained,
+    formLabel: stats.formLabel,
+    trendSummary: stats.trendSummary,
+    handicapIndex: profile.privateProfile.privacy.showHandicap ? stats.handicapIndex : null,
+    smartInsights: stats.smartInsights,
+    headToHeadLabel: opponentProfileId
+      ? `${headToHeadRounds} shared rounds tracked`
+      : "Head-to-head comparison ready",
+    homeCourse: profile.privateProfile.privacy.showHomeCourse ? profile.publicProfile.homeCourse : "",
+    handicap: profile.privateProfile.privacy.showHandicap ? profile.publicProfile.handicap : null,
+    bio: profile.privateProfile.privacy.showBio ? profile.publicProfile.bio : "",
+  };
+}
+
+export function buildPlayerComparison(state, leftProfileId, rightProfileId) {
+  const left = buildCompetitivePreview(state, leftProfileId, rightProfileId);
+  const right = buildCompetitivePreview(state, rightProfileId, leftProfileId);
+
+  if (!left || !right) {
+    return null;
+  }
+
+  return {
+    left,
+    right,
+    metricRows: [
+      {
+        label: "Average score",
+        left: left.averageScore,
+        right: right.averageScore,
+      },
+      {
+        label: "Fairways",
+        left: left.fairwayPercentage,
+        right: right.fairwayPercentage,
+      },
+      {
+        label: "GIR",
+        left: left.girPercentage,
+        right: right.girPercentage,
+      },
+      {
+        label: "Putts",
+        left: left.averagePutts,
+        right: right.averagePutts,
+      },
+      {
+        label: "Form",
+        left: left.formLabel,
+        right: right.formLabel,
+      },
+      {
+        label: "Driving",
+        left: left.strokesGained?.driving?.value,
+        right: right.strokesGained?.driving?.value,
+      },
+    ],
+  };
+}
+
+export function syncCurrentUserProfile(draft) {
+  const existing = draft.profiles.find((profile) => profile.id === draft.currentUser.profileId);
+  const payload = {
+    userId: draft.currentUser.id,
+    displayName: draft.currentUser.displayName || draft.currentUser.name,
+    username: draft.currentUser.username,
+    avatarLabel: draft.currentUser.avatarLabel || draft.currentUser.avatar || avatarFromName(draft.currentUser.name),
+    email: draft.currentUser.email || "",
+    homeCourse: draft.currentUser.homeCourse || "",
+    handicap: draft.currentUser.handicap ?? null,
+    bio: draft.currentUser.bio || "",
+    createdAt: draft.currentUser.createdAt,
+    premiumStatus: draft.currentUser.subscription?.tier || draft.currentUser.premiumStatus || "free",
+    privacy: draft.currentUser.privacy || {},
+  };
+
+  const stats = buildProfileRoundStats(draft, draft.currentUser.profileId);
+
+  if (!existing) {
+    const profile = createPlayerProfile({
+      ...payload,
+      publicStats: stats,
+      recentForm: stats.recentForm,
+    });
+    profile.id = draft.currentUser.profileId;
+    profile.account.authProviders = [...(draft.auth?.linkedProviders || [])];
+    draft.profiles.unshift(profile);
+    return profile;
+  }
+
+  existing.userId = draft.currentUser.id;
+  existing.displayName = payload.displayName;
+  existing.username = payload.username.startsWith("@") ? payload.username : `@${payload.username}`;
+  existing.avatarLabel = payload.avatarLabel;
+  existing.account = {
+    ...existing.account,
+    email: payload.email,
+    createdAt: payload.createdAt,
+    premiumStatus: payload.premiumStatus,
+    authProviders: [...(draft.auth?.linkedProviders || [])],
+  };
+  existing.privateProfile = {
+    ...existing.privateProfile,
+    homeCourse: payload.homeCourse,
+    handicap: payload.handicap,
+    bio: payload.bio,
+    privacy: {
+      ...existing.privateProfile.privacy,
+      ...(draft.currentUser.privacy || {}),
+    },
+  };
+  existing.publicProfile = {
+    ...existing.publicProfile,
+    displayName: payload.displayName,
+    username: payload.username.startsWith("@") ? payload.username : `@${payload.username}`,
+    avatarLabel: payload.avatarLabel,
+    homeCourse: payload.homeCourse,
+    handicap: payload.handicap,
+    bio: payload.bio,
+    roundsPlayed: stats.roundsPlayed,
+    averageScore: stats.averageScore,
+    bestRound: stats.bestRound,
+    recentFormSummary: stats.recentFormSummary,
+    fairwayPercentage: stats.fairwayPercentage,
+    girPercentage: stats.girPercentage,
+    averagePutts: stats.averagePutts,
+    penaltiesAverage: stats.penaltiesAverage,
+    upAndDownRate: stats.upAndDownRate,
+    sandSaveCount: stats.sandSaveCount,
+    scoringByParType: stats.scoringByParType,
+    hardestHoles: stats.hardestHoles,
+    bestHoles: stats.bestHoles,
+    strokesGained: stats.strokesGained,
+    formLabel: stats.formLabel,
+    trendSummary: stats.trendSummary,
+    handicapIndex: stats.handicapIndex,
+    smartInsights: stats.smartInsights,
+    recentForm: stats.recentForm,
+  };
+  existing.updatedAt = Date.now();
+  return existing;
+}
+
+export function ensureProfilesForNames(draft, players) {
+  return players.map((player) => {
+    const displayName = String(player?.displayName || player?.name || player || "").trim();
+    const currentDisplayName = draft.currentUser.displayName || draft.currentUser.name;
+
+    if (displayName.toLowerCase() === currentDisplayName.toLowerCase()) {
+      return {
+        profileId: draft.currentUser.profileId,
+        userId: draft.currentUser.id,
+        displayName: currentDisplayName,
+        username: draft.currentUser.username,
+        avatarLabel: draft.currentUser.avatarLabel || draft.currentUser.avatar || avatarFromName(currentDisplayName),
+      };
+    }
+
+    const existing = draft.profiles.find((profile) =>
+      profile.publicProfile.displayName.toLowerCase() === displayName.toLowerCase()
+      || profile.publicProfile.username.toLowerCase() === String(player?.username || normalizeUsername(displayName)).toLowerCase()
+    );
+
+    if (existing) {
+      return {
+        profileId: existing.id,
+        userId: existing.userId,
+        displayName: existing.publicProfile.displayName,
+        username: existing.publicProfile.username,
+        avatarLabel: existing.publicProfile.avatarLabel,
+      };
+    }
+
+    const created = createPlayerProfile({
+      displayName,
+      username: player?.username || normalizeUsername(displayName),
+      avatarLabel: player?.avatarLabel || player?.avatar || avatarFromName(displayName),
+      bio: "Competitive profile ready for shared rounds and stats.",
+      privacy: {
+        showHomeCourse: false,
+        showHandicap: false,
+        showBio: true,
+        showRecentForm: true,
+      },
+    });
+    draft.profiles.push(created);
+
+    return {
+      profileId: created.id,
+      userId: created.userId,
+      displayName: created.publicProfile.displayName,
+      username: created.publicProfile.username,
+      avatarLabel: created.publicProfile.avatarLabel,
+    };
+  });
+}
+
+export function refreshProfileSnapshots(draft) {
+  draft.profiles.forEach((profile) => {
+    const stats = buildProfileRoundStats(draft, profile.id);
+    profile.publicProfile = {
+      ...profile.publicProfile,
+      roundsPlayed: stats.roundsPlayed,
+      averageScore: stats.averageScore,
+      bestRound: stats.bestRound,
+      recentFormSummary: stats.recentFormSummary,
+      fairwayPercentage: stats.fairwayPercentage,
+      girPercentage: stats.girPercentage,
+      averagePutts: stats.averagePutts,
+      penaltiesAverage: stats.penaltiesAverage,
+      upAndDownRate: stats.upAndDownRate,
+      sandSaveCount: stats.sandSaveCount,
+      scoringByParType: stats.scoringByParType,
+      hardestHoles: stats.hardestHoles,
+      bestHoles: stats.bestHoles,
+      strokesGained: stats.strokesGained,
+      formLabel: stats.formLabel,
+      trendSummary: stats.trendSummary,
+      handicapIndex: stats.handicapIndex,
+      smartInsights: stats.smartInsights,
+      recentForm: profile.privateProfile.privacy.showRecentForm ? stats.recentForm : [],
+    };
+    profile.account = {
+      ...profile.account,
+      premiumStatus: profile.userId === draft.currentUser.id
+        ? draft.currentUser.subscription?.tier || draft.currentUser.premiumStatus || "free"
+        : profile.account.premiumStatus || "free",
+    };
+    profile.updatedAt = Date.now();
+  });
+}
+
+```
+
+## `src/services/product-platform.js`
+
+```js
+import { createLocalAuthGateway, createSupabaseAuthGateway } from "./auth-gateway.js";
+import { createLocalDataGateway, createSupabaseDataGateway } from "./data-gateway.js";
+import { createLocalRealtimeGatewayFactory } from "./realtime-gateway.js";
+import { getRuntimeConfig, hasSupabaseRuntimeConfig } from "./runtime-config.js";
+import { createSupabaseRestBridge } from "./supabase-rest.js";
+
+export function createProductPlatform({
+  auth = null,
+  data = null,
+  realtime = createLocalRealtimeGatewayFactory(),
+} = {}) {
+  const runtimeConfig = getRuntimeConfig();
+  const localAuth = createLocalAuthGateway();
+  const localData = createLocalDataGateway();
+  const supabaseBridge = hasSupabaseRuntimeConfig(runtimeConfig)
+    ? createSupabaseRestBridge({ config: runtimeConfig })
+    : null;
+  const resolvedAuth = auth || (supabaseBridge ? createSupabaseAuthGateway({ bridge: supabaseBridge, fallback: localAuth }) : localAuth);
+  const resolvedData = data || (supabaseBridge ? createSupabaseDataGateway({ bridge: supabaseBridge, fallback: localData }) : localData);
+
+  return {
+    auth: resolvedAuth,
+    data: resolvedData,
+    realtime,
+    capabilities: {
+      authMode: resolvedAuth.mode,
+      dataMode: resolvedData.mode,
+      realtimeMode: realtime.mode,
+      backendReady: Boolean(resolvedAuth.backendReady && resolvedData.backendReady && realtime.backendReady),
+      supabaseEnabled: Boolean(supabaseBridge?.isConfigured?.()),
+    },
+  };
+}
+
+```
+
+## `src/services/realtime-gateway.js`
+
+```js
+import { createSyncService } from "./sync-service.js";
+
+export function createLocalRealtimeGatewayFactory() {
+  return {
+    mode: "device-realtime-adapter",
+    backendReady: true,
+    createSession({ store }) {
+      const service = createSyncService({ store });
+
+      return {
+        mode: "device-realtime-session",
+        connect() {
+          service.init();
+        },
+        disconnect() {
+          service.teardown();
+        },
+        publishRoundUpdate(roundId) {
+          service.notifyRoundUpdated(roundId);
+        },
+        enableNearbySync(roundId) {
+          service.enableNearbyPrototype(roundId);
+        },
+        enableBluetoothSync(roundId) {
+          return service.tryBluetoothPrototype(roundId);
+        },
+        updateTransport(roundId, transport, stateLabel) {
+          service.updateTransport(roundId, transport, stateLabel);
+        },
+      };
+    },
+  };
+}
+
+```
+
+## `src/services/runtime-config.js`
+
+```js
+import { RUNTIME_CONFIG_GLOBAL } from "../config.js";
+
+function getGlobalRuntimeConfig() {
+  if (typeof window !== "undefined" && window[RUNTIME_CONFIG_GLOBAL]) {
+    return window[RUNTIME_CONFIG_GLOBAL];
+  }
+
+  if (typeof globalThis !== "undefined" && globalThis[RUNTIME_CONFIG_GLOBAL]) {
+    return globalThis[RUNTIME_CONFIG_GLOBAL];
+  }
+
+  return {};
+}
+
+export function getRuntimeConfig() {
+  const runtime = getGlobalRuntimeConfig();
+
+  return {
+    supabaseUrl: String(runtime.supabaseUrl || runtime.SUPABASE_URL || "").trim(),
+    supabaseAnonKey: String(runtime.supabaseAnonKey || runtime.SUPABASE_ANON_KEY || "").trim(),
+    supabaseResetRedirectUrl: String(runtime.supabaseResetRedirectUrl || runtime.SUPABASE_RESET_REDIRECT_URL || "").trim(),
+    siteUrl: String(runtime.siteUrl || runtime.SITE_URL || "").trim(),
+  };
+}
+
+export function hasSupabaseRuntimeConfig(config = getRuntimeConfig()) {
+  return Boolean(config.supabaseUrl && config.supabaseAnonKey);
+}
+
+```
+
+## `src/services/storage-service.js`
+
+```js
+import { STORAGE_KEY } from "../config.js";
+import { cloneData } from "../utils/formatters.js";
+
+function getAvailableStorage() {
+  try {
+    if (typeof localStorage === "undefined") {
+      return null;
+    }
+
+    return localStorage;
+  } catch (error) {
+    console.warn("[Golfers Nation] Local storage is unavailable.", error);
+    return null;
+  }
+}
+
+export function loadStoredState(createDefaultState) {
+  const fallback = createDefaultState();
+  const storage = getAvailableStorage();
+  if (!storage) {
+    return fallback;
+  }
+
+  try {
+    const saved = storage.getItem(STORAGE_KEY);
+    if (!saved) {
+      return fallback;
+    }
+
+    const parsed = JSON.parse(saved);
+    // Merge a few nested shells explicitly so future billing/profile fields can be
+    // added without breaking older locally stored payloads.
+    return {
+      ...cloneData(fallback),
+      ...parsed,
+      session: {
+        ...fallback.session,
+        ...parsed.session,
+        cloudSync: {
+          ...(fallback.session?.cloudSync || {}),
+          ...(parsed.session?.cloudSync || {}),
+        },
+      },
+      auth: { ...(fallback.auth || {}), ...(parsed.auth || {}) },
+      social: { ...fallback.social, ...parsed.social },
+      gear: { ...fallback.gear, ...parsed.gear },
+      currentUser: {
+        ...fallback.currentUser,
+        ...parsed.currentUser,
+        privacy: {
+          ...(fallback.currentUser?.privacy || {}),
+          ...(parsed.currentUser?.privacy || {}),
+        },
+        appearance: {
+          ...(fallback.currentUser?.appearance || {}),
+          ...(parsed.currentUser?.appearance || {}),
+        },
+        social: {
+          ...(fallback.currentUser?.social || {}),
+          ...(parsed.currentUser?.social || {}),
+          handles: {
+            ...(fallback.currentUser?.social?.handles || {}),
+            ...(parsed.currentUser?.social?.handles || {}),
+          },
+        },
+        subscription: {
+          ...(fallback.currentUser?.subscription || {}),
+          ...(parsed.currentUser?.subscription || {}),
+        },
+      },
+    };
+  } catch (error) {
+    return fallback;
+  }
+}
+
+export function persistState(state) {
+  const storage = getAvailableStorage();
+  if (!storage) {
+    return false;
+  }
+
+  try {
+    storage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return true;
+  } catch (error) {
+    console.warn("[Golfers Nation] State persistence failed.", error);
+    return false;
+  }
+}
+
+```
+
+## `src/services/supabase-rest.js`
+
+```js
+import { SUPABASE_SESSION_STORAGE_KEY } from "../config.js";
+
+function getBrowserStorage(storageOverride = null) {
+  if (storageOverride) {
+    return storageOverride;
+  }
+
+  try {
+    if (typeof localStorage === "undefined") {
+      return null;
+    }
+
+    return localStorage;
+  } catch (error) {
+    console.warn("[Golfers Nation] Supabase session storage is unavailable.", error);
+    return null;
+  }
+}
+
+function normalizeUrl(value = "") {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function parseJsonSafely(text) {
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    return null;
+  }
+}
+
+function normalizeError(payload, response) {
+  return {
+    status: response?.status || 0,
+    message: payload?.msg || payload?.message || payload?.error_description || payload?.error || "Request failed.",
+    code: payload?.code || payload?.error || "",
+  };
+}
+
+function normalizeSessionPayload(payload) {
+  const source = payload?.session || payload || null;
+  const user = payload?.user || source?.user || null;
+
+  if (!source || (!source.access_token && !source.refresh_token)) {
+    return {
+      session: null,
+      user,
+    };
+  }
+
+  const expiresAt = source.expires_at
+    || (source.expires_in ? Math.floor(Date.now() / 1000) + Number(source.expires_in) : null);
+
+  return {
+    session: {
+      access_token: source.access_token,
+      refresh_token: source.refresh_token,
+      expires_in: source.expires_in || null,
+      expires_at: expiresAt,
+      token_type: source.token_type || "bearer",
+      user,
+    },
+    user,
+  };
+}
+
+function isSessionExpired(session) {
+  if (!session?.expires_at) {
+    return false;
+  }
+
+  return (Number(session.expires_at) * 1000) <= (Date.now() + 30_000);
+}
+
+export function createSupabaseRestBridge({
+  config,
+  fetchImpl = typeof fetch === "function" ? fetch.bind(globalThis) : null,
+  storage = null,
+} = {}) {
+  const runtimeConfig = {
+    supabaseUrl: normalizeUrl(config?.supabaseUrl),
+    supabaseAnonKey: String(config?.supabaseAnonKey || "").trim(),
+    supabaseResetRedirectUrl: String(config?.supabaseResetRedirectUrl || config?.siteUrl || "").trim(),
+    siteUrl: String(config?.siteUrl || "").trim(),
+  };
+  const storageRef = getBrowserStorage(storage);
+
+  function isConfigured() {
+    return Boolean(runtimeConfig.supabaseUrl && runtimeConfig.supabaseAnonKey && typeof fetchImpl === "function");
+  }
+
+  function readStoredSession() {
+    if (!storageRef) {
+      return null;
+    }
+
+    try {
+      const raw = storageRef.getItem(SUPABASE_SESSION_STORAGE_KEY);
+      return raw ? parseJsonSafely(raw) : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function writeStoredSession(session) {
+    if (!storageRef) {
+      return session;
+    }
+
+    try {
+      storageRef.setItem(SUPABASE_SESSION_STORAGE_KEY, JSON.stringify(session || null));
+    } catch (error) {
+      console.warn("[Golfers Nation] Failed to store Supabase session.", error);
+    }
+
+    return session;
+  }
+
+  function clearStoredSession() {
+    if (!storageRef) {
+      return;
+    }
+
+    try {
+      storageRef.removeItem(SUPABASE_SESSION_STORAGE_KEY);
+    } catch (error) {
+      console.warn("[Golfers Nation] Failed to clear Supabase session.", error);
+    }
+  }
+
+  async function request(path, {
+    method = "GET",
+    body = null,
+    accessToken = "",
+    headers = {},
+  } = {}) {
+    if (!isConfigured()) {
+      return {
+        error: {
+          status: 0,
+          message: "Supabase is not configured. Add the project URL and anon key first.",
+          code: "supabase_not_configured",
+        },
+      };
+    }
+
+    const response = await fetchImpl(`${runtimeConfig.supabaseUrl}${path}`, {
+      method,
+      headers: {
+        apikey: runtimeConfig.supabaseAnonKey,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...(body ? { "Content-Type": "application/json" } : {}),
+        ...headers,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    const payloadText = await response.text();
+    const payload = parseJsonSafely(payloadText);
+
+    if (!response.ok) {
+      return { error: normalizeError(payload, response) };
+    }
+
+    return { data: payload };
+  }
+
+  async function refreshStoredSession() {
+    const current = readStoredSession();
+
+    if (!current?.refresh_token) {
+      return { error: { status: 401, message: "No refresh token is available.", code: "missing_refresh_token" } };
+    }
+
+    const result = await request("/auth/v1/token?grant_type=refresh_token", {
+      method: "POST",
+      body: {
+        refresh_token: current.refresh_token,
+      },
+    });
+
+    if (result.error) {
+      clearStoredSession();
+      return result;
+    }
+
+    const normalized = normalizeSessionPayload(result.data);
+    if (normalized.session) {
+      writeStoredSession(normalized.session);
+    }
+
+    return normalized;
+  }
+
+  async function getActiveSession() {
+    const stored = readStoredSession();
+    if (!stored) {
+      return { session: null };
+    }
+
+    if (!isSessionExpired(stored)) {
+      return { session: stored };
+    }
+
+    const refreshed = await refreshStoredSession();
+    if (refreshed.error) {
+      return refreshed;
+    }
+
+    return { session: refreshed.session || null };
+  }
+
+  async function signUpWithEmail({ email, password, displayName }) {
+    const result = await request("/auth/v1/signup", {
+      method: "POST",
+      body: {
+        email: String(email || "").trim().toLowerCase(),
+        password: String(password || ""),
+        data: {
+          display_name: String(displayName || "").trim(),
+        },
+      },
+    });
+
+    if (result.error) {
+      return result;
+    }
+
+    const normalized = normalizeSessionPayload(result.data);
+    if (normalized.session) {
+      writeStoredSession(normalized.session);
+    }
+
+    return normalized;
+  }
+
+  async function signInWithEmail({ email, password }) {
+    const result = await request("/auth/v1/token?grant_type=password", {
+      method: "POST",
+      body: {
+        email: String(email || "").trim().toLowerCase(),
+        password: String(password || ""),
+      },
+    });
+
+    if (result.error) {
+      return result;
+    }
+
+    const normalized = normalizeSessionPayload(result.data);
+    if (normalized.session) {
+      writeStoredSession(normalized.session);
+    }
+
+    return normalized;
+  }
+
+  async function signOut() {
+    const active = await getActiveSession();
+    const accessToken = active.session?.access_token || "";
+
+    if (accessToken) {
+      await request("/auth/v1/logout", {
+        method: "POST",
+        accessToken,
+      });
+    }
+
+    clearStoredSession();
+    return { signedOut: true };
+  }
+
+  async function requestPasswordReset(email) {
+    return request("/auth/v1/recover", {
+      method: "POST",
+      body: {
+        email: String(email || "").trim().toLowerCase(),
+        ...(runtimeConfig.supabaseResetRedirectUrl ? { redirect_to: runtimeConfig.supabaseResetRedirectUrl } : {}),
+      },
+    });
+  }
+
+  async function getCurrentUser() {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    const result = await request("/auth/v1/user", {
+      accessToken: active.session.access_token,
+    });
+
+    if (result.error) {
+      if (result.error.status === 401) {
+        clearStoredSession();
+      }
+      return result;
+    }
+
+    return {
+      user: result.data,
+      session: active.session,
+    };
+  }
+
+  async function fetchWorkspace(userId) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    const encodedUserId = encodeURIComponent(String(userId || ""));
+    const [profileResult, workspaceResult] = await Promise.all([
+      request(`/rest/v1/player_profiles?id=eq.${encodedUserId}&select=*`, {
+        accessToken: active.session.access_token,
+      }),
+      request(`/rest/v1/player_workspaces?user_id=eq.${encodedUserId}&select=user_id,workspace,updated_at`, {
+        accessToken: active.session.access_token,
+      }),
+    ]);
+
+    if (profileResult.error) {
+      return profileResult;
+    }
+
+    if (workspaceResult.error) {
+      return workspaceResult;
+    }
+
+    return {
+      profile: Array.isArray(profileResult.data) ? profileResult.data[0] || null : profileResult.data || null,
+      workspace: Array.isArray(workspaceResult.data) ? workspaceResult.data[0]?.workspace || null : workspaceResult.data?.workspace || null,
+      session: active.session,
+    };
+  }
+
+  async function upsertProfile(profileRecord) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    return request("/rest/v1/player_profiles?on_conflict=id", {
+      method: "POST",
+      accessToken: active.session.access_token,
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=representation",
+      },
+      body: profileRecord,
+    });
+  }
+
+  async function upsertWorkspace(userId, workspace) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    return request("/rest/v1/player_workspaces?on_conflict=user_id", {
+      method: "POST",
+      accessToken: active.session.access_token,
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=representation",
+      },
+      body: {
+        user_id: userId,
+        workspace,
+        updated_at: new Date().toISOString(),
+      },
+    });
+  }
+
+  return {
+    mode: "supabase-rest-bridge",
+    config: runtimeConfig,
+    isConfigured,
+    readStoredSession,
+    writeStoredSession,
+    clearStoredSession,
+    getActiveSession,
+    signUpWithEmail,
+    signInWithEmail,
+    signOut,
+    requestPasswordReset,
+    getCurrentUser,
+    fetchWorkspace,
+    upsertProfile,
+    upsertWorkspace,
+  };
+}
+
+```
+
+## `src/services/sync-service.js`
+
+```js
+import { CONNECTION_COPY } from "../config.js";
+import { createActivity } from "../domain/factories.js";
+import { applyHoleUpdate, getLocalParticipantIds, getScoringParticipants } from "../domain/scoring.js";
+
+export function createSyncService({ store }) {
+  const clientId = `client-${Date.now()}`;
+  let broadcastChannel = null;
+  let simulationTimer = null;
+
+  function init() {
+    if ("BroadcastChannel" in window) {
+      broadcastChannel = new BroadcastChannel("golfers-nation-sync");
+      broadcastChannel.addEventListener("message", handleBroadcastMessage);
+    }
+
+    simulationTimer = window.setInterval(simulateRemoteProgress, 12000);
+  }
+
+  function teardown() {
+    if (broadcastChannel) {
+      broadcastChannel.close();
+      broadcastChannel = null;
+    }
+
+    if (simulationTimer) {
+      clearInterval(simulationTimer);
+      simulationTimer = null;
+    }
+  }
+
+  function handleBroadcastMessage(event) {
+    const payload = event.data;
+    if (!payload || payload.clientId === clientId || payload.type !== "round-sync") {
+      return;
+    }
+
+    store.setState((draft) => {
+      const round = draft.rounds.find((item) => item.id === payload.roundId);
+      if (!round) {
+        return draft;
+      }
+
+      round.sync.lastEventAt = payload.at;
+      round.sync.state = "connected";
+      round.sync.note = "Cross-tab sync event received.";
+      draft.social.activity.unshift(
+        createActivity({
+          type: "sync",
+          message: `${round.courseName} received a shared update.`,
+        })
+      );
+      draft.social.activity = draft.social.activity.slice(0, 16);
+      return draft;
+    }, { reason: "broadcast-received" });
+  }
+
+  function broadcastRoundUpdate(round) {
+    if (!broadcastChannel) {
+      return;
+    }
+
+    broadcastChannel.postMessage({
+      type: "round-sync",
+      clientId,
+      roundId: round.id,
+      at: Date.now(),
+    });
+  }
+
+  function updateTransport(roundId, transport, stateLabel) {
+    store.setState((draft) => {
+      const round = draft.rounds.find((item) => item.id === roundId);
+      if (!round) {
+        return draft;
+      }
+
+      round.sync.transport = transport;
+      round.sync.label = CONNECTION_COPY[transport] || CONNECTION_COPY.local;
+      round.sync.state = stateLabel;
+      round.sync.lastEventAt = Date.now();
+      round.sync.note = "Sync transport changed through the current device sync layer.";
+
+      const group = draft.groups.find((item) => item.roundId === roundId);
+      if (group) {
+        group.transport = transport;
+        group.status = stateLabel;
+        group.updatedAt = Date.now();
+      }
+
+      draft.social.activity.unshift(
+        createActivity({
+          type: "sync",
+          message: `${round.courseName} is now using ${round.sync.label}.`,
+        })
+      );
+      draft.social.activity = draft.social.activity.slice(0, 16);
+      return draft;
+    }, { reason: "transport-updated" });
+  }
+
+  function enableNearbyPrototype(roundId) {
+    updateTransport(roundId, "nearby", "connected");
+  }
+
+  async function tryBluetoothPrototype(roundId) {
+    if (!navigator.bluetooth) {
+      updateTransport(roundId, "nearby", "connected");
+      store.setState((draft) => {
+        draft.social.activity.unshift(
+          createActivity({
+            type: "sync",
+            message: "Browser Bluetooth is unavailable. Nearby sync stayed active instead.",
+          })
+        );
+        draft.social.activity = draft.social.activity.slice(0, 16);
+        return draft;
+      }, { reason: "bluetooth-fallback" });
+      return;
+    }
+
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+      });
+
+      store.setState((draft) => {
+        const round = draft.rounds.find((item) => item.id === roundId);
+        if (!round) {
+          return draft;
+        }
+
+        round.sync.transport = "bluetooth";
+        round.sync.label = CONNECTION_COPY.bluetooth;
+        round.sync.state = "connected";
+        round.sync.lastEventAt = Date.now();
+        round.sync.note = `${device.name || "Nearby device"} linked through browser Bluetooth.`;
+        draft.social.activity.unshift(
+          createActivity({
+            type: "sync",
+            message: `${device.name || "Nearby device"} linked for Bluetooth sync.`,
+          })
+        );
+        draft.social.activity = draft.social.activity.slice(0, 16);
+        return draft;
+      }, { reason: "bluetooth-connected" });
+    } catch (error) {
+      updateTransport(roundId, "invite", "hosting");
+      store.setState((draft) => {
+        draft.social.activity.unshift(
+          createActivity({
+            type: "sync",
+            message: "Bluetooth request canceled. Invite-code sync remains the primary path.",
+          })
+        );
+        draft.social.activity = draft.social.activity.slice(0, 16);
+        return draft;
+      }, { reason: "bluetooth-canceled" });
+    }
+  }
+
+  function notifyRoundUpdated(roundId) {
+    const round = store.getState().rounds.find((item) => item.id === roundId);
+    if (!round) {
+      return;
+    }
+
+    broadcastRoundUpdate(round);
+  }
+
+  function simulateRemoteProgress() {
+    const state = store.getState();
+    const activeRound = state.rounds.find((round) => round.id === state.session.activeRoundId);
+    if (!activeRound || activeRound.status !== "active" || activeRound.sync.transport === "local") {
+      return;
+    }
+
+    const participants = getScoringParticipants(activeRound);
+    const localIds = new Set(getLocalParticipantIds(activeRound, state.currentUser.id));
+    const remoteParticipants = participants.filter((participant) => !localIds.has(participant.id));
+    if (!remoteParticipants.length) {
+      return;
+    }
+
+    const target = remoteParticipants[Math.floor(Math.random() * remoteParticipants.length)];
+    const targetHole = activeRound.holes.find((hole) => {
+      const entry = hole.entries.find((item) => item.participantId === target.id);
+      return entry && (entry.strokes === null || entry.strokes === 0);
+    });
+
+    if (!targetHole) {
+      return;
+    }
+
+    const par = targetHole.par;
+    const strokes = par + [-1, 0, 0, 1][Math.floor(Math.random() * 4)];
+    const putts = Math.max(1, Math.min(3, strokes - (par - 2)));
+
+    store.setState((draft) => {
+      const round = draft.rounds.find((item) => item.id === activeRound.id);
+      if (!round) {
+        return draft;
+      }
+
+      applyHoleUpdate(round, targetHole.number, target.id, {
+        strokes,
+        putts,
+        fairwayHit: targetHole.par > 3 ? strokes <= par : false,
+        gir: strokes <= par,
+      });
+      round.sync.lastEventAt = Date.now();
+
+      const group = draft.groups.find((item) => item.roundId === round.id);
+      if (group) {
+        group.updatedAt = Date.now();
+        group.feed.unshift(
+          createActivity({
+            type: "sync",
+            message: `${target.name} updated hole ${targetHole.number}.`,
+          })
+        );
+        group.feed = group.feed.slice(0, 12);
+      }
+
+      draft.social.activity.unshift(
+        createActivity({
+          type: "sync",
+          message: `${target.name} posted a live update on hole ${targetHole.number}.`,
+        })
+      );
+      draft.social.activity = draft.social.activity.slice(0, 16);
+      return draft;
+    }, { reason: "remote-progress" });
+  }
+
+  return {
+    init,
+    teardown,
+    enableNearbyPrototype,
+    tryBluetoothPrototype,
+    notifyRoundUpdated,
+    updateTransport,
+  };
+}
+
+```
+
+## `src/state/default-state.js`
+
+```js
+import { createDefaultAccountState } from "../services/account-service.js";
+import { cloneData } from "../utils/formatters.js";
+
+export function createDefaultState() {
+  const seeded = createDefaultAccountState();
+  const activeWorkspace = seeded.accountVault[seeded.previewAccountId];
+  const currentAccount = seeded.accounts.find((account) => account.id === seeded.previewAccountId);
+
+  return {
+    version: 3,
+    currentUser: {
+      id: currentAccount.id,
+      name: currentAccount.name,
+      displayName: currentAccount.displayName,
+      username: currentAccount.username,
+      profileId: currentAccount.profileId,
+      avatarLabel: currentAccount.avatarLabel,
+      avatar: currentAccount.avatarLabel,
+      avatarUrl: currentAccount.avatarUrl || "",
+      email: currentAccount.email,
+      provider: currentAccount.provider,
+      providerType: currentAccount.provider,
+      homeCourse: currentAccount.homeCourse,
+      handicap: currentAccount.handicap,
+      handedness: currentAccount.handedness || "",
+      bio: currentAccount.bio,
+      seasonGoal: currentAccount.seasonGoal,
+      city: currentAccount.city,
+      createdAt: currentAccount.createdAt,
+      premiumStatus: currentAccount.subscription.tier,
+      privacy: cloneData(currentAccount.privacy),
+      appearance: cloneData(currentAccount.appearance),
+      social: cloneData(currentAccount.social),
+      seededDemo: currentAccount.seededDemo,
+      subscription: cloneData(currentAccount.subscription),
+      roundsPlayed: currentAccount.roundsPlayed || 0,
+      averageScore: currentAccount.averageScore ?? null,
+      bestRound: currentAccount.bestRound ?? null,
+      recentFormSummary: currentAccount.recentFormSummary || "First round pending",
+    },
+    accounts: seeded.accounts,
+    accountVault: seeded.accountVault,
+    previewAccountId: seeded.previewAccountId,
+    auth: {
+      status: "signed_out",
+      activeUserId: null,
+      lastUserId: null,
+      provider: null,
+      linkedProviders: ["email", "google", "apple"],
+      lastIntent: null,
+      lastIntentAt: null,
+      mode: "login",
+      notice: "Sign in with email, create a free golfer account, or use a demo account below for review access.",
+      error: "",
+    },
+    profiles: cloneData(activeWorkspace.profiles),
+    rounds: cloneData(activeWorkspace.rounds),
+    groups: cloneData(activeWorkspace.groups),
+    tournaments: cloneData(activeWorkspace.tournaments),
+    gear: cloneData(activeWorkspace.gear),
+    social: cloneData(activeWorkspace.social),
+    session: {
+      activeView: "home",
+      previousView: "home",
+      transitionDirection: "steady",
+      standaloneMode: false,
+      installPromptAvailable: false,
+      installState: "browser",
+      installHintDismissed: false,
+      helpSection: "getting-started",
+      helpReturnView: "home",
+      settingsSection: "account",
+      settingsReturnView: "stats",
+      activeRoundId: activeWorkspace.userSession.activeRoundId,
+      selectedProfileId: activeWorkspace.userSession.selectedProfileId,
+      selectedHole: activeWorkspace.userSession.selectedHole,
+      summaryRoundId: activeWorkspace.userSession.summaryRoundId,
+      lastScoredParticipantId: null,
+      lastScoredHole: null,
+      lastScorePulseAt: 0,
+      feedback: null,
+      pendingLabel: "",
+      cloudSync: {
+        status: "idle",
+        scope: "",
+        roundId: null,
+        userId: null,
+        errorMessage: "",
+        lastAttemptAt: 0,
+        lastSuccessAt: 0,
+        retryCount: 0,
+      },
+      roundSetup: {
+        courseQuery: "",
+        selectedCourseId: "",
+        selectedTeeBoxId: "",
+      },
+    },
+  };
+}
+
+```
+
+## `src/state/store.js`
+
+```js
+import { cloneData } from "../utils/formatters.js";
+
+export function createStore(initialState) {
+  let state = cloneData(initialState);
+  const listeners = new Set();
+
+  function getState() {
+    return state;
+  }
+
+  function setState(updater, meta = {}) {
+    const draft = cloneData(state);
+    const nextState = typeof updater === "function" ? updater(draft) || draft : updater;
+    state = nextState;
+    listeners.forEach((listener) => listener(state, meta));
+  }
+
+  function subscribe(listener) {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }
+
+  return {
+    getState,
+    setState,
+    subscribe,
+  };
+}
+
+```
+
+## `src/ui/render.js`
+
+```js
+import { renderAppTemplate } from "./templates.js";
+
+export function createRenderer(root) {
+  return function render(state) {
+    root.innerHTML = renderAppTemplate(state);
+  };
+}
+
+```
+
+## `src/ui/templates.js`
+
+```js
+import {
+  APPEARANCE_MODE_OPTIONS,
+  APP_VERSION,
+  CONNECTION_COPY,
+  GAME_MODES,
+  GEAR_CATEGORIES,
+  NETLIFY_FEEDBACK_FORM_NAME,
+  PREMIUM_MODE_IDS,
+  PROFILE_VISIBILITY_OPTIONS,
+  PRIVACY_CONTROL_OPTIONS,
+  TEXT_SCALE_OPTIONS,
+  SUBSCRIPTION_PLANS,
+  TESTER_FEEDBACK_AREAS,
+  THEME_PRESET_OPTIONS,
+  VIEW_ORDER,
+} from "../config.js";
+import {
+  getFrequentPartners,
+  getHistoryMetrics,
+  getParticipantTotals,
+  getRoundSummary,
+  getScoringParticipants,
+} from "../domain/scoring.js";
+import { getPendingRoundEvents } from "../domain/round-sync.js";
+import { escapeHtml, formatDate, formatDateTime, formatRelativeSync } from "../utils/formatters.js";
+import { getGearRecommendations, listNearbyGames } from "../services/mock-api.js";
+import { getReviewAccounts } from "../services/account-service.js";
+import { createManualCourseSelection, findCourseById, findTeeBox, getDefaultTeeBox, getRoundSetupCourses } from "../services/course-library.js";
+import { buildCompetitivePreview, buildPlayerComparison, getCurrentProfile, getProfileById, getProfileForPlayer } from "../services/player-service.js";
+
+const PREMIUM_FEATURES = new Set([
+  "advanced-stats",
+  "round-insights",
+  "enhanced-live",
+  "player-comparison",
+  "tournament-tools",
+  "premium-modes",
+  "premium-dashboards",
+  "future-integrations",
+]);
+
+const SCREEN_COPY = {
+  home: {
+    eyebrow: "Welcome back",
+    title: "Simple golf flow, polished enough to trust during a real round.",
+    description: "Start quickly, find your active game fast, and keep the dashboard calm enough for every golfer to understand.",
+  },
+  round: {
+    eyebrow: "Live round companion",
+    title: "Fast score entry, clear hole movement, and a leaderboard that stays readable on the course.",
+    description: "The round workspace is built mobile-first so scoring, syncing, and finishing a card feel fast instead of fiddly.",
+  },
+  stats: {
+    eyebrow: "Player progress",
+    title: "Useful free stats today, premium insights ready when subscriptions arrive.",
+    description: "Season progress, round summaries, and locked advanced analytics all live in one structured player history.",
+  },
+  community: {
+    eyebrow: "Group play",
+    title: "Invite rounds, social groups, and tournament entry points without the placeholder feel.",
+    description: "Community keeps live group play and event tools organized, with clear upgrade paths for premium league features.",
+  },
+  premium: {
+    eyebrow: "Premium and shop",
+    title: "A high-end upgrade path with billing-ready structure and future gear expansion.",
+    description: "Premium shows why the paid tier matters without feeling pushy, and the shop scaffolding stays useful for round prep.",
+  },
+  help: {
+    eyebrow: "Help and guide",
+    title: "Short, plain-language answers that make the app easier to use.",
+    description: "Open help when you need a fast answer, then jump right back into the round, stats, or account flow.",
+  },
+  settings: {
+    eyebrow: "Profile and settings",
+    title: "A clean place to manage your account, golf identity, appearance, and support tools.",
+    description: "Settings keeps personal details, theme choices, and light social actions together without cluttering the rest of the app.",
+  },
+};
+
+const HELP_SECTIONS = [
+  {
+    id: "getting-started",
+    title: "Getting Started",
+    description: "The quickest way to understand the app on your first visit.",
+    items: [
+      { title: "Start here", body: "Sign in, then tap Start round on Home if you want the fastest path into the app." },
+      { title: "Where things live", body: "Home keeps next actions simple. Round is live scoring. Stats is your history. Community is for group play." },
+      { title: "Will my data stay saved?", body: "Yes. Rounds, stats, and profile details stay attached to the signed-in golfer on this device." },
+    ],
+  },
+  {
+    id: "accounts-profiles",
+    title: "Accounts & Profiles",
+    description: "Short answers for sign-in, profile setup, and switching golfers.",
+    items: [
+      { title: "Why create an account?", body: "Your rounds, stats, and plan access stay tied to one golfer instead of staying anonymous." },
+      { title: "How do I switch golfers?", body: "Open Profile & settings, choose Sign Out, then sign in with another golfer or one of the demo accounts." },
+      { title: "What is public?", body: "Other golfers only see your competitive profile. Email and account details stay private." },
+    ],
+  },
+  {
+    id: "playing-round",
+    title: "Playing a Round",
+    description: "How to start, join, score, and finish a round without getting lost.",
+    items: [
+      { title: "How do I start a round?", body: "Open Round, keep the defaults if you want, and tap Start local round." },
+      { title: "How do invite codes work?", body: "Ask the host for the round code, open Community, then enter the code to join." },
+      { title: "How should I score?", body: "Tap the large score buttons first. Use fairway, GIR, putts, and penalties for deeper stats." },
+    ],
+  },
+  {
+    id: "stats-competition",
+    title: "Stats & Competition",
+    description: "Quick definitions for the numbers and public player views.",
+    items: [
+      { title: "What do fairways and GIR mean?", body: "Fairways count tee shots in play on par 4 and 5 holes. GIR shows greens hit in regulation." },
+      { title: "What is a competitive profile?", body: "It is your public golf card with safe stats that other players can view during group play." },
+      { title: "Why are some numbers locked?", body: "Advanced analytics, insights, and detailed player comparisons are premium features." },
+    ],
+  },
+  {
+    id: "premium-features",
+    title: "Premium Features",
+    description: "What premium adds on top of the free round and stats flow.",
+    items: [
+      { title: "What unlocks with premium?", body: "Premium opens advanced analytics, deeper insights, player comparisons, and richer live tools." },
+      { title: "Can I test premium now?", body: "Yes. Use the premium demo golfer, or use the hidden tester toggle after sign-in." },
+      { title: "Is free still useful?", body: "Yes. Free keeps score tracking, round history, simple stats, and join-by-code working well." },
+    ],
+  },
+  {
+    id: "troubleshooting",
+    title: "Troubleshooting",
+    description: "Quick fixes when something feels stuck or unclear.",
+    items: [
+      { title: "The round will not sync", body: "Check the sync card in Round. You can keep scoring locally, then host or reconnect again." },
+      { title: "The app looks old", body: "Hard refresh once. If the PWA is installed, reopen it or reinstall after a major update." },
+      { title: "I am not sure what to do next", body: "Use the small Help links on each screen. They open the most relevant section first." },
+    ],
+  },
+];
+
+const SETTINGS_SECTIONS = [
+  { id: "account", label: "Account" },
+  { id: "golf-profile", label: "Golf Profile" },
+  { id: "appearance", label: "Appearance" },
+  { id: "social", label: "Social" },
+  { id: "app-support", label: "App & Support" },
+];
+
+const NAV_ICONS = {
+  home: `
+    <svg viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <path d="M4 11.5 12 5l8 6.5" />
+      <path d="M6.5 10.5V19h11v-8.5" />
+    </svg>
+  `,
+  round: `
+    <svg viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <path d="M6 4v16" />
+      <path d="M6 5c2.2 0 3.2 1.4 5.2 1.4S14 5 16 5s2 .8 2 2.2c0 1.8-1 2.7-2.9 2.7S12.5 8.5 10.7 8.5 8 9.9 6 9.9" />
+      <circle cx="17.5" cy="17.5" r="2.5" />
+    </svg>
+  `,
+  stats: `
+    <svg viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <path d="M5 19V11" />
+      <path d="M12 19V7" />
+      <path d="M19 19v-5" />
+      <path d="M4 19h16" />
+    </svg>
+  `,
+  community: `
+    <svg viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <circle cx="8" cy="9" r="2.5" />
+      <circle cx="16.5" cy="8.5" r="2" />
+      <path d="M3.5 18c.8-2.6 2.8-4 4.5-4s3.7 1.4 4.5 4" />
+      <path d="M13.5 17c.6-1.9 2.1-2.9 3.6-2.9 1.3 0 2.5.7 3.4 2.1" />
+    </svg>
+  `,
+  premium: `
+    <svg viewBox="0 0 24 24" role="presentation" aria-hidden="true">
+      <path d="m5 16 2-8 5 5 5-7 2 10H5Z" />
+      <path d="M7 19h10" />
+    </svg>
+  `,
+};
+
+function getActiveRound(state) {
+  return state.rounds.find((round) => round.id === state.session.activeRoundId) || null;
+}
+
+function getSummaryRound(state) {
+  return state.rounds.find((round) => round.id === state.session.summaryRoundId) || null;
+}
+
+function getActiveGroup(state, round) {
+  if (!round) {
+    return null;
+  }
+
+  return state.groups.find((group) => group.roundId === round.id) || null;
+}
+
+function getCompletedRounds(state) {
+  return state.rounds
+    .filter((round) => round.status === "completed")
+    .sort((left, right) => (right.completedAt || 0) - (left.completedAt || 0));
+}
+
+function getSubscription(state) {
+  return state.currentUser.subscription || {
+    tier: "free",
+    planName: "Free",
+    status: "active",
+    billingReady: true,
+  };
+}
+
+function getNavActiveView(state) {
+  const activeView = state.session.activeView || "home";
+  if (VIEW_ORDER.some((view) => view.id === activeView)) {
+    return activeView;
+  }
+
+  if (activeView === "settings") {
+    const fallback = state.session.settingsReturnView || state.session.previousView || "stats";
+    return VIEW_ORDER.some((view) => view.id === fallback) ? fallback : "stats";
+  }
+
+  if (activeView === "help") {
+    const fallback = state.session.helpReturnView || state.session.previousView || "home";
+    if (fallback === "auth") {
+      return "home";
+    }
+    return VIEW_ORDER.some((view) => view.id === fallback) ? fallback : "home";
+  }
+
+  return "home";
+}
+
+function formatAverageScore(value) {
+  return typeof value === "number" ? value.toFixed(1) : "--";
+}
+
+function formatSignedValue(value) {
+  return typeof value === "number"
+    ? `${value > 0 ? "+" : ""}${value.toFixed(1)}`
+    : "--";
+}
+
+function formatPercent(value) {
+  return typeof value === "number" ? `${value}%` : "--";
+}
+
+function formatHandicap(value) {
+  return typeof value === "number" ? value.toFixed(1) : "--";
+}
+
+function formatComparisonMetric(label, value) {
+  if (label === "Average score" || label === "Putts") {
+    return formatAverageScore(value);
+  }
+
+  if (label === "Fairways" || label === "GIR") {
+    return formatPercent(value);
+  }
+
+  if (label === "Driving") {
+    return formatSignedValue(value);
+  }
+
+  return escapeHtml(String(value ?? "--"));
+}
+
+function renderHolePerformanceList(title, holes) {
+  if (!holes?.length) {
+    return `
+      <article class="plan-card">
+        <span class="mini-label">${escapeHtml(title)}</span>
+        <strong>No rounds yet</strong>
+        <p class="body-copy compact-copy">Finish more rounds to identify where scoring is strongest and weakest.</p>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="plan-card">
+      <span class="mini-label">${escapeHtml(title)}</span>
+      <div class="stack-list compact-stack">
+        ${holes.map((hole) => `
+          <div class="feature-row">Hole ${hole.holeNumber} / Par ${hole.par} / ${formatSignedValue(hole.averageToPar)} to par</div>
+        `).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderHelpLink(label, sectionId, compact = false) {
+  return `
+    <button
+      class="button subtle help-inline-button ${compact ? "is-compact" : ""}"
+      type="button"
+      data-action="open-help-section"
+      data-section="${sectionId}"
+    >
+      <span class="help-inline-icon" aria-hidden="true">i</span>
+      <span>${escapeHtml(label)}</span>
+    </button>
+  `;
+}
+
+function shouldShowFirstRoundGuide(state) {
+  return state.auth?.status === "authenticated"
+    && !state.currentUser?.seededDemo
+    && getCompletedRounds(state).length === 0;
+}
+
+function renderFirstRoundGuide(state, placement) {
+  if (!shouldShowFirstRoundGuide(state)) {
+    return "";
+  }
+
+  const activeRound = getActiveRound(state);
+
+  if (placement === "home") {
+    if (activeRound) {
+      return "";
+    }
+
+    return `
+      <article class="card onboarding-card card-span-3">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">First round guide</p>
+            <h3>Step 1 of 3: start your first round</h3>
+          </div>
+          <span class="status-pill">New golfer</span>
+        </div>
+        <p class="body-copy">Use the highlighted Start round button. Golden Nugget Lake Charles is already loaded so you can get into scoring quickly.</p>
+        <div class="summary-grid onboarding-list">
+          <article>
+            <strong>1</strong>
+            <p>Tap <strong>Start round</strong> on Home.</p>
+          </article>
+          <article>
+            <strong>2</strong>
+            <p>Keep Golden Nugget selected and press <strong>Start local round</strong>.</p>
+          </article>
+          <article>
+            <strong>3</strong>
+            <p>Use the big score buttons, then finish the round to build Stats.</p>
+          </article>
+        </div>
+        <div class="row-actions">
+          <button class="button primary guided-action" type="button" data-action="nav-view" data-view="round">Start round now</button>
+          ${renderHelpLink("Open Help Center", "getting-started", true)}
+        </div>
+      </article>
+    `;
+  }
+
+  if (placement === "round-setup") {
+    return `
+      <article class="card onboarding-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">First round guide</p>
+            <h3>Step 2 of 3: create the round</h3>
+          </div>
+          <span class="status-pill">Keep it simple</span>
+        </div>
+        <p class="body-copy compact-copy">For the easiest first round, keep stroke play selected, leave Golden Nugget loaded, and tap the highlighted <strong>Start local round</strong> button.</p>
+      </article>
+    `;
+  }
+
+  if (placement === "round-live") {
+    return `
+      <article class="card onboarding-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">First round guide</p>
+            <h3>Step 3 of 3: score a few holes</h3>
+          </div>
+          <span class="status-pill">Live scoring</span>
+        </div>
+        <p class="body-copy compact-copy">Tap a large score button for each golfer, use the hole pills to move forward, then finish the round when you are ready to see Stats update.</p>
+      </article>
+    `;
+  }
+
+  return "";
+}
+
+function renderHelpCenterCard() {
+  return `
+    <article class="card stats-quiet-card help-center-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Help Center</p>
+          <h3>Short guides, not a giant FAQ</h3>
+        </div>
+      </div>
+      <p class="body-copy compact-copy">Open the help center from your account area whenever you need a quick answer about sign-in, rounds, stats, premium, or troubleshooting.</p>
+      <div class="stack-list help-center-list">
+        <div class="feature-row">Getting Started</div>
+        <div class="feature-row">Accounts & Profiles</div>
+        <div class="feature-row">Playing a Round</div>
+        <div class="feature-row">Stats & Competition</div>
+      </div>
+      <div class="row-actions">
+        <button class="button primary" type="button" data-action="open-help-section" data-section="getting-started">Open Help Center</button>
+        <button class="button subtle" type="button" data-action="open-help-section" data-section="troubleshooting">Troubleshooting</button>
+      </div>
+    </article>
+  `;
+}
+
+function getOrderedHelpSections(selectedId) {
+  if (!selectedId || !HELP_SECTIONS.some((section) => section.id === selectedId)) {
+    return HELP_SECTIONS;
+  }
+
+  const selected = HELP_SECTIONS.find((section) => section.id === selectedId);
+  return [selected, ...HELP_SECTIONS.filter((section) => section.id !== selectedId)];
+}
+
+function findParticipantProfileId(round, participantId) {
+  if (round.mode === "stroke") {
+    return round.players.find((player) => player.id === participantId)?.profileId || null;
+  }
+
+  const side = round.sides.find((entry) => entry.id === participantId);
+  const leadPlayerId = side?.playerIds?.[0];
+  return round.players.find((player) => player.id === leadPlayerId)?.profileId || null;
+}
+
+function isPremiumSubscription(subscription) {
+  return (typeof subscription === "string" ? subscription : subscription?.tier) === "premium";
+}
+
+export function isModeLocked(modeId, subscription) {
+  return PREMIUM_MODE_IDS.includes(modeId) && !isPremiumSubscription(subscription);
+}
+
+export function getFeatureGate(featureId, subscription) {
+  const premium = isPremiumSubscription(subscription);
+  const locked = PREMIUM_FEATURES.has(featureId) && !premium;
+
+  return {
+    featureId,
+    locked,
+    badge: locked ? "Premium" : premium ? "Included" : "Free",
+    tone: locked ? "locked" : premium ? "premium" : "free",
+  };
+}
+
+function getRoundProgress(round) {
+  const completedHoles = round.holes.filter((hole) => hole.entries.some((entry) => entry.strokes && entry.strokes > 0)).length;
+  const frontNine = round.holes
+    .slice(0, 9)
+    .filter((hole) => hole.entries.some((entry) => entry.strokes && entry.strokes > 0)).length;
+  const backNine = round.holes
+    .slice(9)
+    .filter((hole) => hole.entries.some((entry) => entry.strokes && entry.strokes > 0)).length;
+
+  return {
+    completedHoles,
+    remainingHoles: round.holes.length - completedHoles,
+    frontNine,
+    backNine,
+  };
+}
+
+function getHoleCompletionStats(round, holeNumber) {
+  const hole = round?.holes?.find((item) => item.number === holeNumber);
+  if (!hole) {
+    return { scored: 0, total: 0 };
+  }
+
+  const scored = hole.entries.filter((entry) => entry.strokes !== null && entry.strokes > 0).length;
+  return {
+    scored,
+    total: hole.entries.length,
+  };
+}
+
+export function getNextOpenHole(round, selectedHole = 1) {
+  if (!round?.holes?.length) {
+    return selectedHole;
+  }
+
+  const afterSelected = round.holes.slice(selectedHole).concat(round.holes.slice(0, selectedHole));
+  const nextHole = afterSelected.find((hole) => hole.entries.some((entry) => entry.strokes === null || entry.strokes === 0));
+
+  return nextHole ? nextHole.number : selectedHole;
+}
+
+export function getSyncPresentation(round, group) {
+  const pendingCount = getPendingRoundEvents(round).length;
+  const saveState = round?.sync?.saveState || "saved-local";
+  const transport = round?.sync?.transport || "local";
+  const stateLabel = round?.sync?.state || "local";
+  const lastEventAt = round?.sync?.lastEventAt || null;
+  const inviteCode = group?.inviteCode || round?.inviteCode || null;
+  const stale = transport !== "local" && transport !== "nearby" ? Boolean(lastEventAt && Date.now() - lastEventAt > 45000) : false;
+
+  if (saveState === "retry-needed") {
+    return {
+      tone: "warning",
+      title: "Saved locally / retry needed",
+      message: `${pendingCount === 1 ? "1 change is" : `${pendingCount} changes are`} still safe on this device. Golfers Nation will retry cloud backup when service returns, and any joined golfer can keep scoring locally even if the original host leaves.`,
+    };
+  }
+
+  if (saveState === "syncing") {
+    return {
+      tone: "success",
+      title: "Syncing live changes",
+      message: `${pendingCount === 1 ? "1 local update is" : `${pendingCount} local updates are`} already safe on this device and are backing up now.`,
+    };
+  }
+
+  if (transport === "local") {
+    return {
+      tone: "quiet",
+      title: "Local score mode",
+      message: pendingCount
+        ? `${pendingCount === 1 ? "1 change is" : `${pendingCount} changes are`} saved locally already. Host with an invite code when the rest of the group is ready.`
+        : "Scores are safe on this device. Host with an invite code when the rest of the group is ready.",
+    };
+  }
+
+  if (stale) {
+    return {
+      tone: "warning",
+      title: "Reconnect check",
+      message: `No live update since ${formatRelativeSync(lastEventAt)}. Re-host with ${inviteCode || "your invite code"} or fall back to nearby sync if the room feels stuck.`,
+    };
+  }
+
+  if (stateLabel === "hosting") {
+    return {
+      tone: "success",
+      title: "Live room open",
+      message: `Invite code ${inviteCode || "pending"} is ready. The original host can leave later because every joined golfer keeps a safe local card.`,
+    };
+  }
+
+  if (stateLabel === "connected") {
+    return {
+      tone: "success",
+      title: "Sync healthy",
+      message: `Shared updates are flowing through ${escapeHtml(round.sync.label)}. Last activity: ${formatRelativeSync(lastEventAt)}. Every joined device still saves locally first.`,
+    };
+  }
+
+  return {
+    tone: "quiet",
+    title: "Sync standing by",
+    message: "This round is ready to reconnect whenever you enable hosting, nearby, or future cloud-backed sync.",
+  };
+}
+
+function renderNav(state) {
+  const navActiveView = getNavActiveView(state);
+  return VIEW_ORDER.map((view) => {
+    const isActive = navActiveView === view.id;
+    const activeClass = isActive ? "is-active" : "";
+    const currentAttr = isActive ? 'aria-current="page"' : "";
+    const selectedAttr = isActive ? "true" : "false";
+    return `
+      <button
+        id="tab-${view.id}"
+        class="nav-item ${activeClass}"
+        data-action="nav-view"
+        data-view="${view.id}"
+        type="button"
+        role="tab"
+        aria-selected="${selectedAttr}"
+        aria-controls="app-screen-${view.id}"
+        aria-label="${escapeHtml(view.label)}"
+        ${currentAttr}
+      >
+        <span class="nav-icon">${NAV_ICONS[view.id] || ""}</span>
+        <strong class="nav-label">${escapeHtml(view.label)}</strong>
+        <span class="nav-indicator" aria-hidden="true"></span>
+      </button>
+    `;
+  }).join("");
+}
+
+function renderAppShellHeader(state, activeRound, subscription) {
+  const viewId = state.session.activeView || "home";
+  const currentView = VIEW_ORDER.find((view) => view.id === viewId);
+  const firstName = state.currentUser.name?.split(" ")[0] || "Golfer";
+  let title = currentView?.label || "Home";
+  let subtitle = subscription.tier === "premium" ? "Premium golfer" : "Free golfer";
+  let headerClass = "app-header-card--utility";
+  let contextClass = "app-header-context--utility";
+
+  if (viewId === "home") {
+    headerClass = "app-header-card--home";
+    contextClass = "app-header-context--home";
+    title = "Home";
+    subtitle = activeRound
+      ? `Welcome back, ${firstName}. Resume ${activeRound.courseName} on hole ${state.session.selectedHole}.`
+      : `Welcome back, ${firstName}. Start a round quickly and keep the rest of the app in sync.`;
+  } else if (viewId === "round") {
+    headerClass = "app-header-card--round";
+    contextClass = "app-header-context--round";
+    title = activeRound ? `Hole ${state.session.selectedHole}` : "Round";
+    subtitle = activeRound
+      ? `${activeRound.courseName} / ${activeRound.players.length} golfers`
+      : "Start a local or invite round to begin scoring.";
+  } else if (viewId === "stats") {
+    title = "Stats";
+    subtitle = `${state.currentUser.roundsPlayed || 0} rounds saved${typeof state.currentUser.averageScore === "number" ? ` / ${state.currentUser.averageScore.toFixed(1)} avg` : ""}`;
+  } else if (viewId === "community") {
+    title = "Community";
+    subtitle = activeRound
+      ? `Invite ${activeRound.inviteCode || "ready when hosted"} / ${activeRound.sync.label}`
+      : "Join by code, host a round, or enter event play.";
+  } else if (viewId === "premium") {
+    title = "Premium";
+    subtitle = subscription.tier === "premium"
+      ? "Advanced stats and live tools are unlocked on this account."
+      : "See what premium adds without losing the simple free flow.";
+  } else if (viewId === "settings") {
+    title = "Profile & settings";
+    subtitle = "Account, golf profile, appearance, and support tools.";
+  } else if (viewId === "help") {
+    title = "Help Center";
+    subtitle = "Short answers that get golfers back to the round quickly.";
+  }
+
+  return `
+    <header class="app-header-card ${headerClass}" data-view="${escapeHtml(viewId)}">
+      <div class="app-header-context ${contextClass}">
+        ${viewId === "home"
+          ? `
+            <button
+              class="brand-mark brand-mark--compact"
+              type="button"
+              data-action="admin-secret-tap"
+              aria-label="Golfers Nation admin toggle"
+            >
+              GN
+            </button>
+          `
+          : ""}
+        <div class="app-header-copy">
+          ${viewId === "home" ? '<span class="mini-label app-header-overline">Golfers Nation</span>' : ""}
+          <strong class="app-header-title">${escapeHtml(title)}</strong>
+          <p class="app-header-subtitle">${escapeHtml(subtitle)}</p>
+        </div>
+      </div>
+      <button
+        class="account-trigger"
+        type="button"
+        data-action="open-settings"
+        data-section="account"
+        aria-label="Profile and settings"
+      >
+        ${renderAvatarChip(state.currentUser.avatarLabel || firstName, "is-header")}
+        <span class="account-trigger-copy">
+          <span class="mini-label">Profile & settings</span>
+          <strong>${escapeHtml(firstName)}</strong>
+        </span>
+      </button>
+    </header>
+  `;
+}
+
+function renderScreenHeader(state, activeRound) {
+  if (["round", "stats", "community", "premium"].includes(state.session.activeView)) {
+    return "";
+  }
+
+  const copy = SCREEN_COPY[state.session.activeView] || SCREEN_COPY.home;
+  const subscription = getSubscription(state);
+  const premium = isPremiumSubscription(subscription);
+  const hasActiveRound = Boolean(activeRound);
+  const nextOpenHole = activeRound ? getNextOpenHole(activeRound, state.session.selectedHole) : 1;
+  const summaryRound = getSummaryRound(state);
+  const metrics = getHistoryMetrics(state.rounds, state.currentUser.id);
+
+  if (state.session.activeView === "home") {
+    const guided = shouldShowFirstRoundGuide(state) && !hasActiveRound;
+    const actionMarkup = `
+      <button
+        class="button primary hero-action-button ${guided ? "guided-action" : ""}"
+        type="button"
+        ${hasActiveRound ? `data-action="resume-round" data-round-id="${activeRound.id}"` : 'data-action="nav-view" data-view="round"'}
+      >
+        ${hasActiveRound ? "Continue round" : "Start round"}
+      </button>
+    `;
+
+    return `
+      <header class="screen-hero screen-hero--home">
+        <div class="screen-hero-main">
+          <div class="screen-copy">
+            <p class="eyebrow">${escapeHtml(copy.eyebrow)}</p>
+            <h2>${escapeHtml(`Ready for the next clean round, ${state.currentUser.name.split(" ")[0]}?`)}</h2>
+            <p class="hero-copy">${escapeHtml(copy.description)}</p>
+          </div>
+          <div class="screen-hero-actions">
+            ${actionMarkup}
+            <p class="hero-support-copy">${hasActiveRound ? `Live at ${escapeHtml(activeRound.courseName)} and ready to resume.` : "Start one round and the app history, stats, and group tools all build from there."}</p>
+          </div>
+        </div>
+        <div class="screen-meta">
+          <span class="top-chip">${escapeHtml(state.currentUser.city)}</span>
+          <span class="top-chip">${premium ? "Premium access" : "Free plan"}</span>
+          <span class="top-chip">${hasActiveRound ? `Live on ${escapeHtml(activeRound.courseName)}` : "No round in play"}</span>
+        </div>
+      </header>
+    `;
+  }
+
+  let title = copy.eyebrow;
+  let description = copy.description;
+  let actionMarkup = "";
+  let metaItems = [];
+
+  if (state.session.activeView === "round") {
+    title = hasActiveRound ? `Hole ${state.session.selectedHole}` : "Round setup";
+    description = hasActiveRound
+      ? `${activeRound.courseName} · ${GAME_MODES[activeRound.mode].label} · ${activeRound.players.length} golfers`
+      : "Start a round to unlock the live scoring companion.";
+    actionMarkup = hasActiveRound
+      ? `
+        <button class="button primary utility-header-button" type="button" data-action="jump-next-open" data-hole="${nextOpenHole}">
+          Next open
+        </button>
+      `
+      : "";
+    metaItems = [
+      hasActiveRound ? `Sync ${activeRound.sync.label}` : "Local ready",
+      hasActiveRound ? `Invite ${activeRound.inviteCode || "Ready when hosted"}` : "Invite later",
+    ];
+  } else if (state.session.activeView === "stats") {
+    title = "Player progress";
+    description = summaryRound
+      ? `Latest card saved from ${summaryRound.courseName}.`
+      : "Finish a round and this becomes your clean player archive.";
+    actionMarkup = summaryRound
+      ? `
+        <button class="button primary utility-header-button" type="button" data-action="view-summary" data-round-id="${summaryRound.id}">
+          Latest summary
+        </button>
+      `
+      : `
+        <button
+          class="button primary utility-header-button"
+          type="button"
+          ${hasActiveRound ? `data-action="resume-round" data-round-id="${activeRound.id}"` : 'data-action="nav-view" data-view="round"'}
+        >
+          ${hasActiveRound ? "Resume round" : "Start a round"}
+        </button>
+      `;
+    metaItems = [
+      `Rounds: ${metrics.roundsPlayed}`,
+      `Average: ${metrics.scoringAverage ? metrics.scoringAverage.toFixed(1) : "--"}`,
+      premium ? "Premium insights included" : "Advanced insights locked",
+    ];
+  } else if (state.session.activeView === "community") {
+    title = "Group play";
+    description = hasActiveRound
+      ? "Host the current round, share a code, or manage nearby play."
+      : "Join by code, host later, or keep event tools organized.";
+    actionMarkup = hasActiveRound
+      ? `
+        <button class="button primary utility-header-button" type="button" data-action="host-active-round">
+          Host active round
+        </button>
+      `
+      : `
+        <button class="button primary utility-header-button" type="button" data-action="nav-view" data-view="round">
+          Start a round first
+        </button>
+      `;
+    metaItems = [
+      hasActiveRound ? `Room ${activeRound.inviteCode || "Not hosted"}` : "Room not live",
+      hasActiveRound ? `Transport ${activeRound.sync.label}` : "Transport local",
+      `${state.tournaments.length} events`,
+    ];
+  } else if (state.session.activeView === "premium") {
+    title = premium ? "Premium access" : "Premium upgrade";
+    description = premium
+      ? "Advanced analytics, comparison, and live tools are ready on this golfer."
+      : "See the premium layer without interrupting the free round flow.";
+    actionMarkup = `
+      <button class="button primary utility-header-button" type="button" data-action="nav-view" data-view="stats">
+        ${premium ? "Use premium stats" : "See locked stats"}
+      </button>
+    `;
+    metaItems = [
+      `${subscription.planName || (premium ? "Premium" : "Free")} plan`,
+      `Billing ${subscription.billingReady ? "ready" : "later"}`,
+      `${state.currentUser.providerType || state.currentUser.provider || "email"} account`,
+    ];
+  } else if (state.session.activeView === "help") {
+    title = "Help and guide";
+    description = "Short answers for sign-in, rounds, score entry, stats, premium, and troubleshooting.";
+    actionMarkup = `
+      <button class="button primary utility-header-button" type="button" data-action="close-help">
+        Back to ${escapeHtml(VIEW_ORDER.find((view) => view.id === state.session.helpReturnView)?.label || (state.session.helpReturnView === "auth" ? "sign in" : "home"))}
+      </button>
+    `;
+    metaItems = [
+      "Short help cards",
+      "Mobile-friendly answers",
+      "Context links throughout the app",
+    ];
+  } else if (state.session.activeView === "settings") {
+    title = "Profile and settings";
+    description = "Manage account details, golf identity, appearance, and support tools.";
+    actionMarkup = `
+      <button class="button secondary utility-header-button" type="button" data-action="close-settings">
+        Back
+      </button>
+    `;
+    metaItems = [
+      `${state.currentUser.subscription?.tier === "premium" ? "Premium" : "Free"} golfer`,
+      state.currentUser.providerType || state.currentUser.provider || "email",
+    ];
+  }
+
+  return `
+    <header class="screen-utility-bar screen-utility-bar--${state.session.activeView}">
+      <div class="screen-utility-main">
+        <div class="screen-copy utility-copy-group">
+          <p class="eyebrow">${escapeHtml(copy.eyebrow)}</p>
+          <h2 class="utility-heading">${escapeHtml(title)}</h2>
+          <p class="hero-copy utility-copy">${escapeHtml(description)}</p>
+        </div>
+        <div class="screen-utility-actions">
+          ${actionMarkup}
+        </div>
+      </div>
+      ${metaItems.length
+        ? `
+          <div class="screen-meta screen-meta--utility">
+            ${metaItems.map((item) => `<span class="top-chip">${escapeHtml(item)}</span>`).join("")}
+          </div>
+        `
+        : ""}
+    </header>
+  `;
+}
+
+function renderPlanPill(state) {
+  const subscription = getSubscription(state);
+  const premium = isPremiumSubscription(subscription);
+
+  return `
+    <article class="rail-card tier-card ${premium ? "is-premium" : ""}">
+      <span class="mini-label">Membership</span>
+      <strong>${escapeHtml(subscription.planName || (premium ? "Premium" : "Free"))}</strong>
+      <p>${premium ? "Advanced analytics and group tools are unlocked for this account." : "Basic scoring is active. Advanced insights stay neatly locked until premium access is active."}</p>
+      <button class="button ${premium ? "secondary" : "primary"}" type="button" data-action="nav-view" data-view="premium">
+        ${premium ? "Manage premium" : "See premium"}
+      </button>
+    </article>
+  `;
+}
+
+function renderSummarySpotlight(state, summaryRound) {
+  if (!summaryRound) {
+    return "";
+  }
+
+  const summary = getRoundSummary(summaryRound, state.currentUser.id);
+  const premiumInsights = !getFeatureGate("round-insights", getSubscription(state)).locked
+    ? summary.roundInsights.slice(0, 2)
+    : [];
+  return `
+    <section class="summary-spotlight card premium-summary-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Recent finish</p>
+          <h3>${escapeHtml(summaryRound.courseName)} / ${escapeHtml(summary.roundLabel)}</h3>
+        </div>
+        <div class="row-actions">
+          <button class="button subtle" type="button" data-action="dismiss-summary">Hide</button>
+          <button class="button secondary" type="button" data-action="view-summary" data-round-id="${summaryRound.id}">Open summary</button>
+        </div>
+      </div>
+      <div class="summary-grid">
+        <article>
+          <span>Winner</span>
+          <strong>${escapeHtml(summary.winnerLabel)}</strong>
+        </article>
+        <article>
+          <span>Your finish</span>
+          <strong>${escapeHtml(summary.localParticipant?.displayStatus || "--")}</strong>
+        </article>
+        <article>
+          <span>Holes played</span>
+          <strong>${summary.holesPlayed}/${summary.totalHoles}</strong>
+        </article>
+        <article>
+          <span>Average putts</span>
+          <strong>${summary.localTotals?.averagePutts ? summary.localTotals.averagePutts.toFixed(1) : "--"}</strong>
+        </article>
+      </div>
+      <div class="summary-detail-list">
+        ${summary.leaderboard
+          .slice(0, 3)
+          .map(
+            (entry) => `
+              <article class="summary-detail-row ${entry.isLocal ? "is-local" : ""}">
+                <div>
+                  <span>Rank ${entry.rank}</span>
+                  <strong>${escapeHtml(entry.name)}</strong>
+                </div>
+                <div>
+                  <span>Status</span>
+                  <strong>${escapeHtml(entry.displayStatus)}</strong>
+                </div>
+                <div>
+                  <span>${summaryRound.mode === "match" ? "Holes won" : "Total"}</span>
+                  <strong>${entry.total || 0}</strong>
+                </div>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+      ${premiumInsights.length
+        ? `
+          <div class="stack-list compact-stack">
+            ${premiumInsights.map((insight) => `<div class="feature-row">${escapeHtml(insight)}</div>`).join("")}
+          </div>
+        `
+        : ""}
+    </section>
+  `;
+}
+
+function renderAvatarChip(label, sizeClass = "") {
+  const source = String(label || "GN").trim();
+  const compact = source.length <= 2 && !source.includes(" ")
+    ? source.toUpperCase()
+    : source
+        .split(" ")
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() || "")
+        .join("")
+        .slice(0, 2) || "GN";
+  return `<span class="avatar-chip ${sizeClass}">${escapeHtml(compact)}</span>`;
+}
+
+function renderAuthEntryCard(state) {
+  const auth = state.auth || {};
+  const connected = auth.status === "authenticated";
+
+  if (!connected) {
+    return "";
+  }
+
+  return `
+    <article class="card account-access-card stats-quiet-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Account status</p>
+          <h3>Signed in and saving to this golfer</h3>
+        </div>
+        <span class="status-pill">Ready</span>
+      </div>
+      <p class="body-copy">Your rounds, stats, and premium access now follow this account. Open Profile & settings any time you want to manage the golfer on this device.</p>
+      <div class="account-access-meta">
+        <span class="top-chip">Primary: ${escapeHtml(auth.provider || "email")}</span>
+        <span class="top-chip">Linked: ${escapeHtml((auth.linkedProviders || []).join(", ") || "none")}</span>
+        <span class="top-chip">${escapeHtml(state.currentUser.subscription?.tier === "premium" ? "Premium tester access" : "Free plan")}</span>
+      </div>
+      <p class="body-copy compact-copy">Use the small avatar button in the top-right to manage this golfer, change appearance, or sign out.</p>
+      <div class="row-actions">
+        <button class="button subtle" type="button" data-action="open-help-section" data-section="accounts-profiles">Help Center</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderPlayerProfileCard(state) {
+  const profile = getCurrentProfile(state);
+  const publicPreview = buildCompetitivePreview(state, state.currentUser.profileId, state.currentUser.profileId);
+  const visibilityLabel = PROFILE_VISIBILITY_OPTIONS.find((option) => option.id === state.currentUser.privacy?.profileVisibility)?.label || "Friends only";
+
+  if (!profile) {
+    return "";
+  }
+
+  return `
+    <article class="card player-profile-card card-span-2">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Player profile</p>
+          <h3>Player details and privacy</h3>
+        </div>
+        <span class="status-pill">${escapeHtml(state.currentUser.subscription?.tier === "premium" ? "Premium" : "Free")}</span>
+      </div>
+      <div class="profile-identity-row">
+        ${renderAvatarChip(profile.publicProfile.avatarLabel, "is-large")}
+        <div>
+          <strong>${escapeHtml(profile.publicProfile.displayName)}</strong>
+          <p>${escapeHtml(profile.publicProfile.username)} / Joined ${formatDate(profile.account.createdAt)} / ${publicPreview?.roundsPlayed || 0} rounds / ${escapeHtml(visibilityLabel)}</p>
+        </div>
+      </div>
+      <div class="profile-visibility-grid">
+        <article class="visibility-card">
+          <span>Only you can see</span>
+          <strong>${escapeHtml(state.currentUser.email || "Email ready")}</strong>
+          <p>Account email, provider details, and privacy settings stay private.</p>
+        </article>
+        <article class="visibility-card">
+          <span>Other golfers can see</span>
+          <strong>${publicPreview ? `${publicPreview.roundsPlayed} rounds / ${formatAverageScore(publicPreview.averageScore)} avg` : "Public profile ready"}</strong>
+          <p>Name, avatar, selected stats, and anything you allow through privacy settings.</p>
+        </article>
+      </div>
+      <div class="summary-grid compact">
+        <article>
+          <span>Rounds played</span>
+          <strong>${publicPreview?.roundsPlayed || 0}</strong>
+        </article>
+        <article>
+          <span>Average score</span>
+          <strong>${formatAverageScore(publicPreview?.averageScore)}</strong>
+        </article>
+        <article>
+          <span>Best round</span>
+          <strong>${publicPreview?.bestRound || "--"}</strong>
+        </article>
+        <article>
+          <span>Fairways</span>
+          <strong>${formatPercent(publicPreview?.fairwayPercentage)}</strong>
+        </article>
+        <article>
+          <span>GIR</span>
+          <strong>${formatPercent(publicPreview?.girPercentage)}</strong>
+        </article>
+        <article>
+          <span>Form</span>
+          <strong>${escapeHtml(publicPreview?.formLabel || "Stable")}</strong>
+        </article>
+      </div>
+      <p class="body-copy compact-copy">Your account and golf identity now have a dedicated settings area. Update profile details, appearance, privacy, and light social preferences there instead of editing them inside Stats.</p>
+      <div class="row-actions help-row">
+        ${renderHelpLink("Profile and account help", "accounts-profiles", true)}
+      </div>
+    </article>
+  `;
+}
+
+function renderCompetitivePreviewCard(state, profileId, title = "Competitive preview") {
+  const preview = buildCompetitivePreview(state, profileId, state.currentUser.profileId);
+  if (!preview) {
+    return "";
+  }
+
+  const comparison = profileId !== state.currentUser.profileId
+    ? buildPlayerComparison(state, state.currentUser.profileId, profileId)
+    : null;
+  const advancedGate = getFeatureGate("advanced-stats", getSubscription(state));
+  const comparisonGate = getFeatureGate("player-comparison", getSubscription(state));
+
+  if (comparison && !comparisonGate.locked) {
+    return `
+      <article class="card competitive-preview-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Player comparison</p>
+            <h3>${escapeHtml(title)}</h3>
+          </div>
+          <span class="status-pill">${escapeHtml(comparison.right.formLabel)}</span>
+        </div>
+        <div class="comparison-grid comparison-player-grid">
+          <article class="comparison-player-card">
+            <div class="profile-identity-row compact-profile-row">
+              ${renderAvatarChip(comparison.left.avatarLabel, "is-large")}
+              <div>
+                <strong>${escapeHtml(comparison.left.displayName)}</strong>
+                <p>${escapeHtml(comparison.left.username)} / You</p>
+              </div>
+            </div>
+          </article>
+          <article class="comparison-player-card">
+            <div class="profile-identity-row compact-profile-row">
+              ${renderAvatarChip(comparison.right.avatarLabel, "is-large")}
+              <div>
+                <strong>${escapeHtml(comparison.right.displayName)}</strong>
+                <p>${escapeHtml(comparison.right.username)} / ${escapeHtml(comparison.right.headToHeadLabel)}</p>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="comparison-metric-list">
+          ${comparison.metricRows.map((row) => `
+            <article class="comparison-metric-row">
+              <strong>${formatComparisonMetric(row.label, row.left)}</strong>
+              <span>${escapeHtml(row.label)}</span>
+              <strong>${formatComparisonMetric(row.label, row.right)}</strong>
+            </article>
+          `).join("")}
+        </div>
+        <div class="summary-grid compact comparison-summary-grid">
+          <article>
+            <span>Best round</span>
+            <strong>${comparison.left.bestRound || "--"} / ${comparison.right.bestRound || "--"}</strong>
+          </article>
+          <article>
+            <span>Handicap</span>
+            <strong>${advancedGate.locked ? "Premium" : `${formatHandicap(comparison.left.handicapIndex)} / ${formatHandicap(comparison.right.handicapIndex)}`}</strong>
+          </article>
+        </div>
+        ${advancedGate.locked
+          ? `
+            <div class="feature-row comparison-callout">
+              Premium unlocks handicap scaffolding, par-type breakdowns, and smarter side-by-side insight.
+            </div>
+          `
+          : `
+            <div class="stack-list compact-stack">
+              <div class="feature-row">Trend: ${escapeHtml(comparison.left.trendSummary)} / ${escapeHtml(comparison.right.trendSummary)}</div>
+              <div class="feature-row">Par 5 scoring: ${formatAverageScore(comparison.left.scoringByParType?.[5]?.averageScore)} / ${formatAverageScore(comparison.right.scoringByParType?.[5]?.averageScore)}</div>
+              <div class="feature-row">Driving SG: ${formatSignedValue(comparison.left.strokesGained?.driving?.value)} / ${formatSignedValue(comparison.right.strokesGained?.driving?.value)}</div>
+              <div class="feature-row">Toughest hole: ${comparison.left.hardestHoles?.[0] ? `Hole ${comparison.left.hardestHoles[0].holeNumber}` : "--"} / ${comparison.right.hardestHoles?.[0] ? `Hole ${comparison.right.hardestHoles[0].holeNumber}` : "--"}</div>
+            </div>
+          `}
+      </article>
+    `;
+  }
+
+  return `
+    <article class="card competitive-preview-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Competitive profile</p>
+          <h3>${escapeHtml(title)}</h3>
+        </div>
+      </div>
+      <div class="profile-identity-row">
+        ${renderAvatarChip(preview.avatarLabel, "is-large")}
+        <div>
+          <strong>${escapeHtml(preview.displayName)}</strong>
+          <p>${escapeHtml(preview.username)}</p>
+        </div>
+      </div>
+      <div class="summary-grid compact">
+        <article>
+          <span>Rounds played</span>
+          <strong>${preview.roundsPlayed}</strong>
+        </article>
+        <article>
+          <span>Average score</span>
+          <strong>${formatAverageScore(preview.averageScore)}</strong>
+        </article>
+        <article>
+          <span>Best round</span>
+          <strong>${preview.bestRound || "--"}</strong>
+        </article>
+        <article>
+          <span>Form</span>
+          <strong>${escapeHtml(preview.formLabel)}</strong>
+        </article>
+        <article>
+          <span>Fairways</span>
+          <strong>${formatPercent(preview.fairwayPercentage)}</strong>
+        </article>
+        <article>
+          <span>GIR</span>
+          <strong>${formatPercent(preview.girPercentage)}</strong>
+        </article>
+        <article>
+          <span>Putts</span>
+          <strong>${formatAverageScore(preview.averagePutts)}</strong>
+        </article>
+      </div>
+      <div class="stack-list compact-stack">
+        <div class="feature-row">Recent form: ${escapeHtml(preview.recentFormSummary)}</div>
+        ${preview.homeCourse ? `<div class="feature-row">Home course: ${escapeHtml(preview.homeCourse)}</div>` : ""}
+        ${preview.handicap !== null && preview.handicap !== undefined ? `<div class="feature-row">Handicap: ${escapeHtml(String(preview.handicap))}</div>` : ""}
+        ${!advancedGate.locked && preview.handicapIndex !== null ? `<div class="feature-row">Handicap scaffold: ${formatHandicap(preview.handicapIndex)}</div>` : ""}
+        ${!advancedGate.locked ? `<div class="feature-row">Trend: ${escapeHtml(preview.trendSummary)}</div>` : ""}
+        ${!advancedGate.locked && preview.strokesGained ? `<div class="feature-row">Driving SG: ${formatSignedValue(preview.strokesGained.driving?.value)} / Approach SG: ${formatSignedValue(preview.strokesGained.approach?.value)} / Putting SG: ${formatSignedValue(preview.strokesGained.putting?.value)}</div>` : ""}
+        ${preview.bio ? `<div class="feature-row">${escapeHtml(preview.bio)}</div>` : ""}
+        <div class="feature-row">Head-to-head: ${escapeHtml(preview.headToHeadLabel)}</div>
+        ${comparison && comparisonGate.locked
+          ? `<div class="feature-row comparison-callout">Premium unlocks side-by-side comparison, strokes gained, and hardest-hole trends between players.</div>`
+          : ""}
+        ${!advancedGate.locked && preview.smartInsights?.length
+          ? preview.smartInsights.map((insight) => `<div class="feature-row">${escapeHtml(insight)}</div>`).join("")
+          : ""}
+      </div>
+    </article>
+  `;
+}
+
+function renderPrimaryActions(state, activeRound) {
+  const hasActiveRound = Boolean(activeRound && activeRound.status === "active");
+  const guided = shouldShowFirstRoundGuide(state) && !hasActiveRound;
+  return `
+    <div class="cta-row">
+      <button class="button primary hero-button ${guided ? "guided-action" : ""}" type="button" data-action="nav-view" data-view="round">Start round</button>
+      <button class="button secondary hero-button" type="button" data-action="nav-view" data-view="community">Join round</button>
+      <button
+        class="button subtle hero-button"
+        type="button"
+        ${hasActiveRound ? `data-action="resume-round" data-round-id="${activeRound.id}"` : "disabled"}
+      >
+        Continue round
+      </button>
+    </div>
+  `;
+}
+
+function renderInstallCard(state) {
+  if (state.session.installHintDismissed) {
+    return "";
+  }
+
+  if (state.session.standaloneMode) {
+    return `
+      <article class="card install-card install-card--installed">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Installed app</p>
+            <h3>Built for the home screen now</h3>
+          </div>
+          <span class="status-pill">Standalone</span>
+        </div>
+        <p class="body-copy">Golfers Nation is running in standalone mode with offline shell support, safer screen spacing, and a more native bottom navigation feel.</p>
+      </article>
+    `;
+  }
+
+  if (state.session.installPromptAvailable) {
+    return `
+      <article class="card install-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Install app</p>
+            <h3>Add Golfers Nation to your phone</h3>
+          </div>
+          <button class="button subtle" type="button" data-action="dismiss-install-card">Not now</button>
+        </div>
+        <p class="body-copy">Install the app for a cleaner, full-screen golf companion with faster relaunching and offline shell support.</p>
+        <div class="row-actions">
+          <button class="button primary" type="button" data-action="prompt-install">Install app</button>
+        </div>
+      </article>
+    `;
+  }
+
+  if (state.session.installState === "ios-share") {
+    return `
+      <article class="card install-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Add to Home Screen</p>
+            <h3>Install from Safari on iPhone</h3>
+          </div>
+          <button class="button subtle" type="button" data-action="dismiss-install-card">Not now</button>
+        </div>
+        <p class="body-copy">Use Safari Share, then tap <strong>Add to Home Screen</strong> for the cleaner standalone version of Golfers Nation.</p>
+      </article>
+    `;
+  }
+
+  return "";
+}
+
+function renderGlobalFeedback(state) {
+  const feedback = state.session?.feedback;
+  const pendingLabel = state.session?.pendingLabel;
+  const cloudSync = state.session?.cloudSync || {};
+  const cloudSyncVisible = state.auth?.status === "authenticated"
+    && cloudSync.userId
+    && cloudSync.userId === state.currentUser?.id
+    && ["syncing", "failed"].includes(cloudSync.status);
+
+  if (!feedback && !pendingLabel && !cloudSyncVisible) {
+    return "";
+  }
+
+  return `
+    <section class="global-feedback-stack" aria-live="polite">
+      ${pendingLabel ? `
+        <article class="global-feedback is-loading">
+          <div>
+            <strong>Working</strong>
+            <p>${escapeHtml(pendingLabel)}</p>
+          </div>
+        </article>
+      ` : ""}
+      ${cloudSyncVisible && cloudSync.status === "failed" ? `
+        <article class="global-feedback is-warning">
+          <div>
+            <strong>Cloud backup needs another try</strong>
+            <p>${escapeHtml(cloudSync.errorMessage || "Your latest round is still safe on this device, but the cloud copy has not completed yet.")}</p>
+          </div>
+          <button class="button subtle compact-feedback-button" type="button" data-action="retry-cloud-save">Retry save</button>
+        </article>
+      ` : ""}
+      ${feedback ? `
+        <article class="global-feedback is-${feedback.tone || "info"}">
+          <div>
+            <strong>${escapeHtml(feedback.title || "Update")}</strong>
+            <p>${escapeHtml(feedback.message || "")}</p>
+          </div>
+          <button class="button subtle compact-feedback-button" type="button" data-action="dismiss-feedback">Dismiss</button>
+        </article>
+      ` : ""}
+    </section>
+  `;
+}
+
+function getLastUsedAccount(state) {
+  const lastUserId = state.auth?.lastUserId;
+  if (!lastUserId) {
+    return null;
+  }
+
+  return (state.accounts || []).find((account) => account.id === lastUserId) || null;
+}
+
+function getAppearanceSettings(state) {
+  return {
+    colorMode: state.currentUser?.appearance?.colorMode || "system",
+    themeId: state.currentUser?.appearance?.themeId || "forest",
+    textScale: state.currentUser?.appearance?.textScale || "standard",
+    compactMode: state.currentUser?.appearance?.compactMode === true,
+    contrastMode: state.currentUser?.appearance?.contrastMode === "high" ? "high" : "standard",
+  };
+}
+
+function getSocialSettings(state) {
+  return {
+    handles: {
+      instagram: state.currentUser?.social?.handles?.instagram || "",
+      x: state.currentUser?.social?.handles?.x || "",
+      ghin: state.currentUser?.social?.handles?.ghin || "",
+    },
+    allowFriendConnections: state.currentUser?.social?.allowFriendConnections !== false,
+    allowProfileSharing: state.currentUser?.social?.allowProfileSharing !== false,
+    allowRoundSharing: state.currentUser?.social?.allowRoundSharing !== false,
+  };
+}
+
+function getRoundSetup(state) {
+  return {
+    courseQuery: state.session?.roundSetup?.courseQuery || "",
+    selectedCourseId: state.session?.roundSetup?.selectedCourseId || "",
+    selectedTeeBoxId: state.session?.roundSetup?.selectedTeeBoxId || "",
+  };
+}
+
+function getOrderedSettingsSections(selectedId) {
+  if (!selectedId || !SETTINGS_SECTIONS.some((section) => section.id === selectedId)) {
+    return SETTINGS_SECTIONS;
+  }
+
+  const selected = SETTINGS_SECTIONS.find((section) => section.id === selectedId);
+  return [selected, ...SETTINGS_SECTIONS.filter((section) => section.id !== selectedId)];
+}
+
+function renderAuthScreen(state) {
+  const auth = state.auth || {};
+  const loginMode = auth.mode !== "signup";
+  const reviewAccounts = getReviewAccounts(state);
+  const lastUsedAccount = getLastUsedAccount(state);
+
+  return `
+    <section class="auth-shell">
+      <article class="card auth-hero-card">
+        <p class="eyebrow">Golfers Nation</p>
+        <h2>Enter the app quickly and understand what happens next.</h2>
+        <p class="hero-copy">Create a golfer account, restore a saved session, or use the free and premium demo golfers below to review the product without setup friction.</p>
+        <div class="auth-benefit-grid">
+          <article>
+            <span>Player accounts</span>
+            <strong>Persistent profile and history</strong>
+          </article>
+          <article>
+            <span>Rounds and stats</span>
+            <strong>Saved to the signed-in golfer</strong>
+          </article>
+          <article>
+            <span>PWA ready</span>
+            <strong>Installable on your phone</strong>
+          </article>
+        </div>
+        <div class="auth-helper-note">
+          <strong>Fastest review path</strong>
+          <p>Use the free demo golfer first to see locked states, then switch to the premium demo golfer to review the unlocked version.</p>
+          <div class="row-actions help-row">
+            ${renderHelpLink("Need help signing in?", "accounts-profiles", true)}
+          </div>
+        </div>
+      </article>
+      <article class="card auth-panel-card">
+        <div class="auth-mode-toggle" role="tablist" aria-label="Authentication mode">
+          <button class="button ${loginMode ? "primary" : "subtle"}" type="button" data-action="set-auth-mode" data-mode="login">Log in</button>
+          <button class="button ${loginMode ? "subtle" : "primary"}" type="button" data-action="set-auth-mode" data-mode="signup">Sign up</button>
+        </div>
+        ${renderGlobalFeedback(state)}
+        ${auth.error ? `<div class="auth-message is-error">${escapeHtml(auth.error)}</div>` : ""}
+        ${auth.notice ? `<div class="auth-message">${escapeHtml(auth.notice)}</div>` : ""}
+        ${lastUsedAccount ? `
+          <div class="auth-helper-note auth-helper-note--compact">
+            <strong>Last golfer on this device</strong>
+            <p>${escapeHtml(lastUsedAccount.displayName)} / ${escapeHtml(lastUsedAccount.email)} / ${escapeHtml(lastUsedAccount.subscription?.tier === "premium" ? "Premium" : "Free")}</p>
+          </div>
+        ` : ""}
+        <div class="auth-helper-note auth-helper-note--compact">
+          <strong>${loginMode ? "Returning golfer" : "New golfer"}</strong>
+          <p>${loginMode ? "Log in with your own email to restore your rounds, stats, and plan." : "Create your golfer account with your own email. New tester accounts get full access right away, then the app guides you straight into your first round."}</p>
+        </div>
+        ${!loginMode ? `
+          <div class="summary-grid onboarding-list auth-onboarding-list">
+            <article>
+              <strong>1</strong>
+              <p>Create your golfer account.</p>
+            </article>
+            <article>
+              <strong>2</strong>
+              <p>Home will highlight <strong>Start round</strong> next.</p>
+            </article>
+            <article>
+              <strong>3</strong>
+              <p>Golden Nugget Lake Charles will be ready as your first course.</p>
+            </article>
+          </div>
+        ` : ""}
+        ${loginMode
+          ? `
+            <form class="stack-form" data-form="auth-login">
+              <label>
+                Email
+                <input name="email" type="email" placeholder="you@example.com" required autofocus />
+              </label>
+              <label>
+                Password
+                <input name="password" type="password" placeholder="Password" required />
+              </label>
+              <button class="button primary" type="submit">Log in</button>
+            </form>
+            <form class="stack-form auth-reset-form" data-form="auth-password-reset">
+              <label>
+                Need a reset link?
+                <input name="email" type="email" placeholder="your account email" />
+              </label>
+              <button class="button subtle" type="submit">Send password reset email</button>
+            </form>
+          `
+          : `
+            <form class="stack-form" data-form="auth-signup">
+              <label>
+                Display name
+                <input name="displayName" type="text" placeholder="Your name" required />
+              </label>
+              <label>
+                Email
+                <input name="email" type="email" placeholder="you@example.com" required />
+              </label>
+              <label>
+                Password
+                <input name="password" type="password" placeholder="Create a password" required />
+              </label>
+              <button class="button primary" type="submit">Create account</button>
+            </form>
+          `}
+        <div class="section-divider"></div>
+        <div class="auth-provider-stack">
+          <button class="auth-provider-button" type="button" disabled>
+            <strong>Google sign-in</strong>
+            <span>Coming soon. Email is the fastest way to start right now.</span>
+          </button>
+          <button class="auth-provider-button" type="button" disabled>
+            <strong>Apple sign-in</strong>
+            <span>Coming soon. Email keeps the first-round flow simple today.</span>
+          </button>
+        </div>
+      </article>
+      <article class="card auth-review-card">
+        <details class="auth-example-details">
+          <summary>
+            <span class="eyebrow">Quick preview</span>
+            <strong>Use an example golfer instead</strong>
+          </summary>
+          <p class="body-copy compact-copy">If you only want a fast walkthrough, these built-in golfers already have saved rounds and stats.</p>
+          <div class="stack-list">
+            ${reviewAccounts.map((account) => `
+              <article class="list-row large review-account-row">
+                <div>
+                  <strong>${escapeHtml(account.displayName)}</strong>
+                  <p>${escapeHtml(account.email)} / ${escapeHtml(account.tier === "premium" ? "Premium" : "Free")}</p>
+                </div>
+                <div class="list-metrics">
+                  <span>${account.tier === "premium" ? "Premium unlocked" : "Shows the free experience"}</span>
+                  <span>Password: fairway123</span>
+                  <button class="button subtle" type="button" data-action="use-review-account" data-user-id="${account.id}">Open account</button>
+                </div>
+              </article>
+            `).join("")}
+          </div>
+        </details>
+      </article>
+    </section>
+  `;
+}
+
+function renderSettingsSectionNav(state) {
+  const selected = state.session.settingsSection || "account";
+  return `
+    <div class="settings-section-nav" role="tablist" aria-label="Settings sections">
+      ${SETTINGS_SECTIONS.map((section) => `
+        <button
+          class="settings-section-pill ${selected === section.id ? "is-active" : ""}"
+          type="button"
+          data-action="set-settings-section"
+          data-section="${section.id}"
+          role="tab"
+          aria-selected="${selected === section.id ? "true" : "false"}"
+        >
+          ${escapeHtml(section.label)}
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderSettingsTopCard(state) {
+  const subscription = getSubscription(state);
+  const provider = state.currentUser.providerType || state.currentUser.provider || "email";
+  const returnView = state.session.settingsReturnView || "stats";
+  const returnLabel = VIEW_ORDER.find((view) => view.id === returnView)?.label || "Stats";
+  const shortSummary = state.currentUser.bio
+    ? state.currentUser.bio
+    : `${state.currentUser.homeCourse ? `${state.currentUser.homeCourse} home course` : "Golf identity ready"} / ${subscription.tier === "premium" ? "Premium access active" : "Free plan active"} / ${provider} sign-in`;
+
+  return `
+    <article class="card settings-top-card card-span-3">
+      <div class="profile-identity-row">
+        ${renderAvatarChip(state.currentUser.avatarLabel || state.currentUser.avatar, "is-large")}
+        <div>
+          <p class="eyebrow">Profile and settings</p>
+          <h3>${escapeHtml(state.currentUser.displayName || state.currentUser.name)}</h3>
+          <p>${escapeHtml(state.currentUser.username || "@golfer")} / ${escapeHtml(state.currentUser.email || "Email ready")} / ${escapeHtml(subscription.tier === "premium" ? "Premium access" : "Free plan")}</p>
+        </div>
+      </div>
+      <div class="summary-grid compact">
+        <article>
+          <span>Provider</span>
+          <strong>${escapeHtml(provider)}</strong>
+        </article>
+        <article>
+          <span>Member since</span>
+          <strong>${formatDate(state.currentUser.createdAt)}</strong>
+        </article>
+        <article>
+          <span>Rounds played</span>
+          <strong>${state.currentUser.roundsPlayed || 0}</strong>
+        </article>
+        <article>
+          <span>Best round</span>
+          <strong>${state.currentUser.bestRound || "--"}</strong>
+        </article>
+      </div>
+      <p class="body-copy compact-copy">This settings area keeps account details, golf identity, theme preferences, social scaffolding, and support access together in one clean place.</p>
+      <p class="body-copy compact-copy">${escapeHtml(shortSummary)}</p>
+      <div class="row-actions">
+        <button class="button secondary" type="button" data-action="close-settings">Back to ${escapeHtml(returnLabel)}</button>
+        <button class="button primary" type="button" data-action="sign-out">Log out account</button>
+        ${renderHelpLink("Settings help", "accounts-profiles", true)}
+      </div>
+    </article>
+  `;
+}
+
+function renderAccountSettingsCard(state) {
+  const provider = state.currentUser.providerType || state.currentUser.provider || "email";
+  const subscription = getSubscription(state);
+  const passwordScaffold = provider === "email"
+    ? `
+      <form class="stack-form compact-form" data-form="change-password-settings">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Password</p>
+            <h4>Change password</h4>
+          </div>
+        </div>
+        <div class="split-inputs">
+          <label>
+            Current password
+            <input name="currentPassword" type="password" placeholder="Current password" />
+          </label>
+          <label>
+            New password
+            <input name="newPassword" type="password" placeholder="New password" />
+          </label>
+        </div>
+        <label>
+          Confirm new password
+          <input name="confirmPassword" type="password" placeholder="Confirm new password" />
+        </label>
+        <button class="button secondary" type="submit">Update password</button>
+      </form>
+    `
+    : `
+      <article class="settings-support-panel">
+        <span class="mini-label">Password</span>
+        <strong>Password is managed by ${escapeHtml(provider)}</strong>
+        <p class="body-copy compact-copy">This account uses ${escapeHtml(provider)} sign-in, so password changes will live in the real provider flow when backend auth is connected.</p>
+      </article>
+    `;
+
+  return `
+    <article class="card settings-card" data-settings-card="account">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Account</p>
+          <h3>Identity and access</h3>
+        </div>
+        <span class="status-pill">${escapeHtml(subscription.tier === "premium" ? "Premium" : "Free")}</span>
+      </div>
+      <form class="stack-form" data-form="save-account-settings">
+        <div class="split-inputs">
+          <label>
+            Display Name
+            <input name="displayName" type="text" value="${escapeHtml(state.currentUser.displayName || state.currentUser.name)}" />
+          </label>
+          <label>
+            Username
+            <input name="username" type="text" value="${escapeHtml(state.currentUser.username || "")}" />
+          </label>
+        </div>
+        <div class="split-inputs">
+          <label>
+            Email
+            <input name="email" type="email" value="${escapeHtml(state.currentUser.email || "")}" />
+          </label>
+          <label>
+            Avatar
+            <input name="avatarLabel" type="text" maxlength="2" value="${escapeHtml(state.currentUser.avatarLabel || "GN")}" />
+          </label>
+        </div>
+        <div class="summary-grid compact">
+          <article>
+            <span>Provider</span>
+            <strong>${escapeHtml(provider)}</strong>
+          </article>
+          <article>
+            <span>Member since</span>
+            <strong>${formatDate(state.currentUser.createdAt)}</strong>
+          </article>
+          <article>
+            <span>Premium status</span>
+            <strong>${escapeHtml(subscription.tier === "premium" ? "Premium access active" : "Free plan active")}</strong>
+          </article>
+        </div>
+        <div class="row-actions">
+          <button class="button primary" type="submit">Save account</button>
+        </div>
+      </form>
+      ${passwordScaffold}
+    </article>
+  `;
+}
+
+function renderGolfProfileSettingsCard(state) {
+  return `
+    <article class="card settings-card" data-settings-card="golf-profile">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Golf Profile</p>
+          <h3>Golf identity and privacy</h3>
+        </div>
+      </div>
+      <form class="stack-form" data-form="save-golf-profile">
+        <label>
+          Home Course
+          <input name="homeCourse" type="text" value="${escapeHtml(state.currentUser.homeCourse || "")}" />
+        </label>
+        <div class="split-inputs">
+          <label>
+            Handicap / Skill Level
+            <input name="handicap" type="number" step="0.1" value="${state.currentUser.handicap ?? ""}" />
+          </label>
+          <label>
+            Handedness
+            <select name="handedness">
+              ${["", "Right-handed", "Left-handed", "Switch"].map((option) => `
+                <option value="${option}" ${state.currentUser.handedness === option ? "selected" : ""}>${option || "Prefer not to say"}</option>
+              `).join("")}
+            </select>
+          </label>
+        </div>
+        <label>
+          Bio
+          <textarea name="bio" rows="3">${escapeHtml(state.currentUser.bio || "")}</textarea>
+        </label>
+        <label>
+          Profile Visibility
+          <select name="profileVisibility">
+            ${PROFILE_VISIBILITY_OPTIONS.map((option) => `
+              <option value="${option.id}" ${state.currentUser.privacy?.profileVisibility === option.id ? "selected" : ""}>${escapeHtml(option.label)}</option>
+            `).join("")}
+          </select>
+        </label>
+        <div class="privacy-grid">
+          ${PRIVACY_CONTROL_OPTIONS.map((option) => `
+            <label class="privacy-option">
+              <input type="checkbox" name="${option.id}" ${state.currentUser.privacy?.[option.id] ? "checked" : ""} />
+              <span>${escapeHtml(option.label)}</span>
+            </label>
+          `).join("")}
+        </div>
+        <button class="button primary" type="submit">Save golf profile</button>
+      </form>
+    </article>
+  `;
+}
+
+function renderAppearanceSettingsCard(state) {
+  const appearance = getAppearanceSettings(state);
+  const activeTheme = THEME_PRESET_OPTIONS.find((theme) => theme.id === appearance.themeId) || THEME_PRESET_OPTIONS[0];
+
+  return `
+    <article class="card settings-card" data-settings-card="appearance">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Appearance</p>
+          <h3>App look and feel</h3>
+        </div>
+      </div>
+      <form class="stack-form" data-form="save-appearance-settings">
+        <div class="settings-option-group">
+          <span class="mini-label">Appearance Mode</span>
+          <div class="settings-choice-grid">
+            ${APPEARANCE_MODE_OPTIONS.map((option) => `
+              <label class="settings-choice-card ${appearance.colorMode === option.id ? "is-selected" : ""}">
+                <input type="radio" name="colorMode" value="${option.id}" data-appearance-input="true" ${appearance.colorMode === option.id ? "checked" : ""} />
+                <strong>${escapeHtml(option.label)}</strong>
+                <p>${escapeHtml(option.description)}</p>
+              </label>
+            `).join("")}
+          </div>
+        </div>
+        <div class="settings-option-group">
+          <span class="mini-label">Theme Style</span>
+          <div class="theme-current-card" data-active-theme-card="true" data-theme-preview="${escapeHtml(activeTheme.id)}">
+            <div class="theme-current-copy" aria-live="polite">
+              <span class="theme-current-eyebrow">Live preview</span>
+              <strong data-active-theme-name="true">${escapeHtml(activeTheme.label)}</strong>
+              <p data-active-theme-description="true">${escapeHtml(activeTheme.description)}</p>
+            </div>
+            <div class="theme-preview-swatches theme-preview-swatches--hero" aria-hidden="true">
+              <span class="theme-preview-swatch theme-preview-swatch--bg"></span>
+              <span class="theme-preview-swatch theme-preview-swatch--surface"></span>
+              <span class="theme-preview-swatch theme-preview-swatch--accent"></span>
+            </div>
+          </div>
+          <p class="body-copy compact-copy">Themes update the background, cards, buttons, header glow, and nav highlight right away. Tap a card to preview it live.</p>
+          <div class="theme-choice-grid">
+            ${THEME_PRESET_OPTIONS.map((theme) => `
+              <label class="theme-choice-card ${appearance.themeId === theme.id ? "is-selected" : ""}" data-theme-preview="${theme.id}">
+                <input type="radio" name="themeId" value="${theme.id}" data-theme-label="${escapeHtml(theme.label)}" data-theme-description="${escapeHtml(theme.description)}" data-appearance-input="true" ${appearance.themeId === theme.id ? "checked" : ""} />
+                <div class="theme-preview-swatches" aria-hidden="true">
+                  <span class="theme-preview-swatch theme-preview-swatch--bg"></span>
+                  <span class="theme-preview-swatch theme-preview-swatch--surface"></span>
+                  <span class="theme-preview-swatch theme-preview-swatch--accent"></span>
+                </div>
+                <div class="theme-choice-meta">
+                  <strong>${escapeHtml(theme.label)}</strong>
+                  <span class="theme-choice-badge">Previewing</span>
+                </div>
+                <p>${escapeHtml(theme.description)}</p>
+              </label>
+            `).join("")}
+          </div>
+        </div>
+        <div class="settings-option-group">
+          <span class="mini-label">Display Comfort</span>
+          <div class="settings-choice-grid settings-choice-grid--dual">
+            ${TEXT_SCALE_OPTIONS.map((option) => `
+              <label class="settings-choice-card ${appearance.textScale === option.id ? "is-selected" : ""}">
+                <input type="radio" name="textScale" value="${option.id}" data-appearance-input="true" ${appearance.textScale === option.id ? "checked" : ""} />
+                <strong>${escapeHtml(option.label)}</strong>
+                <p>${escapeHtml(option.description)}</p>
+              </label>
+            `).join("")}
+          </div>
+          <div class="settings-toggle-grid">
+            <label class="settings-toggle-card ${appearance.compactMode ? "is-selected" : ""}">
+              <input type="checkbox" name="compactMode" data-appearance-input="true" ${appearance.compactMode ? "checked" : ""} />
+              <strong>Compact layout</strong>
+              <p>Tightens vertical spacing for quicker one-handed use.</p>
+            </label>
+            <label class="settings-toggle-card ${appearance.contrastMode === "high" ? "is-selected" : ""}">
+              <input type="checkbox" name="contrastMode" value="high" data-appearance-input="true" ${appearance.contrastMode === "high" ? "checked" : ""} />
+              <strong>Higher contrast</strong>
+              <p>Strengthens text and surface separation without changing the theme.</p>
+            </label>
+          </div>
+        </div>
+        <p class="body-copy compact-copy">Theme selections preview right away. Save appearance to keep them on this golfer account.</p>
+        <button class="button primary" type="submit">Save appearance</button>
+      </form>
+    </article>
+  `;
+}
+
+function renderSocialSettingsCard(state) {
+  const social = getSocialSettings(state);
+
+  return `
+    <article class="card settings-card" data-settings-card="social">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Social</p>
+          <h3>Light community settings</h3>
+        </div>
+      </div>
+      <p class="body-copy compact-copy">These tools are intentionally lightweight for this stage: invite friends, share your profile or latest round, and keep a few golf-related handles connected.</p>
+      <div class="row-actions settings-social-actions">
+        <button class="button primary" type="button" data-action="invite-friends">Invite Friends</button>
+        <button class="button secondary" type="button" data-action="share-profile-placeholder">Share Profile</button>
+        <button class="button subtle" type="button" data-action="share-round-summary-placeholder">Share Round Summary</button>
+      </div>
+      <form class="stack-form" data-form="save-social-settings">
+        <div class="split-inputs">
+          <label>
+            Instagram
+            <input name="instagram" type="text" value="${escapeHtml(social.handles.instagram)}" placeholder="@yourhandle" />
+          </label>
+          <label>
+            X / Twitter
+            <input name="x" type="text" value="${escapeHtml(social.handles.x)}" placeholder="@yourhandle" />
+          </label>
+        </div>
+        <label>
+          GHIN / golf profile handle
+          <input name="ghin" type="text" value="${escapeHtml(social.handles.ghin)}" placeholder="Optional player handle" />
+        </label>
+        <div class="privacy-grid">
+          <label class="privacy-option">
+            <input type="checkbox" name="allowFriendConnections" ${social.allowFriendConnections ? "checked" : ""} />
+            <span>Allow follow / friend connection placeholders</span>
+          </label>
+          <label class="privacy-option">
+            <input type="checkbox" name="allowProfileSharing" ${social.allowProfileSharing ? "checked" : ""} />
+            <span>Allow profile sharing</span>
+          </label>
+          <label class="privacy-option">
+            <input type="checkbox" name="allowRoundSharing" ${social.allowRoundSharing ? "checked" : ""} />
+            <span>Allow round summary sharing</span>
+          </label>
+        </div>
+        <button class="button primary" type="submit">Save social settings</button>
+      </form>
+    </article>
+  `;
+}
+
+function renderAppSupportSettingsCard(state) {
+  const recentActivity = (state.social?.activity || [])
+    .slice(0, 3)
+    .map((entry) => entry.message)
+    .join(" | ");
+  const contextView = state.session.settingsReturnView || state.session.previousView || "stats";
+
+  return `
+    <article class="card settings-card" data-settings-card="app-support">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">App & Support</p>
+          <h3>Help, policy, and device support</h3>
+        </div>
+      </div>
+      <div class="stack-list settings-support-list">
+        <button class="list-row large settings-link-row" type="button" data-action="open-help-section" data-section="getting-started">
+          <div>
+            <strong>Help Center</strong>
+            <p>Short guides for sign-in, rounds, stats, and premium features.</p>
+          </div>
+          <span>Open</span>
+        </button>
+        <button class="list-row large settings-link-row" type="button" data-action="show-policy-placeholder" data-doc="privacy">
+          <div>
+            <strong>Privacy Policy</strong>
+            <p>Placeholder entry for the production legal flow.</p>
+          </div>
+          <span>View</span>
+        </button>
+        <button class="list-row large settings-link-row" type="button" data-action="show-policy-placeholder" data-doc="terms">
+          <div>
+            <strong>Terms of Service</strong>
+            <p>Placeholder entry for subscription and account terms.</p>
+          </div>
+          <span>View</span>
+        </button>
+        <button class="list-row large settings-link-row" type="button" data-action="contact-support-placeholder">
+          <div>
+            <strong>Contact Support</strong>
+            <p>Placeholder support flow for real device testing and account help.</p>
+          </div>
+          <span>Email</span>
+        </button>
+      </div>
+      <article class="settings-support-panel">
+        <span class="mini-label">Tester feedback</span>
+        <strong>Send field-test notes without leaving the app</strong>
+        <p class="body-copy compact-copy">On a Netlify deployment, submissions from this form can land in the site Forms tab with device, plan, and screen context attached.</p>
+        <form
+          class="stack-form compact-form"
+          data-form="submit-tester-feedback"
+          name="${NETLIFY_FEEDBACK_FORM_NAME}"
+          method="POST"
+          data-netlify="true"
+          netlify-honeypot="bot-field"
+        >
+          <input type="hidden" name="form-name" value="${NETLIFY_FEEDBACK_FORM_NAME}" />
+          <input type="hidden" name="bot-field" value="" />
+          <input type="hidden" name="appVersion" value="${escapeHtml(APP_VERSION)}" />
+          <input type="hidden" name="planTier" value="${escapeHtml(state.currentUser.subscription?.tier || "free")}" />
+          <input type="hidden" name="installState" value="${escapeHtml(state.session.installState || "browser")}" />
+          <input type="hidden" name="appearanceMode" value="${escapeHtml(state.currentUser.appearance?.colorMode || "system")}" />
+          <input type="hidden" name="themeId" value="${escapeHtml(state.currentUser.appearance?.themeId || "forest")}" />
+          <input type="hidden" name="contextView" value="${escapeHtml(contextView)}" />
+          <input type="hidden" name="recentActivity" value="${escapeHtml(recentActivity)}" />
+          <input type="hidden" name="userAgent" value="${escapeHtml(typeof navigator === "undefined" ? "" : navigator.userAgent || "")}" />
+          <div class="split-inputs">
+            <label>
+              Tester name
+              <input name="testerName" type="text" value="${escapeHtml(state.currentUser.displayName || state.currentUser.name)}" />
+            </label>
+            <label>
+              Contact email
+              <input name="email" type="email" value="${escapeHtml(state.currentUser.email || "")}" />
+            </label>
+          </div>
+          <div class="split-inputs">
+            <label>
+              Feedback area
+              <select name="feedbackArea">
+                ${TESTER_FEEDBACK_AREAS.map((option) => `
+                  <option value="${option.id}" ${option.id === "other" ? "selected" : ""}>${escapeHtml(option.label)}</option>
+                `).join("")}
+              </select>
+            </label>
+            <label>
+              Overall feel
+              <select name="rating">
+                <option value="5">5 / Great</option>
+                <option value="4">4 / Good</option>
+                <option value="3" selected>3 / Okay</option>
+                <option value="2">2 / Rough</option>
+                <option value="1">1 / Broken</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            What happened, or what would improve it?
+            <textarea name="feedbackMessage" rows="4" placeholder="Short note about what worked, what felt confusing, or what should change next."></textarea>
+          </label>
+          <button class="button primary" type="submit">Send tester feedback</button>
+        </form>
+      </article>
+      <div class="summary-grid compact">
+        <article>
+          <span>App version</span>
+          <strong>${escapeHtml(APP_VERSION)}</strong>
+        </article>
+        <article>
+          <span>Install state</span>
+          <strong>${escapeHtml(state.session.standaloneMode ? "Installed" : "Browser / web link")}</strong>
+        </article>
+      </div>
+      <div class="row-actions">
+        <button class="button subtle" type="button" data-action="reset-local-data">Reset local app data</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderSettingsView(state) {
+  const orderedSections = getOrderedSettingsSections(state.session.settingsSection || "account");
+  const cards = {
+    account: renderAccountSettingsCard(state),
+    "golf-profile": renderGolfProfileSettingsCard(state),
+    appearance: renderAppearanceSettingsCard(state),
+    social: renderSocialSettingsCard(state),
+    "app-support": renderAppSupportSettingsCard(state),
+  };
+
+  return `
+    <section class="view-grid settings-grid">
+      ${renderSettingsTopCard(state)}
+      <article class="card settings-nav-card card-span-3">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Settings sections</p>
+            <h3>Everything important, grouped simply</h3>
+          </div>
+        </div>
+        ${renderSettingsSectionNav(state)}
+      </article>
+      ${orderedSections.map((section) => cards[section.id]).join("")}
+    </section>
+  `;
+}
+
+function renderHelpView(state, { standalone = false } = {}) {
+  const selectedSection = state.session.helpSection || "getting-started";
+  const sections = getOrderedHelpSections(selectedSection);
+  const returnView = state.session.helpReturnView || "home";
+  const returnLabel = returnView === "auth"
+    ? "Sign in"
+    : VIEW_ORDER.find((view) => view.id === returnView)?.label || "Home";
+  const helpContent = `
+    <section class="view-grid help-grid">
+      <article class="card help-overview-card card-span-2">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Help</p>
+            <h3>Help Center for quick answers</h3>
+          </div>
+          <button class="button subtle" type="button" data-action="close-help">Back to ${escapeHtml(returnLabel)}</button>
+        </div>
+        <p class="body-copy">Use the quick links below, or scan the first section. When help opens from another screen, the most relevant section moves to the top.</p>
+        <div class="help-jump-grid">
+          ${HELP_SECTIONS.map((section) => `
+            <button
+              class="help-jump-pill ${selectedSection === section.id ? "is-active" : ""}"
+              type="button"
+              data-action="open-help-section"
+              data-section="${section.id}"
+            >
+              ${escapeHtml(section.title)}
+            </button>
+          `).join("")}
+        </div>
+      </article>
+      ${sections.map((section) => `
+        <article class="card help-section-card ${section.id === selectedSection ? "is-selected" : ""}">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Guide</p>
+              <h3>${escapeHtml(section.title)}</h3>
+            </div>
+          </div>
+          <p class="body-copy compact-copy">${escapeHtml(section.description)}</p>
+          <div class="help-item-list">
+            ${section.items.map((item) => `
+              <article class="help-item">
+                <strong>${escapeHtml(item.title)}</strong>
+                <p>${escapeHtml(item.body)}</p>
+              </article>
+            `).join("")}
+          </div>
+        </article>
+      `).join("")}
+    </section>
+  `;
+
+  if (!standalone) {
+    return helpContent;
+  }
+
+  return `
+    <section class="auth-shell">
+      <article class="card auth-hero-card">
+        <p class="eyebrow">Golfers Nation help</p>
+        <h2>Answers that keep the app easy to understand.</h2>
+        <p class="hero-copy">Open a section, read a short answer, then go right back to signing in or reviewing the app.</p>
+        <div class="row-actions help-row">
+          <button class="button primary" type="button" data-action="close-help">Back to sign in</button>
+        </div>
+      </article>
+      ${helpContent}
+    </section>
+  `;
+}
+
+function renderHomeView(state) {
+  const activeRound = getActiveRound(state);
+  const summaryRound = getSummaryRound(state);
+  const metrics = getHistoryMetrics(state.rounds, state.currentUser.id);
+  const completedRounds = getCompletedRounds(state);
+  const recentActivity = state.social.activity.slice(0, 4);
+  const subscription = getSubscription(state);
+  const premium = isPremiumSubscription(subscription);
+
+  return `
+    <section class="view-grid home-grid">
+      <article class="card hero-home-card card-span-2">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Home</p>
+            <h3>${escapeHtml(`Welcome, ${state.currentUser.name.split(" ")[0]}`)}</h3>
+          </div>
+          <span class="status-pill">${premium ? "Premium access" : "Free membership"}</span>
+        </div>
+        <p class="body-copy">
+          Your next action should always be obvious. Start a round, join a game, or jump right back into the card you already have in play.
+        </p>
+        ${renderPrimaryActions(state, activeRound)}
+        <div class="row-actions help-row">
+          ${renderHelpLink("Need help getting started?", "getting-started", true)}
+        </div>
+        <div class="hero-status-grid">
+          <article>
+            <span>Live round</span>
+            <strong>${escapeHtml(activeRound ? activeRound.courseName : "No round in progress")}</strong>
+            <p>${activeRound ? `Hole ${activeRound.currentHole} / ${escapeHtml(GAME_MODES[activeRound.mode].label)}` : "Start a local round to build momentum."}</p>
+          </article>
+          <article>
+            <span>Recent finish</span>
+            <strong>${escapeHtml(summaryRound ? summaryRound.courseName : "No recent finish")}</strong>
+            <p>${summaryRound ? `${formatDate(summaryRound.completedAt)} / Summary saved` : "Round summaries will appear here after your first finish."}</p>
+          </article>
+          <article>
+            <span>Membership</span>
+            <strong>${premium ? "Premium access active" : "Free plan active"}</strong>
+            <p>${premium ? "Advanced insights and premium tools are included in the current view." : "Locked premium states stay available without cluttering the free experience."}</p>
+          </article>
+        </div>
+      </article>
+      ${renderFirstRoundGuide(state, "home")}
+      ${renderInstallCard(state)}
+      <article class="card home-snapshot-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Player account</p>
+            <h3>Profile linked to every round</h3>
+          </div>
+          <button class="button subtle" type="button" data-action="open-current-profile">Open profile</button>
+        </div>
+        <div class="profile-identity-row compact-profile-row">
+          ${renderAvatarChip(state.currentUser.avatarLabel || state.currentUser.avatar, "is-large")}
+          <div>
+            <strong>${escapeHtml(state.currentUser.displayName || state.currentUser.name)}</strong>
+            <p>${escapeHtml(state.currentUser.username || "")} / ${escapeHtml(state.currentUser.email || "Email ready for auth")}</p>
+          </div>
+        </div>
+        <div class="summary-grid">
+          <article>
+            <span>Rounds</span>
+            <strong>${metrics.roundsPlayed}</strong>
+          </article>
+          <article>
+            <span>Average</span>
+            <strong>${metrics.scoringAverage ? metrics.scoringAverage.toFixed(1) : "--"}</strong>
+          </article>
+          <article>
+            <span>Fairways</span>
+            <strong>${metrics.fairways}%</strong>
+          </article>
+          <article>
+            <span>GIR</span>
+            <strong>${metrics.gir}%</strong>
+          </article>
+        </div>
+      </article>
+      <article class="card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Recent activity</p>
+            <h3>What changed lately</h3>
+          </div>
+        </div>
+        <div class="stack-list">
+          ${recentActivity.length
+            ? recentActivity
+                .map(
+                  (entry) => `
+                    <article class="feed-row">
+                      <time>${formatDateTime(entry.createdAt)}</time>
+                      <p>${escapeHtml(entry.message)}</p>
+                    </article>
+                  `
+                )
+                .join("")
+            : `
+              <div class="empty-state onboarding-state">
+                <strong>No recent activity yet.</strong>
+                <p>Start a round or join by code and this feed will explain what just happened.</p>
+                <div class="row-actions empty-state-actions">
+                  <button class="button primary" type="button" data-action="nav-view" data-view="round">Start round</button>
+                  <button class="button subtle" type="button" data-action="nav-view" data-view="community">Join round</button>
+                  ${renderHelpLink("How the app works", "getting-started", true)}
+                </div>
+              </div>`}
+        </div>
+      </article>
+      <article class="card card-span-2">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Recent rounds</p>
+            <h3>History without the clutter</h3>
+          </div>
+        </div>
+        ${completedRounds.length
+          ? `
+            <div class="stack-list">
+              ${completedRounds
+                .slice(0, 3)
+                .map((round) => {
+                  const summary = getRoundSummary(round, state.currentUser.id);
+                  return `
+                    <article class="list-row large">
+                      <div>
+                        <strong>${escapeHtml(round.courseName)}</strong>
+                        <p>${escapeHtml(summary.roundLabel)} / ${formatDate(round.completedAt)}</p>
+                      </div>
+                      <div class="list-metrics">
+                        <span>${escapeHtml(summary.localParticipant?.displayStatus || "--")}</span>
+                        <span>${summary.holesPlayed} holes</span>
+                        <button class="button subtle" type="button" data-action="view-summary" data-round-id="${round.id}">View summary</button>
+                      </div>
+                    </article>
+                  `;
+                })
+                .join("")}
+            </div>
+          `
+          : `
+            <div class="empty-state onboarding-state">
+              <strong>New golfer? The home screen stays simple on purpose.</strong>
+              <p>Start one local round, finish it, and this area will turn into your round archive and progress snapshot.</p>
+              <div class="row-actions empty-state-actions">
+                <button class="button primary" type="button" data-action="nav-view" data-view="round">Start your first round</button>
+                ${renderHelpLink("What happens next?", "getting-started", true)}
+              </div>
+            </div>
+          `}
+      </article>
+    </section>
+  `;
+}
+
+function renderModeNotes(state, mode) {
+  const subscription = getSubscription(state);
+  const premiumModes = PREMIUM_MODE_IDS.map((modeId) => GAME_MODES[modeId].label).join(" and ");
+
+  return `
+    <div class="mode-strip">
+      <span class="status-pill">Mode in play: ${escapeHtml(GAME_MODES[mode].label)}</span>
+      <span class="status-pill">${isPremiumSubscription(subscription) ? "Premium modes unlocked" : `${escapeHtml(premiumModes)} unlock with Premium`}</span>
+    </div>
+  `;
+}
+
+function renderCoursePicker(state) {
+  const roundSetup = getRoundSetup(state);
+  const matchingCourses = getRoundSetupCourses(roundSetup.courseQuery, 8);
+  const selectedCourse = roundSetup.selectedCourseId ? findCourseById(roundSetup.selectedCourseId) : null;
+  const defaultTeeBox = selectedCourse ? getDefaultTeeBox(selectedCourse) : null;
+  const selectedTeeBox = selectedCourse ? findTeeBox(selectedCourse, roundSetup.selectedTeeBoxId || defaultTeeBox?.id || "") : null;
+
+  return `
+    <div class="stack-list course-picker-block">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Course library</p>
+          <h4>Use a real course</h4>
+        </div>
+      </div>
+      <p class="body-copy compact-copy">Search by course name, city, or state. The featured local course is The Country Club at Golden Nugget in Lake Charles.</p>
+      <div class="course-search-shell" data-course-search-shell="true">
+        <label class="course-search-field">
+          <span>Search courses</span>
+          <input data-course-search-input="true" type="search" value="${escapeHtml(roundSetup.courseQuery)}" placeholder="Golden Nugget, Lake Charles, Boston" />
+        </label>
+        <div class="row-actions course-search-actions">
+          <button class="button secondary" type="button" data-action="apply-course-search">Search</button>
+          <button class="button subtle" type="button" data-action="clear-course-search">Clear</button>
+        </div>
+      </div>
+      <div class="course-results-list">
+        ${matchingCourses.length
+          ? matchingCourses.map((course) => {
+              const featuredTee = getDefaultTeeBox(course);
+              const isSelected = course.id === selectedCourse?.id;
+              return `
+                <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
+                  <div class="course-result-copy">
+                    <strong>${escapeHtml(course.name)}</strong>
+                    <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)} / ${escapeHtml(course.region)}</p>
+                  </div>
+                  <div class="course-result-meta">
+                    ${course.featured ? '<span class="status-pill">Featured local course</span>' : ""}
+                    <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
+                    <span>${featuredTee?.totalYardage || "--"} yds / Par ${featuredTee?.totalPar || "--"}</span>
+                  </div>
+                </button>
+              `;
+            }).join("")
+          : `
+            <div class="empty-state compact-empty-state">
+              <strong>No seeded courses matched that search.</strong>
+              <p>Try a city or state instead, or leave course selection empty and use the quick custom template below.</p>
+            </div>
+          `}
+      </div>
+      ${selectedCourse && selectedTeeBox
+        ? `
+          <article class="course-selected-card" data-selected-course="true">
+            <div class="course-selected-copy">
+              <span class="mini-label">Selected course</span>
+              <strong>${escapeHtml(selectedCourse.name)}</strong>
+              <p>${escapeHtml(selectedCourse.city)}, ${escapeHtml(selectedCourse.state)} / ${escapeHtml(selectedCourse.region)}</p>
+            </div>
+            <div class="summary-grid compact">
+              <article>
+                <span>Tee</span>
+                <strong>${escapeHtml(selectedTeeBox.name)}</strong>
+              </article>
+              <article>
+                <span>Yardage</span>
+                <strong>${selectedTeeBox.totalYardage}</strong>
+              </article>
+              <article>
+                <span>Par</span>
+                <strong>${selectedTeeBox.totalPar}</strong>
+              </article>
+              <article>
+                <span>Rating / slope</span>
+                <strong>${selectedTeeBox.rating ?? "--"} / ${selectedTeeBox.slope ?? "--"}</strong>
+              </article>
+            </div>
+            <div class="split-inputs course-selected-actions">
+              <label>
+                Tee box
+                <select name="selectedTeeBoxId" form="create-round-form" data-course-tee-select="true">
+                  ${selectedCourse.teeBoxes.map((teeBox) => `
+                    <option value="${teeBox.id}" ${teeBox.id === selectedTeeBox.id ? "selected" : ""}>
+                      ${escapeHtml(teeBox.name)} / ${teeBox.totalYardage} yds / Par ${teeBox.totalPar}
+                    </option>
+                  `).join("")}
+                </select>
+              </label>
+              <div class="course-selected-actions-buttons">
+                <button class="button subtle" type="button" data-action="clear-selected-course">Use quick custom course instead</button>
+              </div>
+            </div>
+          </article>
+        `
+        : `
+          <div class="empty-state compact-empty-state">
+            <strong>No real course selected yet.</strong>
+            <p>Select a seeded course above, or keep the quick custom course fields below for a fast local demo round.</p>
+          </div>
+        `}
+    </div>
+  `;
+}
+
+function renderCreateRoundCard(state, activeRound) {
+  const subscription = getSubscription(state);
+  const playerValue = activeRound ? activeRound.players.map((player) => player.name).join(", ") : `${state.currentUser.name}, Maya Chen, Theo Grant`;
+  const guided = shouldShowFirstRoundGuide(state) && !activeRound;
+  const roundSetup = getRoundSetup(state);
+  const selectedCourse = roundSetup.selectedCourseId ? findCourseById(roundSetup.selectedCourseId) : null;
+  const selectedTeeBox = selectedCourse ? findTeeBox(selectedCourse, roundSetup.selectedTeeBoxId || getDefaultTeeBox(selectedCourse)?.id || "") : null;
+  const manualCourse = createManualCourseSelection(activeRound?.courseName || "National Pines", activeRound?.teeBox || "Blue");
+  const premiumModeCards = PREMIUM_MODE_IDS.map(
+    (modeId) => `
+      <article class="mode-preview-card ${isModeLocked(modeId, subscription) ? "is-locked" : ""}">
+        <div>
+          <strong>${escapeHtml(GAME_MODES[modeId].label)}</strong>
+          <p>${escapeHtml(GAME_MODES[modeId].description)}</p>
+        </div>
+        <span class="premium-badge">${isModeLocked(modeId, subscription) ? "Premium" : "Included"}</span>
+      </article>
+    `
+  ).join("");
+
+  return `
+    <article class="card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Round setup</p>
+          <h3>Create or host a round</h3>
+        </div>
+      </div>
+      <p class="body-copy compact-copy">Start local if you only want to score. Host with invite code when friends need to join the same round.</p>
+      ${renderCoursePicker(state)}
+      <form class="stack-form" data-form="create-round" id="create-round-form">
+        <input type="hidden" name="selectedCourseId" value="${escapeHtml(selectedCourse?.id || "")}" />
+        ${selectedCourse && selectedTeeBox
+          ? `
+            <div class="selected-course-summary-strip">
+              <span class="status-pill">Real course selected</span>
+              <span class="status-pill">${escapeHtml(selectedCourse.name)} / ${escapeHtml(selectedTeeBox.name)} / ${selectedTeeBox.totalYardage} yds</span>
+            </div>
+          `
+          : `
+            <label>
+              Course
+              <input name="courseName" type="text" value="${escapeHtml(manualCourse.courseName)}" required />
+            </label>
+            <div class="split-inputs">
+              <label>
+                Tee
+                <input name="teeBox" type="text" value="${escapeHtml(manualCourse.teeBoxName)}" required />
+              </label>
+              <label>
+                Template
+                <input value="18 holes / ${manualCourse.totalYardage} yds / Par ${manualCourse.totalPar}" readonly />
+              </label>
+            </div>
+          `}
+        <div class="split-inputs">
+          <label>
+            Weather
+            <input name="weather" type="text" value="${escapeHtml(activeRound?.weather || "Calm 72F")}" required />
+          </label>
+          ${selectedCourse && selectedTeeBox
+            ? `
+              <label>
+                Course details
+                <input value="${escapeHtml(selectedCourse.city)}, ${escapeHtml(selectedCourse.state)} / ${selectedTeeBox.rating ?? "--"} rating / ${selectedTeeBox.slope ?? "--"} slope" readonly />
+              </label>
+            `
+            : `
+              <label>
+                Round type
+                <input value="Quick custom course template" readonly />
+              </label>
+            `}
+        </div>
+        <label>
+          Scoring mode
+          <select name="mode">
+            ${Object.values(GAME_MODES)
+              .filter((gameMode) => !isModeLocked(gameMode.id, subscription))
+              .map(
+                (gameMode) => `
+                  <option value="${gameMode.id}" ${activeRound?.mode === gameMode.id ? "selected" : ""}>
+                    ${escapeHtml(gameMode.label)}
+                  </option>
+                `
+              )
+              .join("")}
+          </select>
+        </label>
+        <label>
+          Players
+          <textarea name="players" rows="3">${escapeHtml(playerValue)}</textarea>
+        </label>
+        <p class="body-copy compact-copy">Enter 2 to 4 golfer names separated by commas. If you only enter your own name, Golfers Nation will add one playing partner so the round can start cleanly.</p>
+        <div class="row-actions">
+          <button class="button primary ${guided ? "guided-action" : ""}" type="submit" name="intent" value="local">Start local round</button>
+          <button class="button secondary" type="submit" name="intent" value="host">Host with invite code</button>
+        </div>
+      </form>
+      <div class="section-divider"></div>
+      <div class="stack-list">
+        <div>
+          <p class="eyebrow">Premium mode preview</p>
+          <h4>${isPremiumSubscription(subscription) ? "All scoring modes are open." : "Advanced formats stay clearly locked until upgrade."}</h4>
+        </div>
+        <div class="mode-preview-grid">
+          ${premiumModeCards}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderHoleNavigator(round, selectedHole) {
+  const progress = getRoundProgress(round);
+  const nextOpenHole = getNextOpenHole(round, selectedHole);
+  const completion = getHoleCompletionStats(round, selectedHole);
+  const selected = round.holes.find((hole) => hole.number === selectedHole) || round.holes[0];
+  return `
+    <div class="hole-nav">
+      <button class="button subtle hole-stepper" type="button" data-action="step-hole" data-direction="-1" aria-label="Previous hole">Prev</button>
+      <div class="hole-pills">
+        ${round.holes
+          .map((hole) => {
+            const activeClass = selectedHole === hole.number ? "is-active" : "";
+            const completeClass = hole.entries.some((entry) => entry.strokes && entry.strokes > 0) ? "is-complete" : "";
+            return `
+              <button class="hole-pill ${activeClass} ${completeClass}" type="button" data-action="select-hole" data-hole="${hole.number}">
+                <span>${hole.number}</span>
+                <strong>Par ${hole.par}</strong>
+              </button>
+            `;
+          })
+          .join("")}
+      </div>
+      <button class="button subtle hole-stepper" type="button" data-action="step-hole" data-direction="1" aria-label="Next hole">Next</button>
+    </div>
+    <div class="hole-utility-row">
+      <div class="hole-utility-card hole-utility-card--primary">
+        <span class="mini-label">Current hole</span>
+        <strong>Hole ${selected.number} · Par ${selected.par}</strong>
+        <p>${selected.yards} yards</p>
+      </div>
+      <div class="hole-utility-card">
+        <span class="mini-label">Cards in</span>
+        <strong>${completion.scored}/${completion.total}</strong>
+        <p>Scored on this hole</p>
+      </div>
+      <div class="hole-utility-card">
+        <span class="mini-label">Round progress</span>
+        <strong>${progress.completedHoles}/18</strong>
+        <p>Front ${progress.frontNine}/9 · Back ${progress.backNine}/9</p>
+      </div>
+      <button class="button primary hole-next-button" type="button" data-action="jump-next-open" data-hole="${nextOpenHole}">
+        Continue to hole ${nextOpenHole}
+      </button>
+    </div>
+  `;
+}
+
+function formatCompetitiveDelta(value) {
+  const magnitude = Math.abs(value);
+  return Number.isInteger(magnitude) ? String(magnitude) : magnitude.toFixed(1).replace(/\.0$/, "");
+}
+
+function getCompetitiveFeedback(round, summary, participantId) {
+  const leaderboard = summary?.leaderboard || [];
+  const entry = leaderboard.find((item) => item.id === participantId);
+  const leader = leaderboard[0];
+
+  if (!entry || entry.thru === 0) {
+    return {
+      headline: "Waiting to score",
+      detail: "No strokes posted yet",
+    };
+  }
+
+  if (round.mode === "match") {
+    return {
+      headline: entry.id === leader?.id ? "Leading match" : "Chasing match",
+      detail: entry.displayStatus,
+    };
+  }
+
+  const scoredEntries = leaderboard.filter((item) => item.thru > 0 && typeof item.toPar === "number");
+  const groupAverage = scoredEntries.length
+    ? scoredEntries.reduce((sum, item) => sum + item.toPar, 0) / scoredEntries.length
+    : null;
+
+  const headline = entry.id === leader?.id
+    ? "Leading"
+    : `${formatCompetitiveDelta((entry.total || 0) - (leader?.total || 0))} back`;
+
+  if (groupAverage === null) {
+    return {
+      headline,
+      detail: "Group average still building",
+    };
+  }
+
+  const versusGroup = entry.toPar - groupAverage;
+  const detail = Math.abs(versusGroup) < 0.15
+    ? "Level with group"
+    : `${formatCompetitiveDelta(versusGroup)} ${versusGroup < 0 ? "better than group" : "behind group"}`;
+
+  return {
+    headline,
+    detail,
+  };
+}
+
+function renderHoleEditor(state, round) {
+  const selectedHole = state.session.selectedHole;
+  const hole = round.holes.find((item) => item.number === selectedHole) || round.holes[0];
+  const participants = getScoringParticipants(round);
+  const summary = getRoundSummary(round, state.currentUser.id);
+  const pendingEvents = getPendingRoundEvents(round);
+  const saveState = round.sync?.saveState || "saved-local";
+  const roundSafetyLabel = saveState === "retry-needed"
+    ? "Retry needed"
+    : saveState === "syncing"
+      ? `Syncing ${pendingEvents.length}`
+      : saveState === "synced"
+        ? "Synced"
+        : "Saved locally";
+  const roundSafetyDetail = saveState === "retry-needed"
+    ? "This phone still has the round. Cloud backup will retry."
+    : saveState === "syncing"
+      ? "Local save is complete. Cloud backup is catching up."
+      : saveState === "synced"
+        ? "This card is backed up and safe to reopen."
+        : "This phone has the latest scores even if service drops.";
+  const localParticipantId = summary.localParticipant?.id;
+  const leadParticipantId = summary.leaderboard[0]?.id;
+  const nextOpenHole = getNextOpenHole(round, selectedHole);
+  const orderedParticipants = [...participants].sort((left, right) => {
+    const leftScore = left.id === localParticipantId ? -2 : left.id === leadParticipantId ? -1 : 0;
+    const rightScore = right.id === localParticipantId ? -2 : right.id === leadParticipantId ? -1 : 0;
+    return leftScore - rightScore;
+  });
+
+  return `
+    <article class="card round-card round-score-shell">
+      <div class="round-score-heading">
+        <div>
+          <p class="eyebrow">Live scoring</p>
+          <h3>Hole ${hole.number} scoring</h3>
+          <p class="body-copy compact-copy round-score-subcopy">${escapeHtml(round.teeBox)} tees · ${escapeHtml(round.weather)}</p>
+        </div>
+        <div class="round-score-status">
+          <span class="status-pill">${escapeHtml(summary.localParticipant?.displayStatus || "--")}</span>
+          <span class="status-pill">${escapeHtml(roundSafetyLabel)}</span>
+        </div>
+      </div>
+      ${renderHoleNavigator(round, selectedHole)}
+      <div class="round-score-guidance">
+        <span class="status-pill">${escapeHtml(roundSafetyDetail)}</span>
+        <button class="button subtle round-continue-inline" type="button" data-action="jump-next-open" data-hole="${nextOpenHole}">Next hole</button>
+      </div>
+      <div class="row-actions help-row round-help-row">
+        ${renderHelpLink("Need help with score entry?", "playing-round", true)}
+      </div>
+      <div class="participant-grid">
+        ${orderedParticipants
+          .map((participant) => {
+            const entry = hole.entries.find((item) => item.participantId === participant.id);
+            const participantTotals = getParticipantTotals(round, participant.id);
+            const label = round.mode === "stroke" ? "Player" : "Side";
+            const previewProfileId = findParticipantProfileId(round, participant.id);
+            const previewProfile = previewProfileId ? getProfileById(state, previewProfileId) : null;
+            const feedback = getCompetitiveFeedback(round, summary, participant.id);
+            const leaderboardEntry = summary.leaderboard.find((item) => item.id === participant.id);
+            const advancedSummary = [
+              `Putts ${entry?.putts ?? "--"}`,
+              `Pens ${entry?.penalties ?? 0}`,
+              hole.par > 3 ? `Fairway ${entry?.fairwayHit ? "Yes" : "No"}` : null,
+              `GIR ${entry?.gir ? "Yes" : "No"}`,
+              `Up/down ${entry?.upAndDown ? "Yes" : "No"}`,
+            ].filter(Boolean).join(" · ");
+            const cardClasses = [
+              "participant-card",
+              participant.id === localParticipantId ? "is-local" : "",
+              participant.id === leadParticipantId ? "is-leader" : "",
+              participant.id === state.session.lastScoredParticipantId ? "is-recent-score" : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
+            return `
+              <article class="${cardClasses}">
+                <div class="participant-heading participant-heading--score">
+                  <div class="participant-heading-main">
+                    ${renderAvatarChip(previewProfile?.publicProfile.avatarLabel || participant.avatarLabel)}
+                    <div>
+                      <span>${escapeHtml(label)}</span>
+                      <strong>${escapeHtml(participant.name)}</strong>
+                      <p class="participant-subcopy">${escapeHtml(participant.playerNames ? participant.playerNames.join(", ") : "Individual scorecard")}</p>
+                    </div>
+                  </div>
+                  <div class="participant-heading-tools">
+                    ${participant.id === localParticipantId ? `<span class="player-badge is-local">You</span>` : ""}
+                    ${participant.id === leadParticipantId ? `<span class="player-badge is-leader">Leader</span>` : ""}
+                    ${previewProfileId
+                      ? `<button class="button subtle profile-preview-button profile-preview-button--inline" type="button" data-action="select-profile-preview" data-profile-id="${previewProfileId}">Profile</button>`
+                      : ""}
+                  </div>
+                </div>
+                <div class="competitive-note competitive-note--tight">
+                  <span class="competitive-pill ${participant.id === leadParticipantId ? "is-leading" : ""}">${escapeHtml(feedback.headline)}</span>
+                  <span>${escapeHtml(feedback.detail)}</span>
+                </div>
+                <div class="participant-compact-stats">
+                  <span>Status ${escapeHtml(leaderboardEntry?.displayStatus || "--")}</span>
+                  <span>Thru ${leaderboardEntry?.thru || 0}</span>
+                  <span>FW ${participantTotals.fairwaysHit}/${participantTotals.fairwayOpportunities}</span>
+                  <span>GIR ${participantTotals.greensHit}/${participantTotals.girOpportunities}</span>
+                </div>
+                <div class="score-primary-block">
+                  <div class="quick-score-row">
+                    <button
+                      class="score-chip"
+                      type="button"
+                      data-action="quick-score"
+                      data-hole="${hole.number}"
+                      data-participant-id="${participant.id}"
+                      data-strokes="${Math.max(1, hole.par - 2)}"
+                    >
+                      <span>Eagle</span>
+                      <strong>${Math.max(1, hole.par - 2)}</strong>
+                    </button>
+                    <button
+                      class="score-chip"
+                      type="button"
+                      data-action="quick-score"
+                      data-hole="${hole.number}"
+                      data-participant-id="${participant.id}"
+                      data-strokes="${Math.max(1, hole.par - 1)}"
+                    >
+                      <span>Birdie</span>
+                      <strong>${Math.max(1, hole.par - 1)}</strong>
+                    </button>
+                    <button
+                      class="score-chip is-primary"
+                      type="button"
+                      data-action="quick-score"
+                      data-hole="${hole.number}"
+                      data-participant-id="${participant.id}"
+                      data-strokes="${hole.par}"
+                    >
+                      <span>Par</span>
+                      <strong>${hole.par}</strong>
+                    </button>
+                    <button
+                      class="score-chip"
+                      type="button"
+                      data-action="quick-score"
+                      data-hole="${hole.number}"
+                      data-participant-id="${participant.id}"
+                      data-strokes="${hole.par + 1}"
+                    >
+                      <span>Bogey</span>
+                      <strong>${hole.par + 1}</strong>
+                    </button>
+                  </div>
+                  <div class="score-manual-row">
+                    <label class="score-inline-field">
+                      <span>Custom score</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max="12"
+                        value="${entry?.strokes ?? ""}"
+                        inputmode="numeric"
+                        enterkeyhint="next"
+                        data-score-field="strokes"
+                        data-hole="${hole.number}"
+                        data-participant-id="${participant.id}"
+                      />
+                    </label>
+                    <button class="button primary score-next-button" type="button" data-action="jump-next-open" data-hole="${nextOpenHole}">
+                      Save & next
+                    </button>
+                  </div>
+                </div>
+                <details class="advanced-hole-stats">
+                  <summary>
+                    <span>Advanced hole stats</span>
+                    <strong>${escapeHtml(advancedSummary)}</strong>
+                  </summary>
+                  <div class="advanced-hole-stats-body">
+                    <div class="split-inputs score-secondary-grid">
+                      <label>
+                        Putts
+                        <input
+                          type="number"
+                          min="0"
+                          max="6"
+                          value="${entry?.putts ?? ""}"
+                          inputmode="numeric"
+                          enterkeyhint="next"
+                          data-score-field="putts"
+                          data-hole="${hole.number}"
+                          data-participant-id="${participant.id}"
+                        />
+                      </label>
+                      <label>
+                        Penalties
+                        <input
+                          type="number"
+                          min="0"
+                          max="4"
+                          value="${entry?.penalties ?? 0}"
+                          inputmode="numeric"
+                          enterkeyhint="done"
+                          data-score-field="penalties"
+                          data-hole="${hole.number}"
+                          data-participant-id="${participant.id}"
+                        />
+                      </label>
+                    </div>
+                    <div class="toggle-row toggle-row-advanced">
+                      <button
+                        class="toggle-pill ${entry?.fairwayHit ? "is-on" : ""}"
+                        type="button"
+                        data-action="toggle-flag"
+                        data-field="fairwayHit"
+                        data-hole="${hole.number}"
+                        data-participant-id="${participant.id}"
+                      >
+                        Fairway
+                      </button>
+                      <button
+                        class="toggle-pill ${entry?.gir ? "is-on" : ""}"
+                        type="button"
+                        data-action="toggle-flag"
+                        data-field="gir"
+                        data-hole="${hole.number}"
+                        data-participant-id="${participant.id}"
+                      >
+                        GIR
+                      </button>
+                      <button
+                        class="toggle-pill ${entry?.upAndDown ? "is-on" : ""}"
+                        type="button"
+                        data-action="toggle-flag"
+                        data-field="upAndDown"
+                        data-hole="${hole.number}"
+                        data-participant-id="${participant.id}"
+                      >
+                        Up and down
+                      </button>
+                      <button
+                        class="toggle-pill ${entry?.sandSave ? "is-on" : ""}"
+                        type="button"
+                        data-action="toggle-flag"
+                        data-field="sandSave"
+                        data-hole="${hole.number}"
+                        data-participant-id="${participant.id}"
+                      >
+                        Sand save
+                      </button>
+                    </div>
+                  </div>
+                </details>
+              </article>
+            `;
+          })
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderLeaderboardCard(state, round) {
+  const summary = getRoundSummary(round, state.currentUser.id);
+  const leader = summary.leaderboard[0];
+  const localEntry = summary.leaderboard.find((entry) => entry.isLocal);
+
+  return `
+    <article class="card live-leaderboard-card round-support-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Leaderboard</p>
+          <h3>Live movement</h3>
+        </div>
+      </div>
+      ${leader
+        ? `
+          <div class="leader-highlight">
+            <div>
+              <span class="mini-label">Pace-setter</span>
+              <strong>${escapeHtml(leader.name)}</strong>
+            </div>
+            <div>
+              <span class="mini-label">Status</span>
+              <strong>${escapeHtml(leader.displayStatus)}</strong>
+            </div>
+            <div>
+              <span class="mini-label">Thru</span>
+              <strong>${leader.thru}</strong>
+            </div>
+          </div>
+        `
+        : ""}
+      ${localEntry
+        ? `
+          <div class="round-subtle-strip">
+            <span class="mini-label">Your position</span>
+            <strong>#${localEntry.rank} / ${escapeHtml(localEntry.displayStatus)}</strong>
+          </div>
+        `
+        : ""}
+      <div class="leaderboard-list">
+        ${summary.leaderboard
+          .map((entry) => {
+            const gapLabel = !leader || entry.id === leader.id
+              ? "Leader"
+              : round.mode === "match"
+                ? "Chasing"
+                : `${Math.max(0, entry.toPar - leader.toPar)} back`;
+            const previewProfileId = findParticipantProfileId(round, entry.id);
+            const previewProfile = previewProfileId ? getProfileById(state, previewProfileId) : null;
+
+            return `
+              <article class="leader-row ${entry.isLocal ? "is-local" : ""} ${entry.id === leader?.id ? "is-leader" : ""}">
+                <div>
+                  <span class="rank-pill">#${entry.rank}</span>
+                  <div class="leader-name-row">
+                    ${renderAvatarChip(previewProfile?.publicProfile.avatarLabel || entry.name)}
+                    <div>
+                      <strong>${escapeHtml(entry.name)}</strong>
+                      <p>${escapeHtml(entry.subtitle)}</p>
+                    </div>
+                  </div>
+                  ${previewProfileId ? `<button class="button subtle profile-preview-button" type="button" data-action="select-profile-preview" data-profile-id="${previewProfileId}">Preview</button>` : ""}
+                </div>
+                <div>
+                  <span>Thru</span>
+                  <strong>${entry.thru}</strong>
+                </div>
+                <div>
+                  <span>Status</span>
+                  <strong>${escapeHtml(entry.displayStatus)}</strong>
+                </div>
+                <div>
+                  <span>${entry.id === leader?.id ? "Live" : "Gap"}</span>
+                  <strong>${escapeHtml(gapLabel)}</strong>
+                </div>
+              </article>
+            `;
+          })
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderLiveStateCard(state, round, group) {
+  const sync = getSyncPresentation(round, group);
+  const pendingCount = getPendingRoundEvents(round).length;
+
+  return `
+    <article class="card round-support-card sync-control-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Connection</p>
+          <h3>Sync and room</h3>
+        </div>
+      </div>
+      <div class="sync-banner is-${sync.tone}">
+        <strong>${escapeHtml(sync.title)}</strong>
+        <p>${sync.message}</p>
+      </div>
+      <div class="summary-grid compact">
+        <article>
+          <span>Transport</span>
+          <strong>${escapeHtml(round.sync.label || CONNECTION_COPY.local)}</strong>
+        </article>
+        <article>
+          <span>Round safety</span>
+          <strong>${escapeHtml(round.sync?.saveState === "retry-needed" ? "Retry needed" : round.sync?.saveState === "syncing" ? "Syncing" : round.sync?.saveState === "synced" ? "Synced" : "Saved locally")}</strong>
+        </article>
+        <article>
+          <span>Last event</span>
+          <strong>${escapeHtml(formatRelativeSync(round.sync.lastEventAt))}</strong>
+        </article>
+        <article>
+          <span>Pending updates</span>
+          <strong>${pendingCount}</strong>
+        </article>
+      </div>
+      <div class="row-actions connection-actions compact-actions">
+        <button class="button primary" type="button" data-action="host-active-round">Host round</button>
+        <button class="button secondary" type="button" data-action="enable-nearby">Nearby sync</button>
+        <button class="button subtle" type="button" data-action="enable-bluetooth">Bluetooth sync</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderRoundControlCard(state, round) {
+  const progress = getRoundProgress(round);
+  const summary = getRoundSummary(round, state.currentUser.id);
+  const canFinish = progress.completedHoles > 0;
+  const saveInProgress = state.session?.cloudSync?.status === "syncing"
+    && state.session?.cloudSync?.scope === "round-finish"
+    && state.session?.cloudSync?.roundId === round.id;
+  const pendingCount = getPendingRoundEvents(round).length;
+  const saveCopy = saveInProgress
+    ? "Your round is already finishing and backing up to your golfer account. Stay here for a moment instead of tapping again."
+    : round.sync?.saveState === "retry-needed"
+      ? `This round is safe on this device. ${pendingCount === 1 ? "1 live change is" : `${pendingCount} live changes are`} still waiting for cloud backup.`
+      : canFinish
+        ? "Finish once the group is in. The round moves into history immediately and your summary becomes the app's newest recap."
+        : "Score at least one hole first. That keeps accidental taps from saving an empty round into history.";
+
+  return `
+    <article class="card premium-finish-card round-support-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Finish flow</p>
+          <h3>Close the card</h3>
+        </div>
+      </div>
+      <div class="summary-grid">
+        <article>
+          <span>Your status</span>
+          <strong>${escapeHtml(summary.localParticipant?.displayStatus || "--")}</strong>
+        </article>
+        <article>
+          <span>Completed</span>
+          <strong>${progress.completedHoles}/18</strong>
+        </article>
+        <article>
+          <span>Remaining</span>
+          <strong>${progress.remainingHoles}</strong>
+        </article>
+        <article>
+          <span>Projected leader</span>
+          <strong>${escapeHtml(summary.winnerLabel)}</strong>
+        </article>
+      </div>
+      <p class="body-copy">${saveCopy}</p>
+      <div class="finish-actions">
+        <button class="button primary finish-button" type="button" data-action="finish-round" data-round-id="${round.id}" ${canFinish && !saveInProgress ? "" : "disabled"}>${saveInProgress ? "Saving..." : "Finish round"}</button>
+        <button class="button subtle" type="button" data-action="nav-view" data-view="stats">Review stats first</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderRoundView(state) {
+  const activeRound = getActiveRound(state);
+  const activeGroup = getActiveGroup(state, activeRound);
+
+  if (!activeRound) {
+    return `
+      <section class="view-grid round-grid">
+        ${renderCreateRoundCard(state, null)}
+        <article class="card card-span-2 round-entry-card">
+          <div class="empty-state onboarding-state round-entry-state">
+            <strong>Start here when you are ready to score.</strong>
+            <p>Use the round form above for the fastest phone flow, or join a hosted round by code if someone else is running the group.</p>
+            <div class="row-actions empty-state-actions">
+              <button class="button subtle" type="button" data-action="nav-view" data-view="community">Join by code</button>
+              ${renderHelpLink("How rounds work", "playing-round", true)}
+            </div>
+          </div>
+        </article>
+        ${renderFirstRoundGuide(state, "round-setup")}
+      </section>
+    `;
+  }
+
+  const progress = getRoundProgress(activeRound);
+  const summary = getRoundSummary(activeRound, state.currentUser.id);
+
+  return `
+    <section class="view-grid round-grid round-grid-live">
+      <div class="round-main-column">
+        ${renderHoleEditor(state, activeRound)}
+        <article class="card round-live-pulse">
+          <div class="summary-grid round-live-summary">
+            <article>
+              <span>Leader</span>
+              <strong>${escapeHtml(summary.winnerLabel)}</strong>
+            </article>
+            <article>
+              <span>Your place</span>
+              <strong>${escapeHtml(getCompetitiveFeedback(activeRound, summary, summary.localParticipant?.id).headline)}</strong>
+            </article>
+            <article>
+              <span>Played</span>
+              <strong>${progress.completedHoles}/18</strong>
+            </article>
+            <article>
+              <span>Vs group</span>
+              <strong>${escapeHtml(getCompetitiveFeedback(activeRound, summary, summary.localParticipant?.id).detail)}</strong>
+            </article>
+          </div>
+          ${renderModeNotes(state, activeRound.mode)}
+        </article>
+        ${renderFirstRoundGuide(state, "round-live")}
+      </div>
+      <div class="round-side-column">
+        ${renderLeaderboardCard(state, activeRound)}
+        ${renderCompetitivePreviewCard(
+          state,
+          state.session.selectedProfileId
+            || activeRound.players.find((player) => !player.userId)?.profileId
+            || state.currentUser.profileId,
+          "Selected player matchup"
+        )}
+        <div class="round-support-stack">
+          ${renderLiveStateCard(state, activeRound, activeGroup)}
+          ${renderRoundControlCard(state, activeRound)}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderFreeStatsCards(metrics, currentPreview) {
+  return `
+    <div class="summary-grid">
+      <article>
+        <span>Rounds played</span>
+        <strong>${metrics.roundsPlayed}</strong>
+      </article>
+      <article>
+        <span>Scoring average</span>
+        <strong>${metrics.scoringAverage ? metrics.scoringAverage.toFixed(1) : "--"}</strong>
+      </article>
+      <article>
+        <span>Fairways</span>
+        <strong>${metrics.fairways}%</strong>
+      </article>
+      <article>
+        <span>GIR</span>
+        <strong>${metrics.gir}%</strong>
+      </article>
+      <article>
+        <span>Average putts</span>
+        <strong>${formatAverageScore(metrics.putts)}</strong>
+      </article>
+      <article>
+        <span>Best round</span>
+        <strong>${currentPreview?.bestRound || "--"}</strong>
+      </article>
+      <article>
+        <span>Recent form</span>
+        <strong>${escapeHtml(currentPreview?.recentFormSummary || "Building")}</strong>
+      </article>
+    </div>
+  `;
+}
+
+function renderPremiumInsights(state, metrics, completedRounds, partners, currentPreview, recentSummary) {
+  const gate = getFeatureGate("advanced-stats", getSubscription(state));
+  const strokesGained = currentPreview?.strokesGained || metrics.strokesGained;
+  const hardestHoles = currentPreview?.hardestHoles || metrics.hardestHoles;
+  const bestHoles = currentPreview?.bestHoles || metrics.bestHoles;
+
+  if (gate.locked) {
+    return `
+      <article class="card premium-lock-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Premium insights</p>
+            <h3>Advanced analytics are ready when you upgrade</h3>
+          </div>
+          <span class="premium-badge">Locked</span>
+        </div>
+        <div class="locked-insight-grid">
+          <article class="locked-insight">
+            <strong>Round-to-round trendline</strong>
+            <p>Track form, scoring trend, and handicap scaffolding instead of checking one scorecard at a time.</p>
+          </article>
+          <article class="locked-insight">
+            <strong>Par-type breakdowns</strong>
+            <p>See whether par 3s, par 4s, or par 5s are driving scoring outcomes.</p>
+          </article>
+          <article class="locked-insight">
+            <strong>Smart performance tools</strong>
+            <p>Unlock strokes gained, hardest-hole trends, and short insight cards that point to where scoring can improve.</p>
+          </article>
+        </div>
+        <button class="button primary" type="button" data-action="nav-view" data-view="premium">See premium benefits</button>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Premium insights</p>
+          <h3>Advanced analytics unlocked</h3>
+        </div>
+        <span class="premium-badge is-live">Included</span>
+      </div>
+      <div class="summary-grid">
+        <article>
+          <span>Form</span>
+          <strong>${escapeHtml(currentPreview?.formLabel || metrics.formLabel || "Stable")}</strong>
+        </article>
+        <article>
+          <span>Handicap scaffold</span>
+          <strong>${formatHandicap(currentPreview?.handicapIndex ?? metrics.handicapIndex)}</strong>
+        </article>
+        <article>
+          <span>Up and down</span>
+          <strong>${formatPercent(currentPreview?.upAndDownRate ?? metrics.upAndDownRate)}</strong>
+        </article>
+        <article>
+          <span>Penalty avg</span>
+          <strong>${formatAverageScore(currentPreview?.penaltiesAverage ?? metrics.penaltiesAverage)}</strong>
+        </article>
+        <article>
+          <span>Total SG</span>
+          <strong>${formatSignedValue(strokesGained?.total)}</strong>
+        </article>
+      </div>
+      <div class="comparison-grid insight-breakdown-grid">
+        <article class="plan-card">
+          <span class="mini-label">Scoring by par type</span>
+          <div class="stack-list compact-stack">
+            <div class="feature-row">Par 3 avg: ${formatAverageScore(currentPreview?.scoringByParType?.[3]?.averageScore)}</div>
+            <div class="feature-row">Par 4 avg: ${formatAverageScore(currentPreview?.scoringByParType?.[4]?.averageScore)}</div>
+            <div class="feature-row">Par 5 avg: ${formatAverageScore(currentPreview?.scoringByParType?.[5]?.averageScore)}</div>
+          </div>
+        </article>
+        <article class="plan-card">
+          <span class="mini-label">Recent trend</span>
+          <strong>${escapeHtml(currentPreview?.trendSummary || metrics.recentTrend?.summary || "Building a trend")}</strong>
+          <p class="body-copy compact-copy">${recentSummary?.roundInsights?.[0] || currentPreview?.smartInsights?.[0] || "Complete more rounds to sharpen the insight engine."}</p>
+        </article>
+      </div>
+      <div class="comparison-grid insight-breakdown-grid">
+        <article class="plan-card">
+          <span class="mini-label">Simplified strokes gained</span>
+          <div class="stack-list compact-stack">
+            <div class="feature-row">Driving: ${formatSignedValue(strokesGained?.driving?.value)} / ${escapeHtml(strokesGained?.driving?.label || "Neutral")}</div>
+            <div class="feature-row">Approach: ${formatSignedValue(strokesGained?.approach?.value)} / ${escapeHtml(strokesGained?.approach?.label || "Neutral")}</div>
+            <div class="feature-row">Putting: ${formatSignedValue(strokesGained?.putting?.value)} / ${escapeHtml(strokesGained?.putting?.label || "Neutral")}</div>
+          </div>
+        </article>
+        <article class="plan-card">
+          <span class="mini-label">Hole tendencies</span>
+          <div class="stack-list compact-stack">
+            <div class="feature-row">Toughest: ${hardestHoles?.[0] ? `Hole ${hardestHoles[0].holeNumber} / ${formatSignedValue(hardestHoles[0].averageToPar)}` : "Need more rounds"}</div>
+            <div class="feature-row">Best: ${bestHoles?.[0] ? `Hole ${bestHoles[0].holeNumber} / ${formatSignedValue(bestHoles[0].averageToPar)}` : "Need more rounds"}</div>
+            <div class="feature-row">Best category: ${escapeHtml(strokesGained?.bestCategory || "Driving")}</div>
+          </div>
+        </article>
+      </div>
+      <div class="comparison-grid insight-breakdown-grid">
+        ${renderHolePerformanceList("Hardest holes", hardestHoles)}
+        ${renderHolePerformanceList("Best holes", bestHoles)}
+      </div>
+      <div class="stack-list compact-stack">
+        ${(recentSummary?.roundInsights?.length ? recentSummary.roundInsights : currentPreview?.smartInsights || [])
+          .map((insight) => `<div class="feature-row">${escapeHtml(insight)}</div>`)
+          .join("")}
+        <div class="feature-row">Playing partners tracked: ${partners.length} / Completed cards: ${completedRounds.length} / Sand saves: ${currentPreview?.sandSaveCount ?? metrics.sandSaveCount ?? 0}</div>
+      </div>
+    </article>
+  `;
+}
+
+function renderStatsView(state) {
+  const metrics = getHistoryMetrics(state.rounds, state.currentUser.id);
+  const partners = getFrequentPartners(state.rounds, state.currentUser.id);
+  const completedRounds = getCompletedRounds(state);
+  const summaryRound = getSummaryRound(state);
+  const selectedSummary = summaryRound ? getRoundSummary(summaryRound, state.currentUser.id) : null;
+  const selectedProfileId = state.session.selectedProfileId || state.currentUser.profileId;
+  const currentCompetitivePreview = buildCompetitivePreview(state, state.currentUser.profileId, state.currentUser.profileId);
+  const showingOtherProfile = selectedProfileId && selectedProfileId !== state.currentUser.profileId;
+  const selectedPreview = showingOtherProfile
+    ? buildCompetitivePreview(state, selectedProfileId, state.currentUser.profileId)
+    : currentCompetitivePreview;
+
+  return `
+    <section class="view-grid stats-grid">
+      <article class="card stats-overview-card card-span-3 stats-primary-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Stats</p>
+            <h3>At a glance</h3>
+          </div>
+          <button class="button subtle" type="button" data-action="open-current-profile">Open player profile</button>
+        </div>
+        <p class="body-copy">This page keeps the important numbers first. You can check your progress, open your latest round, and update your player profile without digging through extra layers.</p>
+        <div class="row-actions help-row">
+          ${renderHelpLink("How to read stats", "stats-competition", true)}
+        </div>
+        <div class="summary-grid compact metric-help-grid">
+          <article>
+            <span>Fairways</span>
+            <strong>Tee shots in play on par 4 and 5 holes</strong>
+          </article>
+          <article>
+            <span>GIR</span>
+            <strong>Greens reached in regulation</strong>
+          </article>
+          <article>
+            <span>Form</span>
+            <strong>How recent rounds compare with the prior stretch</strong>
+          </article>
+        </div>
+        <div class="summary-grid">
+          <article>
+            <span>Rounds played</span>
+            <strong>${metrics.roundsPlayed}</strong>
+          </article>
+          <article>
+            <span>Average score</span>
+            <strong>${metrics.scoringAverage ? metrics.scoringAverage.toFixed(1) : "--"}</strong>
+          </article>
+          <article>
+            <span>Best round</span>
+            <strong>${currentCompetitivePreview?.bestRound || "--"}</strong>
+          </article>
+          <article>
+            <span>Fairways hit</span>
+            <strong>${metrics.fairways}%</strong>
+          </article>
+          <article>
+            <span>GIR</span>
+            <strong>${metrics.gir}%</strong>
+          </article>
+        </div>
+      </article>
+      ${renderPlayerProfileCard(state)}
+      ${renderAuthEntryCard(state)}
+      ${renderHelpCenterCard()}
+      ${showingOtherProfile ? renderCompetitivePreviewCard(state, selectedProfileId, "Selected player preview") : ""}
+      <article class="card stats-quiet-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Simple stats</p>
+            <h3>Easy to read numbers</h3>
+          </div>
+        </div>
+        ${renderFreeStatsCards(metrics, currentCompetitivePreview)}
+      </article>
+      ${summaryRound && selectedSummary
+        ? `
+          <article class="card card-span-2 stats-primary-card">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Latest round</p>
+                <h3>${escapeHtml(summaryRound.courseName)} / ${escapeHtml(selectedSummary.roundLabel)}</h3>
+              </div>
+              <button class="button subtle" type="button" data-action="view-summary" data-round-id="${summaryRound.id}">Open full summary</button>
+            </div>
+            <div class="summary-grid">
+              <article>
+                <span>Your result</span>
+                <strong>${escapeHtml(selectedSummary.localParticipant?.displayStatus || "--")}</strong>
+              </article>
+              <article>
+                <span>Fairways</span>
+                <strong>${selectedSummary.localTotals?.fairwaysHit || 0}/${selectedSummary.localTotals?.fairwayOpportunities || 0}</strong>
+              </article>
+              <article>
+                <span>GIR</span>
+                <strong>${selectedSummary.localTotals?.greensHit || 0}/${selectedSummary.localTotals?.girOpportunities || 0}</strong>
+              </article>
+              <article>
+                <span>Average putts</span>
+                <strong>${selectedSummary.localTotals?.averagePutts ? selectedSummary.localTotals.averagePutts.toFixed(1) : "--"}</strong>
+              </article>
+              <article>
+                <span>Penalties</span>
+                <strong>${selectedSummary.localTotals?.totalPenalties || 0}</strong>
+              </article>
+            </div>
+            ${!getFeatureGate("round-insights", getSubscription(state)).locked && selectedSummary.roundInsights.length
+              ? `
+                <div class="stack-list compact-stack">
+                  ${selectedSummary.roundInsights.slice(0, 2).map((insight) => `<div class="feature-row">${escapeHtml(insight)}</div>`).join("")}
+                </div>
+              `
+              : ""}
+          </article>
+        `
+        : ""}
+      <article class="card stats-quiet-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Playing partners</p>
+            <h3>People you golf with most</h3>
+          </div>
+        </div>
+        <div class="stack-list">
+          ${partners.length
+            ? partners
+                .map(
+                  (partner) => `
+                    <article class="list-row">
+                      <div>
+                        <strong>${escapeHtml(partner.name)}</strong>
+                        <p>${partner.rounds} rounds together</p>
+                      </div>
+                      <span>${formatDateTime(partner.latest)}</span>
+                    </article>
+                  `
+                )
+                .join("")
+            : `
+              <div class="empty-state onboarding-state">
+                <strong>Partner trends appear after shared rounds.</strong>
+                <p>Join or host a group round and Golfers Nation will start surfacing who you play with most.</p>
+                <div class="row-actions empty-state-actions">
+                  <button class="button primary" type="button" data-action="nav-view" data-view="community">Open community</button>
+                  ${renderHelpLink("How shared rounds work", "playing-round", true)}
+                </div>
+              </div>`}
+        </div>
+      </article>
+      ${renderPremiumInsights(state, metrics, completedRounds, partners, selectedPreview, selectedSummary)}
+      <article class="card card-span-3">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">History</p>
+            <h3>Round archive</h3>
+          </div>
+        </div>
+        ${completedRounds.length
+          ? `
+            <div class="stack-list">
+              ${completedRounds
+                .map((round) => {
+                  const summary = getRoundSummary(round, state.currentUser.id);
+                  return `
+                    <article class="list-row large">
+                      <div>
+                        <strong>${escapeHtml(round.courseName)}</strong>
+                        <p>${escapeHtml(summary.roundLabel)} / ${formatDate(round.completedAt)}</p>
+                      </div>
+                      <div class="list-metrics">
+                        <span>${escapeHtml(summary.localParticipant?.displayStatus || "--")}</span>
+                        <span>${summary.holesPlayed} holes</span>
+                        <button class="button subtle" type="button" data-action="view-summary" data-round-id="${round.id}">View summary</button>
+                      </div>
+                    </article>
+                  `;
+                })
+                .join("")}
+            </div>
+          `
+          : `
+            <div class="empty-state onboarding-state">
+              <strong>Your stats screen will build itself from real rounds.</strong>
+              <div class="row-actions empty-state-actions">
+                <button class="button primary" type="button" data-action="nav-view" data-view="round">Start round</button>
+                ${renderHelpLink("How stats build", "stats-competition", true)}
+              </div>
+              <p>Finish one round and you’ll start seeing history, summaries, and player trends here.</p>
+            </div>
+          `}
+      </article>
+    </section>
+  `;
+}
+
+function renderTournamentModule(state) {
+  const gate = getFeatureGate("tournament-tools", getSubscription(state));
+
+  if (gate.locked) {
+    return `
+      <article class="card premium-lock-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Tournament tools</p>
+            <h3>Leagues and tournament controls are a premium workspace</h3>
+          </div>
+          <span class="premium-badge">Premium</span>
+        </div>
+        <p class="body-copy">The free experience keeps community focused on joining rounds and simple group play. Premium unlocks tournament setup, league management, and richer event ops.</p>
+        <button class="button primary" type="button" data-action="nav-view" data-view="premium">Explore premium</button>
+      </article>
+    `;
+  }
+
+  return `
+    <article class="card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Tournament tools</p>
+          <h3>Create an event</h3>
+        </div>
+      </div>
+      <form class="stack-form" data-form="create-tournament">
+        <label>
+          Event name
+          <input name="name" type="text" placeholder="Weekend Cup" required />
+        </label>
+        <label>
+          Course
+          <input name="courseName" type="text" placeholder="National Pines" required />
+        </label>
+        <div class="split-inputs">
+          <label>
+            Date
+            <input name="date" type="date" required />
+          </label>
+          <label>
+            Format
+            <select name="mode">
+              ${Object.values(GAME_MODES)
+                .filter((mode) => !isModeLocked(mode.id, getSubscription(state)))
+                .map((mode) => `<option value="${mode.id}">${escapeHtml(mode.label)}</option>`)
+                .join("")}
+            </select>
+          </label>
+        </div>
+        <label>
+          Field size
+          <input name="fieldSize" type="number" min="4" max="128" value="16" />
+        </label>
+        <button class="button primary" type="submit">Create tournament</button>
+      </form>
+    </article>
+  `;
+}
+
+function renderCommunityView(state) {
+  const activeRound = getActiveRound(state);
+  const activeGroup = getActiveGroup(state, activeRound);
+  const nearbyGames = listNearbyGames(state);
+  const featuredProfileId = state.session.selectedProfileId
+    || activeRound?.players.find((player) => !player.userId)?.profileId
+    || state.currentUser.profileId;
+
+  return `
+    <section class="view-grid community-grid">
+      <article class="card community-hero-card card-span-2">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Community</p>
+            <h3>Group rounds with real player identities</h3>
+          </div>
+          <span class="status-pill">${escapeHtml(activeGroup?.inviteCode || activeRound?.inviteCode || "No code yet")}</span>
+        </div>
+        <p class="body-copy">Join by code, host the active round, and carry real player profiles into shared rounds so stats, history, and competitive identity stay attached to the right account.</p>
+        <div class="row-actions help-row">
+          ${renderHelpLink("Need help joining a round?", "playing-round", true)}
+        </div>
+        <form class="inline-form" data-form="join-code">
+          <label class="inline-grow">
+            Join by invite code
+            <input name="inviteCode" type="text" placeholder="Enter code" />
+          </label>
+          <button class="button primary" type="submit">Join round</button>
+        </form>
+        <p class="body-copy compact-copy join-helper-copy">Ask the host for the invite code. When you join, saved player profiles come into the round automatically. If the code fails, stay here and try again instead of restarting the app.</p>
+        <div class="row-actions">
+          <button class="button secondary" type="button" data-action="host-active-round" ${activeRound ? "" : "disabled"}>Host active round</button>
+          <button class="button subtle" type="button" data-action="enable-nearby" ${activeRound ? "" : "disabled"}>Nearby sync</button>
+          <button class="button subtle" type="button" data-action="enable-bluetooth" ${activeRound ? "" : "disabled"}>Bluetooth sync</button>
+        </div>
+        ${activeRound
+          ? `
+            <div class="participant-preview-row">
+              ${activeRound.players.map((player) => `
+                <button class="player-preview-pill" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(player.profileId || "")}">
+                  ${renderAvatarChip(getProfileForPlayer(state, player)?.publicProfile.avatarLabel || player.avatarLabel)}
+                  <span>${escapeHtml(player.name)}</span>
+                </button>
+              `).join("")}
+            </div>
+          `
+          : ""}
+      </article>
+      <article class="card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Live room</p>
+            <h3>Current group state</h3>
+          </div>
+        </div>
+        ${activeRound
+          ? `
+            <div class="summary-grid compact">
+              <article>
+                <span>Round</span>
+                <strong>${escapeHtml(activeRound.courseName)}</strong>
+              </article>
+              <article>
+                <span>Mode</span>
+                <strong>${escapeHtml(GAME_MODES[activeRound.mode].label)}</strong>
+              </article>
+              <article>
+                <span>Invite</span>
+                <strong>${escapeHtml(activeGroup?.inviteCode || activeRound.inviteCode || "Not live yet")}</strong>
+              </article>
+              <article>
+                <span>Sync</span>
+                <strong>${escapeHtml(activeRound.sync.label)}</strong>
+              </article>
+            </div>
+          `
+          : `
+            <div class="empty-state onboarding-state">
+              <strong>No live room yet.</strong>
+              <p>Start a round to host your own game, or join by code to test a shared room.</p>
+              <div class="row-actions empty-state-actions">
+                <button class="button primary" type="button" data-action="nav-view" data-view="round">Start round</button>
+                ${renderHelpLink("Joining and hosting guide", "playing-round", true)}
+              </div>
+            </div>`}
+      </article>
+      ${renderCompetitivePreviewCard(state, featuredProfileId, featuredProfileId === state.currentUser.profileId ? "Your public matchup card" : "Selected golfer preview")}
+      <article class="card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Nearby games</p>
+            <h3>Discoverable rounds</h3>
+          </div>
+        </div>
+        <div class="stack-list">
+          ${nearbyGames
+            .map(
+              (game) => `
+                <article class="list-row large">
+                  <div>
+                    <strong>${escapeHtml(game.title)}</strong>
+                    <p>${escapeHtml(game.courseName)} / ${escapeHtml(game.modeLabel)}</p>
+                  </div>
+                  <div class="list-metrics">
+                    <span>${escapeHtml(game.distance)}</span>
+                    <span>${escapeHtml(game.transport)}</span>
+                    <button class="button subtle" type="button" data-action="quick-join-code" data-code="${game.inviteCode}">Join</button>
+                  </div>
+                </article>
+              `
+            )
+            .join("")}
+        </div>
+      </article>
+      ${renderTournamentModule(state)}
+      <article class="card card-span-2">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Events and activity</p>
+            <h3>Tournament entry points and feed</h3>
+          </div>
+        </div>
+        <div class="stack-list">
+          ${state.tournaments.length
+            ? state.tournaments
+            .map(
+              (tournament) => `
+                <article class="list-row large">
+                  <div>
+                    <strong>${escapeHtml(tournament.name)}</strong>
+                    <p>${escapeHtml(tournament.courseName)} / ${formatDate(tournament.date)} / ${escapeHtml(GAME_MODES[tournament.mode].label)}</p>
+                  </div>
+                  <div class="list-metrics">
+                    <span>${escapeHtml(tournament.status)}</span>
+                    <span>${tournament.fieldSize} spots</span>
+                    <button class="button subtle" type="button" data-action="start-tournament-round" data-tournament-id="${tournament.id}">Start round</button>
+                  </div>
+                </article>
+              `
+            )
+            .join("")
+            : `
+              <div class="empty-state onboarding-state">
+                <strong>No tournaments yet.</strong>
+                <p>Create one above when you are ready, or stay focused on invite-code rounds first.</p>
+                <div class="row-actions empty-state-actions">
+                  <button class="button primary" type="button" data-action="open-help-section" data-section="playing-round">Open round guide</button>
+                  ${renderHelpLink("Premium tools", "premium-features", true)}
+                </div>
+              </div>
+            `}
+          ${state.social.activity
+            .slice(0, 4)
+            .map(
+              (entry) => `
+                <article class="feed-row">
+                  <time>${formatDateTime(entry.createdAt)}</time>
+                  <p>${escapeHtml(entry.message)}</p>
+                </article>
+              `
+            )
+            .join("")}
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+function renderPlanComparison(state) {
+  const subscription = getSubscription(state);
+  const premium = isPremiumSubscription(subscription);
+
+  return `
+    <article class="card card-span-2">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Plan comparison</p>
+          <h3>Free vs Premium</h3>
+        </div>
+      </div>
+      <div class="comparison-grid">
+        ${SUBSCRIPTION_PLANS.map(
+          (plan) => `
+            <article class="plan-card ${plan.id === "premium" ? "is-premium" : ""} ${subscription.tier === plan.id ? "is-current" : ""}">
+              <span class="mini-label">${escapeHtml(plan.label)}</span>
+              <strong>${escapeHtml(plan.priceLabel)}</strong>
+              <p>${escapeHtml(plan.billingLabel)}</p>
+              <p class="body-copy compact-copy">${escapeHtml(plan.highlight)}</p>
+              <div class="stack-list">
+                ${plan.features.map((feature) => `<div class="feature-row">${escapeHtml(feature)}</div>`).join("")}
+              </div>
+            </article>
+          `
+        ).join("")}
+      </div>
+      <div class="row-actions">
+        <button class="button ${premium ? "secondary" : "primary"}" type="button" data-action="nav-view" data-view="stats">
+          ${premium ? "Open premium stats" : "See locked stats"}
+        </button>
+        <span class="status-pill">Billing-ready structure: ${subscription.billingReady ? "Yes" : "Not yet"}</span>
+      </div>
+    </article>
+  `;
+}
+
+function renderGearSection(state) {
+  const activeRound = getActiveRound(state);
+  const recommendations = getGearRecommendations(activeRound?.weather || "");
+
+  return `
+    <article class="card card-span-2">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Shop and gear</p>
+          <h3>Round prep, apparel, and add-on structure</h3>
+        </div>
+      </div>
+      <div class="tag-row">
+        ${recommendations.map((item) => `<span class="tag">${escapeHtml(item)}</span>`).join("")}
+      </div>
+      <div class="premium-shop-grid">
+        <form class="stack-form" data-form="add-gear">
+          <label>
+            Category
+            <select name="category">
+              ${GEAR_CATEGORIES.map((category) => `<option value="${category}">${escapeHtml(category)}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            Item
+            <input name="name" type="text" placeholder="Quarter zip" required />
+          </label>
+          <label>
+            Notes
+            <input name="notes" type="text" placeholder="Cold morning layer" />
+          </label>
+          <label>
+            Weather use
+            <input name="weatherUse" type="text" placeholder="wind, rain, cold" />
+          </label>
+          <button class="button primary" type="submit">Add to kit</button>
+        </form>
+        <div class="stack-list">
+          ${state.gear.items
+            .map(
+              (item) => `
+                <article class="list-row large">
+                  <div>
+                    <strong>${escapeHtml(item.name)}</strong>
+                    <p>${escapeHtml(item.category)} / ${escapeHtml(item.notes || "No note yet")}</p>
+                  </div>
+                  <div class="list-metrics">
+                    <span>${escapeHtml(item.weatherUse || "all weather")}</span>
+                    <button class="button subtle" type="button" data-action="toggle-gear-packed" data-gear-id="${item.id}">
+                      ${item.packed ? "Packed" : "Not packed"}
+                    </button>
+                  </div>
+                </article>
+              `
+            )
+            .join("")}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderPremiumView(state) {
+  const subscription = getSubscription(state);
+  const premium = isPremiumSubscription(subscription);
+  const planLabel = premium
+    ? "Premium access is active, with deeper performance feedback and stronger live-play tools ready across the app."
+    : "Premium adds deeper performance insight, smarter round review, and stronger group tools when golf becomes more than simple scorekeeping.";
+
+  return `
+    <section class="view-grid premium-grid">
+      <article class="card premium-hero-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Premium</p>
+            <h3>Premium membership for a real player platform</h3>
+          </div>
+          <span class="premium-badge ${premium ? "is-live" : ""}">${premium ? "Access active" : "Upgrade path"}</span>
+        </div>
+        <p class="body-copy">${escapeHtml(planLabel)}</p>
+        <div class="summary-grid compact">
+          <article>
+            <span>Current plan</span>
+            <strong>${escapeHtml(subscription.planName || (premium ? "Premium" : "Free"))}</strong>
+          </article>
+          <article>
+            <span>Billing ready</span>
+            <strong>${subscription.billingReady ? "Yes" : "Not yet"}</strong>
+          </article>
+        </div>
+        <div class="row-actions">
+          <button class="button primary" type="button" data-action="nav-view" data-view="stats">${premium ? "Use premium stats" : "See locked stats"}</button>
+          ${renderHelpLink("What premium adds", "premium-features", true)}
+        </div>
+        <p class="hero-support-copy">${premium ? "This golfer already has premium access, so advanced stats, smarter round takeaways, and premium group tools are live across the app." : "Premium is built for golfers who want deeper feedback, more competitive context, and stronger live group play without losing the clean core flow."}</p>
+        <p class="body-copy compact-copy">${premium ? "Keep using Stats and Community to see the added depth in real round history and live play." : "Locked cards stay visible so free golfers can understand the value before upgrading."}</p>
+      </article>
+      <article class="card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Future integrations</p>
+            <h3>Subscription-ready feature stack</h3>
+          </div>
+        </div>
+        <div class="stack-list">
+          <div class="feature-row">Advanced stats and analytics</div>
+          <div class="feature-row">Premium round insights</div>
+          <div class="feature-row">Enhanced live group features</div>
+          <div class="feature-row">Tournament and league tools</div>
+          <div class="feature-row">GPS, watch, and smart gear integrations</div>
+          <div class="feature-row">Course intelligence and premium dashboards</div>
+        </div>
+      </article>
+      ${renderPlanComparison(state)}
+      ${renderGearSection(state)}
+    </section>
+  `;
+}
+
+function renderCurrentView(state) {
+  switch (state.session.activeView) {
+    case "help":
+      return renderHelpView(state);
+    case "settings":
+      return renderSettingsView(state);
+    case "round":
+      return renderRoundView(state);
+    case "stats":
+      return renderStatsView(state);
+    case "community":
+      return renderCommunityView(state);
+    case "premium":
+      return renderPremiumView(state);
+    case "home":
+    default:
+      return renderHomeView(state);
+  }
+}
+
+export function renderAppTemplate(state) {
+  if (state.auth?.status !== "authenticated") {
+    if (state.session.activeView === "help") {
+      return renderHelpView(state, { standalone: true });
+    }
+
+    return renderAuthScreen(state);
+  }
+
+  const activeRound = getActiveRound(state);
+  const summaryRound = getSummaryRound(state);
+  const subscription = getSubscription(state);
+  const appearance = getAppearanceSettings(state);
+  const activeViewLabel = state.session.activeView === "help"
+    ? "Help"
+    : state.session.activeView === "settings"
+      ? "Settings"
+    : VIEW_ORDER.find((view) => view.id === state.session.activeView)?.label || "Home";
+  const activeTab = VIEW_ORDER.find((view) => view.id === state.session.activeView);
+  const transitionClass = `transition-${state.session.transitionDirection || "steady"}`;
+  const shellClasses = ["app-shell", state.session.standaloneMode ? "is-standalone" : ""].filter(Boolean).join(" ");
+  const screenStageClasses = ["screen-stage", state.session.activeView !== "home" ? "screen-stage--compact" : "", state.session.activeView === "round" ? "screen-stage--round" : ""]
+    .filter(Boolean)
+    .join(" ");
+
+  return `
+    <div class="${shellClasses}" data-theme="${escapeHtml(appearance.themeId)}" data-color-mode="${escapeHtml(appearance.colorMode)}">
+      <aside class="side-rail">
+        <div class="brand-block">
+          <div class="brand-mark" data-action="admin-secret-tap">GN</div>
+          <div>
+            <p class="eyebrow">Premium social golf</p>
+            <h1>Golfers Nation</h1>
+          </div>
+        </div>
+        <div class="nav-stack">
+          ${renderNav(state)}
+        </div>
+        ${renderPlanPill(state)}
+        <article class="rail-card">
+          <span class="mini-label">Sync layer</span>
+          <strong>${escapeHtml(activeRound?.sync.label || CONNECTION_COPY.local)}</strong>
+          <p>${escapeHtml(activeRound?.sync.note || "Offline-first local data foundation.")}</p>
+        </article>
+      </aside>
+      <main class="content-shell">
+        ${renderAppShellHeader(state, activeRound, subscription)}
+        <section class="app-stage">
+          ${renderGlobalFeedback(state)}
+          ${renderScreenHeader(state, activeRound)}
+          ${summaryRound && state.session.activeView !== "round" ? renderSummarySpotlight(state, summaryRound) : ""}
+          <section
+            class="${screenStageClasses}"
+            id="app-screen-${state.session.activeView}"
+            role="tabpanel"
+            ${activeTab ? `aria-labelledby="tab-${state.session.activeView}"` : `aria-label="${escapeHtml(activeViewLabel)}"`}
+            data-view="${state.session.activeView}"
+          >
+            <div class="screen-panel view-shell ${transitionClass}" data-view="${state.session.activeView}" data-from-view="${state.session.previousView || state.session.activeView}">
+              ${renderCurrentView(state)}
+            </div>
+          </section>
+        </section>
+      </main>
+      <nav class="mobile-nav" aria-label="Primary" role="tablist">
+        ${renderNav(state)}
+      </nav>
+    </div>
+  `;
+}
+
+```
+
+## `src/utils/formatters.js`
+
+```js
+let idCounter = 0;
+
+export function uid(prefix = "id") {
+  idCounter += 1;
+  return `${prefix}-${Date.now()}-${idCounter}`;
+}
+
+export function cloneData(value) {
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
+
+  return JSON.parse(JSON.stringify(value));
+}
+
+export function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function formatDate(value) {
+  if (!value) {
+    return "--";
+  }
+
+  return new Date(value).toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+export function formatDateTime(value) {
+  if (!value) {
+    return "--";
+  }
+
+  return new Date(value).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export function formatTime(value) {
+  if (!value) {
+    return "--";
+  }
+
+  return new Date(value).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export function formatRelativeSync(value) {
+  if (!value) {
+    return "Not synced yet";
+  }
+
+  const diffMs = Date.now() - value;
+  const diffSeconds = Math.max(0, Math.round(diffMs / 1000));
+
+  if (diffSeconds < 15) {
+    return "Just now";
+  }
+
+  if (diffSeconds < 60) {
+    return `${diffSeconds}s ago`;
+  }
+
+  const diffMinutes = Math.round(diffSeconds / 60);
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m ago`;
+  }
+
+  return formatTime(value);
+}
+
+export function formatRelationToPar(value) {
+  if (value === null || value === undefined) {
+    return "--";
+  }
+
+  if (value === 0) {
+    return "E";
+  }
+
+  return value > 0 ? `+${value}` : `${value}`;
+}
+
+export function titleCase(value) {
+  return String(value || "")
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+export function average(numbers) {
+  if (!numbers.length) {
+    return 0;
+  }
+
+  return numbers.reduce((sum, value) => sum + value, 0) / numbers.length;
+}
+
+export function compactNames(values) {
+  return values.filter(Boolean).join(", ");
+}
+
+```
+
+## `tests/account-service.test.js`
+
+```js
+import { describe, expect, it } from "vitest";
+
+import {
+  authenticateEmailAccount,
+  createDefaultAccountState,
+  createEmailAccount,
+  hydrateActiveAccountState,
+  loadAccountIntoState,
+  prepareStateForPersistence,
+  saveWorkspaceToVault,
+  signInWithMockProvider,
+  signOutAccount,
+  togglePremiumAccessForUser,
+} from "../src/services/account-service.js";
+import { createDefaultState } from "../src/state/default-state.js";
+
+describe("account service", () => {
+  it("seeds free and premium review accounts with stored workspaces", () => {
+    const seeded = createDefaultAccountState();
+    const freeAccount = seeded.accounts.find((account) => account.email === "free@golfersnation.demo");
+    const premiumAccount = seeded.accounts.find((account) => account.email === "premium@golfersnation.demo");
+
+    expect(freeAccount?.subscription.tier).toBe("free");
+    expect(freeAccount?.roundsPlayed).toBeGreaterThan(0);
+    expect(premiumAccount?.subscription.tier).toBe("premium");
+    expect(seeded.accountVault[premiumAccount.id].rounds.length).toBeGreaterThan(0);
+  });
+
+  it("creates a new email account and loads it as the active user", () => {
+    const state = createDefaultState();
+    const result = createEmailAccount(state, {
+      displayName: "Sam Carter",
+      email: "sam@example.com",
+      password: "swing123",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.account.subscription.tier).toBe("premium");
+    expect(state.accountVault[result.account.id].rounds).toHaveLength(0);
+    expect(state.accountVault[result.account.id].tournaments).toHaveLength(0);
+
+    const loaded = loadAccountIntoState(state, result.account.id);
+
+    expect(loaded).toBe(true);
+    expect(state.auth.status).toBe("authenticated");
+    expect(state.currentUser.email).toBe("sam@example.com");
+    expect(state.currentUser.roundsPlayed).toBe(0);
+  });
+
+  it("authenticates email users and provider review accounts", () => {
+    const state = createDefaultState();
+    const emailResult = authenticateEmailAccount(state, {
+      email: "free@golfersnation.demo",
+      password: "fairway123",
+    });
+    const passwordError = authenticateEmailAccount(state, {
+      email: "free@golfersnation.demo",
+      password: "wrong",
+    });
+    const appleResult = signInWithMockProvider(state, "apple");
+
+    expect(emailResult.account.id).toBe("user-demo-free");
+    expect(passwordError.error).toContain("password");
+    expect(appleResult.account.provider).toBe("apple");
+    expect(appleResult.account.subscription.tier).toBe("premium");
+  });
+
+  it("keeps profile changes attached to the signed in user when switching accounts", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Chris Vale",
+      email: "chris@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, created.account.id);
+    state.currentUser.name = "Chris Vale Updated";
+    state.currentUser.displayName = "Chris Vale Updated";
+    state.currentUser.username = "@chrisvale";
+    saveWorkspaceToVault(state, created.account.id);
+    signOutAccount(state);
+
+    expect(state.auth.status).toBe("signed_out");
+
+    loadAccountIntoState(state, "user-demo-free");
+    expect(state.currentUser.displayName).toBe("Avery Brooks");
+
+    loadAccountIntoState(state, created.account.id);
+    expect(state.currentUser.displayName).toBe("Chris Vale Updated");
+  });
+
+  it("persists appearance, golf profile, and social settings per golfer account", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Taylor Reed",
+      email: "taylor-settings@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, created.account.id);
+    state.currentUser.handedness = "Left-handed";
+    state.currentUser.homeCourse = "Cedar Dunes";
+    state.currentUser.appearance = {
+      ...(state.currentUser.appearance || {}),
+      colorMode: "light",
+      themeId: "ocean",
+      textScale: "large",
+      compactMode: true,
+      contrastMode: "high",
+    };
+    state.currentUser.social = {
+      ...(state.currentUser.social || {}),
+      handles: {
+        ...(state.currentUser.social?.handles || {}),
+        instagram: "@taylorreed",
+        x: "@reedgolf",
+        ghin: "GHIN-102",
+      },
+      allowProfileSharing: false,
+      allowRoundSharing: true,
+      allowFriendConnections: false,
+    };
+
+    saveWorkspaceToVault(state, created.account.id);
+    signOutAccount(state);
+    loadAccountIntoState(state, created.account.id);
+
+    expect(state.currentUser.handedness).toBe("Left-handed");
+    expect(state.currentUser.homeCourse).toBe("Cedar Dunes");
+    expect(state.currentUser.appearance.colorMode).toBe("light");
+    expect(state.currentUser.appearance.themeId).toBe("ocean");
+    expect(state.currentUser.appearance.textScale).toBe("large");
+    expect(state.currentUser.appearance.compactMode).toBe(true);
+    expect(state.currentUser.appearance.contrastMode).toBe("high");
+    expect(state.currentUser.social.handles.instagram).toBe("@taylorreed");
+    expect(state.currentUser.social.handles.ghin).toBe("GHIN-102");
+    expect(state.currentUser.social.allowProfileSharing).toBe(false);
+    expect(state.currentUser.social.allowFriendConnections).toBe(false);
+  });
+
+  it("hydrates the last active user when a saved session is reopened", () => {
+    const state = createDefaultState();
+    state.auth.activeUserId = "user-demo-premium";
+
+    const hydrated = hydrateActiveAccountState(state);
+
+    expect(hydrated.auth.status).toBe("authenticated");
+    expect(hydrated.currentUser.email).toBe("premium@golfersnation.demo");
+    expect(hydrated.currentUser.subscription.tier).toBe("premium");
+  });
+
+  it("falls back to a signed-out safe state when the saved session cannot be restored", () => {
+    const state = createDefaultState();
+    state.auth.activeUserId = "user-missing";
+    state.auth.status = "authenticated";
+
+    const hydrated = hydrateActiveAccountState(state);
+
+    expect(hydrated.auth.activeUserId).toBeNull();
+    expect(hydrated.auth.status).toBe("signed_out");
+    expect(hydrated.auth.notice).toContain("couldn't restore");
+    expect(hydrated.session.activeView).toBe("home");
+  });
+
+  it("toggles premium access for the active user and keeps it attached to that account", () => {
+    const state = createDefaultState();
+    loadAccountIntoState(state, "user-demo-free");
+
+    const upgraded = togglePremiumAccessForUser(state);
+    expect(upgraded.subscription.tier).toBe("premium");
+    expect(state.currentUser.subscription.tier).toBe("premium");
+
+    saveWorkspaceToVault(state, "user-demo-free");
+    signOutAccount(state);
+    loadAccountIntoState(state, "user-demo-premium");
+    expect(state.currentUser.subscription.tier).toBe("premium");
+
+    loadAccountIntoState(state, "user-demo-free");
+    expect(state.currentUser.subscription.tier).toBe("premium");
+
+    const downgraded = togglePremiumAccessForUser(state);
+    expect(downgraded.subscription.tier).toBe("free");
+    expect(state.currentUser.subscription.tier).toBe("free");
+  });
+
+  it("does not persist transient feedback and score pulse state", () => {
+    const state = createDefaultState();
+    loadAccountIntoState(state, "user-demo-free");
+    state.session.feedback = { tone: "success", title: "Saved", message: "Recent message" };
+    state.session.pendingLabel = "Working";
+    state.session.lastScoredParticipantId = "player-1";
+    state.session.lastScoredHole = 4;
+    state.session.lastScorePulseAt = 1234;
+
+    const prepared = prepareStateForPersistence(state);
+
+    expect(prepared.session.feedback).toBeNull();
+    expect(prepared.session.pendingLabel).toBe("");
+    expect(prepared.session.lastScoredParticipantId).toBeNull();
+    expect(prepared.session.lastScoredHole).toBeNull();
+    expect(prepared.session.lastScorePulseAt).toBe(0);
+  });
+});
+
+```
+
+## `tests/bootstrap.test.js`
+
+```js
+// @vitest-environment jsdom
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { bootstrapApp } from "../src/main.js";
+import { createRound } from "../src/domain/factories.js";
+import { appendRoundAction, applyRoundActionEvent, createRoundActionEvent } from "../src/domain/round-sync.js";
+import { createEmailAccount, loadAccountIntoState, prepareStateForPersistence } from "../src/services/account-service.js";
+import { persistState } from "../src/services/storage-service.js";
+import { createDefaultState } from "../src/state/default-state.js";
+import { createRenderer } from "../src/ui/render.js";
+
+function createSuccessPlatform() {
+  return {
+    auth: {
+      restoreSession(state) {
+        return state;
+      },
+    },
+    data: {
+      loadInitialState(createDefaultStateFn) {
+        return createDefaultStateFn();
+      },
+      prepareForPersistence(state) {
+        return state;
+      },
+      persist() {},
+      saveWorkspace() {},
+    },
+    realtime: {
+      createSession() {
+        return {
+          connect() {},
+          disconnect() {},
+          publishRoundUpdate() {},
+          enableNearbySync() {},
+          enableBluetoothSync() {
+            return Promise.resolve();
+          },
+          updateTransport() {},
+        };
+      },
+    },
+  };
+}
+
+describe("bootstrap app", () => {
+  beforeEach(() => {
+    document.body.innerHTML = `
+      <div id="app">
+        <div class="app-loading-shell">Loading</div>
+      </div>
+    `;
+    localStorage.clear();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals?.();
+  });
+
+  it("replaces the loading shell with the real app UI on successful boot", () => {
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      platformFactory: createSuccessPlatform,
+      createDefaultStateFn: createDefaultState,
+      rendererFactory: createRenderer,
+      timeoutMs: 50,
+    });
+
+    expect(result.status).toBe("ready");
+    expect(document.querySelector(".app-loading-shell")).toBeNull();
+    expect(document.querySelector('[data-form="auth-login"]')).not.toBeNull();
+    expect(document.body.dataset.appShellMode).toBe("browser");
+
+    result.destroy();
+  });
+
+  it("boots into the entry screen with empty local data on the real startup path", () => {
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    expect(result.status).toBe("ready");
+    expect(document.querySelector(".app-loading-shell")).toBeNull();
+    expect(document.querySelector('[data-form="auth-login"]')).not.toBeNull();
+    expect(result.store.getState().auth.status).toBe("signed_out");
+
+    result.destroy();
+  });
+
+  it("restores a returning user session on app boot", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Taylor Reed",
+      email: "taylor@example.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.store.getState().auth.status).toBe("authenticated");
+    expect(result.store.getState().currentUser.email).toBe("taylor@example.com");
+    expect(document.querySelector('[data-action="open-settings"]')).not.toBeNull();
+
+    result.destroy();
+  });
+
+  it("retries a pending cloud round save after restore so reloads are safer on weak networks", async () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Retry Restore",
+      email: "retryrestore@example.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    state.session.cloudSync = {
+      status: "failed",
+      scope: "round-finish",
+      roundId: "round-retry",
+      userId: created.account.id,
+      errorMessage: "Weak connection during the last save.",
+      lastAttemptAt: Date.now(),
+      lastSuccessAt: 0,
+      retryCount: 1,
+    };
+
+    const flushSyncAsync = vi.fn().mockResolvedValue({ status: "synced" });
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      platformFactory() {
+        return {
+          auth: {
+            restoreSession(nextState) {
+              return nextState;
+            },
+          },
+          data: {
+            loadInitialState() {
+              return state;
+            },
+            prepareForPersistence(nextState) {
+              return nextState;
+            },
+            persist() {},
+            saveWorkspace() {},
+            hydrateAccountAsync: vi.fn().mockResolvedValue({ status: "ready" }),
+            flushSyncAsync,
+          },
+          realtime: {
+            createSession() {
+              return {
+                connect() {},
+                disconnect() {},
+                publishRoundUpdate() {},
+                enableNearbySync() {},
+                enableBluetoothSync() {
+                  return Promise.resolve();
+                },
+                updateTransport() {},
+              };
+            },
+          },
+        };
+      },
+      timeoutMs: 50,
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(flushSyncAsync).toHaveBeenCalled();
+    expect(result.store.getState().session.cloudSync.status).toBe("idle");
+
+    result.destroy();
+  });
+
+  it("restores an in-progress live round and retries queued live updates after reload", async () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Queued Live Round",
+      email: "queuedlive@example.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    state.rounds = [
+      createRound({
+        currentUser: state.currentUser,
+        courseName: "The Country Club at Golden Nugget",
+        teeBox: "Gold",
+        weather: "Humid 79F",
+        mode: "stroke",
+        players: [state.currentUser.name, "Maya Chen"],
+      }),
+    ];
+    state.session.activeRoundId = state.rounds[0].id;
+    state.session.selectedHole = 4;
+    const event = createRoundActionEvent({
+      roundId: state.rounds[0].id,
+      participantId: state.rounds[0].players[0].id,
+      holeNumber: 4,
+      patch: { strokes: 5, penalties: 1 },
+      actorUserId: created.account.id,
+      occurredAt: Date.now(),
+    });
+    applyRoundActionEvent(state.rounds[0], event);
+    appendRoundAction(state.rounds[0], event);
+    persistState(prepareStateForPersistence(state));
+
+    const flushSyncAsync = vi.fn().mockResolvedValue({ status: "synced" });
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      platformFactory() {
+        return {
+          auth: {
+            restoreSession(nextState) {
+              return nextState;
+            },
+          },
+          data: {
+            loadInitialState() {
+              return state;
+            },
+            prepareForPersistence(nextState) {
+              return nextState;
+            },
+            persist() {},
+            saveWorkspace() {},
+            hydrateAccountAsync: vi.fn().mockResolvedValue({ status: "ready" }),
+            flushSyncAsync,
+          },
+          realtime: {
+            createSession() {
+              return {
+                connect() {},
+                disconnect() {},
+                publishRoundUpdate() {},
+                enableNearbySync() {},
+                enableBluetoothSync() {
+                  return Promise.resolve();
+                },
+                updateTransport() {},
+              };
+            },
+          },
+        };
+      },
+      timeoutMs: 50,
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(result.store.getState().session.activeView).toBe("round");
+    expect(result.store.getState().session.selectedHole).toBe(4);
+    expect(flushSyncAsync).toHaveBeenCalled();
+    expect(result.store.getState().rounds[0].sync.pendingActionCount).toBe(0);
+
+    result.destroy();
+  });
+
+  it("returns to the auth entry screen after logout", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Jordan Miles",
+      email: "jordan@example.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    document.querySelector('[data-action="open-settings"]').click();
+    document.querySelector('[data-action="sign-out"]').click();
+
+    expect(result.store.getState().auth.status).toBe("signed_out");
+    expect(result.store.getState().auth.mode).toBe("login");
+    expect(document.querySelector('[data-form="auth-login"]')).not.toBeNull();
+    expect(document.body.textContent).toContain("Jordan Miles logged out.");
+    expect(document.body.textContent).toContain("Log in below");
+
+    result.destroy();
+  });
+
+  it("creates a premium-access tester account through the signup flow", () => {
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    document.querySelector('[data-action="set-auth-mode"][data-mode="signup"]').click();
+    const form = document.querySelector('[data-form="auth-signup"]');
+    form.querySelector('input[name="displayName"]').value = "Alicia Stone";
+    form.querySelector('input[name="email"]').value = "alicia@example.com";
+    form.querySelector('input[name="password"]').value = "swing123";
+    form.requestSubmit(form.querySelector('button[type="submit"]'));
+
+    expect(result.store.getState().auth.status).toBe("authenticated");
+    expect(result.store.getState().currentUser.email).toBe("alicia@example.com");
+    expect(result.store.getState().currentUser.subscription.tier).toBe("premium");
+    expect(result.store.getState().session.feedback.message).toContain("premium tester access");
+
+    result.destroy();
+  });
+
+  it("keeps rounds and settings isolated when switching between golfer accounts", () => {
+    const state = createDefaultState();
+    const first = createEmailAccount(state, {
+      displayName: "Harper Reed",
+      email: "harper@example.com",
+      password: "swing123",
+    });
+    const second = createEmailAccount(state, {
+      displayName: "Miles Ford",
+      email: "miles@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, first.account.id);
+    state.currentUser.appearance = {
+      ...(state.currentUser.appearance || {}),
+      themeId: "ocean",
+    };
+    const savedRound = createRound({
+      currentUser: state.currentUser,
+      courseName: "The Country Club at Golden Nugget",
+      teeBox: "Gold",
+      weather: "Humid 79F",
+      mode: "stroke",
+      players: [state.currentUser.name, "Maya Chen"],
+      status: "completed",
+    });
+    state.rounds.unshift(savedRound);
+    state.session.summaryRoundId = savedRound.id;
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    expect(result.store.getState().currentUser.email).toBe("harper@example.com");
+    expect(result.store.getState().rounds).toHaveLength(1);
+
+    document.querySelector('[data-action="open-settings"]').click();
+    document.querySelector('[data-action="sign-out"]').click();
+
+    const loginForm = document.querySelector('[data-form="auth-login"]');
+    loginForm.querySelector('input[name="email"]').value = "miles@example.com";
+    loginForm.querySelector('input[name="password"]').value = "swing123";
+    loginForm.requestSubmit(loginForm.querySelector('button[type="submit"]'));
+
+    expect(result.store.getState().auth.status).toBe("authenticated");
+    expect(result.store.getState().currentUser.email).toBe("miles@example.com");
+    expect(result.store.getState().rounds).toHaveLength(0);
+    expect(result.store.getState().currentUser.appearance.themeId).toBe("forest");
+
+    result.destroy();
+  });
+
+  it("recovers a one-player round setup into a playable card", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Field Tester",
+      email: "field@test.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    document.querySelector('[data-action="nav-view"][data-view="round"]').click();
+    const form = document.querySelector('[data-form="create-round"]');
+    form.querySelector('textarea[name="players"]').value = "Field Tester";
+    form.requestSubmit(form.querySelector('button[name="intent"][value="local"]'));
+
+    const currentState = result.store.getState();
+    expect(currentState.session.activeRoundId).toBeTruthy();
+    expect(currentState.rounds[0].players).toHaveLength(2);
+    expect(currentState.session.feedback.message).toContain("A second golfer was added");
+
+    result.destroy();
+  });
+
+  it("creates a round from a seeded real course and tee selection", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Course Tester",
+      email: "course@test.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    document.querySelector('[data-action="nav-view"][data-view="round"]').click();
+    document.querySelector('[data-action="select-course"][data-course-id="pebble-beach-california"]').click();
+
+    const teeSelect = document.querySelector('[data-course-tee-select]');
+    const alternateTeeId = teeSelect.querySelectorAll("option")[1].value;
+    teeSelect.value = alternateTeeId;
+    teeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+    const form = document.querySelector('[data-form="create-round"]');
+    form.querySelector('textarea[name="players"]').value = "Course Tester, Maya Chen";
+    form.requestSubmit(form.querySelector('button[name="intent"][value="local"]'));
+
+    const round = result.store.getState().rounds[0];
+    expect(round.courseId).toBe("pebble-beach-california");
+    expect(round.courseName).toBe("Pebble Beach Golf Links");
+    expect(round.teeBoxId).toBe(alternateTeeId);
+    expect(round.holes[0].yards).toBeGreaterThan(300);
+
+    result.destroy();
+  });
+
+  it("shows inline recovery guidance for a blank invite code submission", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Join Tester",
+      email: "join@test.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    document.querySelector('[data-action="nav-view"][data-view="community"]').click();
+    const form = document.querySelector('[data-form="join-code"]');
+    form.requestSubmit(form.querySelector('button[type="submit"]'));
+
+    expect(result.store.getState().session.feedback.title).toBe("Enter an invite code");
+    expect(result.store.getState().session.feedback.message).toContain("Ask the host");
+
+    result.destroy();
+  });
+
+  it("shows a recovery screen and retries back into the app when startup initially fails", () => {
+    const reload = vi.fn();
+    const removeItem = vi.fn();
+    let attempts = 0;
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      platformFactory: createSuccessPlatform,
+      createDefaultStateFn: createDefaultState,
+      rendererFactory(root) {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("Renderer could not start.");
+        }
+
+        return createRenderer(root);
+      },
+      timeoutMs: 50,
+      locationRef: { reload },
+      storage: { removeItem },
+    });
+
+    expect(result.status).toBe("failed");
+    expect(document.querySelector(".app-loading-shell")).toBeNull();
+    expect(document.body.textContent).toContain("We couldn't finish opening the app.");
+
+    document.querySelector('[data-boot-action="retry"]').click();
+    expect(document.querySelector('[data-form="auth-login"]')).not.toBeNull();
+    expect(reload).toHaveBeenCalledTimes(0);
+
+    document.body.innerHTML = `
+      <div id="app">
+        <div class="app-loading-shell">Loading</div>
+      </div>
+    `;
+    let resetAttempts = 0;
+    const secondResult = bootstrapApp({
+      root: document.querySelector("#app"),
+      platformFactory: createSuccessPlatform,
+      createDefaultStateFn: createDefaultState,
+      rendererFactory(root) {
+        resetAttempts += 1;
+        if (resetAttempts === 1) {
+          throw new Error("Renderer could not start.");
+        }
+
+        return createRenderer(root);
+      },
+      timeoutMs: 50,
+      locationRef: { reload },
+      storage: { removeItem },
+    });
+    document.querySelector('[data-boot-action="reset"]').click();
+    expect(removeItem).toHaveBeenCalledWith("golfers-nation-platform-v2");
+    expect(document.querySelector('[data-form="auth-login"]')).not.toBeNull();
+    expect(reload).toHaveBeenCalledTimes(0);
+
+    expect(secondResult.status).toBe("failed");
+  });
+
+  it("previews appearance changes immediately and saves them to the golfer account", () => {
+    const state = createDefaultState();
+    loadAccountIntoState(state, "user-demo-free");
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    document.querySelector('[data-action="open-settings"]').click();
+
+    const appearanceForm = document.querySelector('[data-form="save-appearance-settings"]');
+    const lightInput = appearanceForm.querySelector('input[name="colorMode"][value="light"]');
+    const oceanInput = appearanceForm.querySelector('input[name="themeId"][value="ocean"]');
+    const largeTextInput = appearanceForm.querySelector('input[name="textScale"][value="large"]');
+    const compactInput = appearanceForm.querySelector('input[name="compactMode"]');
+    const contrastInput = appearanceForm.querySelector('input[name="contrastMode"][value="high"]');
+
+    lightInput.checked = true;
+    lightInput.dispatchEvent(new Event("change", { bubbles: true }));
+    oceanInput.checked = true;
+    oceanInput.dispatchEvent(new Event("change", { bubbles: true }));
+    largeTextInput.checked = true;
+    largeTextInput.dispatchEvent(new Event("change", { bubbles: true }));
+    compactInput.checked = true;
+    compactInput.dispatchEvent(new Event("change", { bubbles: true }));
+    contrastInput.checked = true;
+    contrastInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(document.body.dataset.colorMode).toBe("light");
+    expect(document.body.dataset.resolvedMode).toBe("light");
+    expect(document.body.dataset.theme).toBe("ocean");
+    expect(document.body.dataset.textScale).toBe("large");
+    expect(document.body.dataset.density).toBe("compact");
+    expect(document.body.dataset.contrast).toBe("high");
+    expect(document.querySelector('[data-active-theme-name]').textContent).toBe("Ocean");
+    expect(document.querySelector('[data-active-theme-card]').dataset.themePreview).toBe("ocean");
+
+    appearanceForm.requestSubmit(appearanceForm.querySelector('button[type="submit"]'));
+
+    expect(result.store.getState().currentUser.appearance.colorMode).toBe("light");
+    expect(result.store.getState().currentUser.appearance.themeId).toBe("ocean");
+    expect(result.store.getState().currentUser.appearance.textScale).toBe("large");
+    expect(result.store.getState().currentUser.appearance.compactMode).toBe(true);
+    expect(result.store.getState().currentUser.appearance.contrastMode).toBe("high");
+
+    result.destroy();
+  });
+
+  it("submits tester feedback through the in-app Netlify form flow", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const state = createDefaultState();
+    loadAccountIntoState(state, "user-demo-free");
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    document.querySelector('[data-action="open-settings"]').click();
+    document.querySelector('[data-action="set-settings-section"][data-section="app-support"]').click();
+
+    const feedbackForm = document.querySelector('[data-form="submit-tester-feedback"]');
+    feedbackForm.querySelector('textarea[name="feedbackMessage"]').value = "Round scoring felt great, but the join flow could be clearer.";
+    feedbackForm.requestSubmit(feedbackForm.querySelector('button[type="submit"]'));
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/");
+    expect(fetchMock.mock.calls[0][1].body).toContain("form-name=tester-feedback");
+    expect(fetchMock.mock.calls[0][1].body).toContain("feedbackArea=");
+    expect(result.store.getState().session.feedback.title).toBe("Feedback sent");
+
+    result.destroy();
+  });
+});
+
+```
+
+## `tests/course-library.test.js`
+
+```js
+import { describe, expect, it } from "vitest";
+
+import { createRoundCourseSelection, findCourseById, getRoundSetupCourses, searchCourseLibrary } from "../src/services/course-library.js";
+
+describe("course library", () => {
+  it("searches seeded real courses by name, city, and state", () => {
+    expect(searchCourseLibrary("Pebble").some((course) => course.name.includes("Pebble Beach"))).toBe(true);
+    expect(searchCourseLibrary("Atlanta").some((course) => course.name.includes("East Lake"))).toBe(true);
+    expect(searchCourseLibrary("NV").some((course) => course.region.includes("Las Vegas"))).toBe(true);
+  });
+
+  it("returns a compact starter set for round setup browsing", () => {
+    const results = getRoundSetupCourses("", 6);
+
+    expect(results.length).toBeLessThanOrEqual(6);
+    expect(results[0].id).toBe("golden-nugget-lake-charles");
+    expect(results[0].teeBoxes.length).toBeGreaterThan(0);
+  });
+
+  it("builds a round-ready course selection with tee box hole data", () => {
+    const course = findCourseById("torrey-pines-south");
+    const teeBoxId = course.teeBoxes[1].id;
+    const selection = createRoundCourseSelection(course.id, teeBoxId);
+
+    expect(selection.courseName).toBe("Torrey Pines Golf Course - South");
+    expect(selection.teeBoxName).toBe(course.teeBoxes[1].name);
+    expect(selection.holes).toHaveLength(18);
+    expect(selection.totalPar).toBe(72);
+    expect(selection.totalYardage).toBe(course.teeBoxes[1].totalYardage);
+  });
+});
+
+```
+
+## `tests/data-gateway.test.js`
+
+```js
+import { describe, expect, it, vi } from "vitest";
+
+import { FEATURED_COURSE_ID } from "../src/config.js";
+import { createRound } from "../src/domain/factories.js";
+import { appendRoundAction, applyRoundActionEvent, createRoundActionEvent } from "../src/domain/round-sync.js";
+import { createEmailAccount, loadAccountIntoState } from "../src/services/account-service.js";
+import { createLocalDataGateway, createSupabaseDataGateway } from "../src/services/data-gateway.js";
+import { createDefaultState } from "../src/state/default-state.js";
+import { createStore } from "../src/state/store.js";
+
+function createRemoteProfile(account, overrides = {}) {
+  return {
+    id: account.id,
+    display_name: account.displayName,
+    username: account.username,
+    email: account.email,
+    provider: account.provider,
+    avatar_label: account.avatarLabel,
+    avatar_url: account.avatarUrl || "",
+    city: account.city || "",
+    home_course: account.homeCourse || "",
+    handicap: account.handicap,
+    bio: account.bio || "",
+    season_goal: account.seasonGoal || "Finish your first round",
+    created_at: new Date(account.createdAt).toISOString(),
+    subscription_tier: account.subscription.tier,
+    appearance: account.appearance || {},
+    social_settings: account.social || {},
+    privacy: account.privacy || {},
+    ...overrides,
+  };
+}
+
+function createRemoteWorkspace(account, {
+  courseName = "The Country Club at Golden Nugget",
+  teeBox = "Gold",
+  teeBoxId = "gnlc-gold",
+  selectedHole = 3,
+} = {}) {
+  const round = createRound({
+    currentUser: account,
+    courseName,
+    teeBox,
+    teeBoxId,
+    courseId: FEATURED_COURSE_ID,
+    weather: "Humid 78F",
+    mode: "stroke",
+    players: [account.displayName, "Maya Chen"],
+  });
+
+  return {
+    profiles: [
+      {
+        id: account.profileId,
+        userId: account.id,
+        publicProfile: {
+          displayName: account.displayName,
+          username: account.username,
+          avatarLabel: account.avatarLabel,
+          homeCourse: account.homeCourse,
+          handicap: account.handicap,
+          bio: account.bio,
+        },
+        publicStats: {
+          roundsPlayed: 1,
+          averageScore: 76,
+          bestRound: 76,
+          recentFormSummary: `${courseName} +4`,
+        },
+        account: {
+          premiumStatus: account.subscription.tier,
+          createdAt: account.createdAt,
+        },
+        privacy: account.privacy,
+      },
+    ],
+    rounds: [round],
+    groups: [],
+    tournaments: [],
+    gear: { items: [] },
+    social: { activity: [] },
+    userSession: {
+      activeRoundId: round.id,
+      selectedHole,
+      summaryRoundId: null,
+      selectedProfileId: account.profileId,
+      roundSetup: {
+        courseQuery: "",
+        selectedCourseId: FEATURED_COURSE_ID,
+        selectedTeeBoxId: teeBoxId,
+      },
+    },
+  };
+}
+
+describe("supabase data gateway", () => {
+  it("hydrates only the requested user's remote workspace and leaves other accounts untouched", async () => {
+    const store = createStore(createDefaultState());
+    let primaryAccountId = "";
+    let secondaryAccountId = "";
+
+    store.setState((draft) => {
+      const primary = createEmailAccount(draft, {
+        displayName: "Alex Rivers",
+        email: "alex@example.com",
+        password: "swing123",
+      });
+      const secondary = createEmailAccount(draft, {
+        displayName: "Brooke Lane",
+        email: "brooke@example.com",
+        password: "swing123",
+      });
+
+      primaryAccountId = primary.account.id;
+      secondaryAccountId = secondary.account.id;
+      draft.accountVault[secondary.account.id].rounds.push(
+        createRound({
+          currentUser: secondary.account,
+          courseName: "Brooke Hills",
+          teeBox: "Blue",
+          weather: "Clear 73F",
+          mode: "stroke",
+          players: [secondary.account.displayName, "Theo Grant"],
+        })
+      );
+      return draft;
+    });
+
+    const primaryAccount = store.getState().accounts.find((account) => account.id === primaryAccountId);
+    const bridge = {
+      isConfigured: () => true,
+      fetchWorkspace: vi.fn(async (userId) => ({
+        profile: createRemoteProfile(primaryAccount),
+        workspace: createRemoteWorkspace(primaryAccount),
+        session: { access_token: "token" },
+      })),
+      upsertProfile: vi.fn(async () => ({ data: [{}] })),
+      upsertWorkspace: vi.fn(async () => ({ data: [{}] })),
+    };
+
+    const gateway = createSupabaseDataGateway({
+      bridge,
+      fallback: createLocalDataGateway(),
+    });
+
+    await gateway.hydrateAccountAsync(store, primaryAccountId);
+
+    const nextState = store.getState();
+    expect(bridge.fetchWorkspace).toHaveBeenCalledWith(primaryAccountId);
+    expect(nextState.auth.activeUserId).toBe(primaryAccountId);
+    expect(nextState.currentUser.email).toBe("alex@example.com");
+    expect(nextState.rounds).toHaveLength(1);
+    expect(nextState.rounds[0].courseName).toBe("The Country Club at Golden Nugget");
+    expect(nextState.accountVault[secondaryAccountId].rounds).toHaveLength(1);
+    expect(nextState.accountVault[secondaryAccountId].rounds[0].courseName).toBe("Brooke Hills");
+  });
+
+  it("gives brand-new remote users a clean empty workspace and surfaces bootstrap sync warnings", async () => {
+    const store = createStore(createDefaultState());
+    let accountId = "";
+
+    store.setState((draft) => {
+      const created = createEmailAccount(draft, {
+        displayName: "Casey Marsh",
+        email: "casey@example.com",
+        password: "swing123",
+      });
+      accountId = created.account.id;
+      return draft;
+    });
+
+    const account = store.getState().accounts.find((entry) => entry.id === accountId);
+    const bridge = {
+      isConfigured: () => true,
+      fetchWorkspace: vi.fn(async () => ({
+        profile: createRemoteProfile(account),
+        workspace: null,
+        session: { access_token: "token" },
+      })),
+      upsertProfile: vi.fn(async () => ({ data: [{}] })),
+      upsertWorkspace: vi.fn(async () => ({
+        error: {
+          status: 503,
+          message: "Workspace bootstrap timed out.",
+          code: "workspace_timeout",
+        },
+      })),
+    };
+
+    const gateway = createSupabaseDataGateway({
+      bridge,
+      fallback: createLocalDataGateway(),
+    });
+
+    const result = await gateway.hydrateAccountAsync(store, accountId);
+    const nextState = store.getState();
+
+    expect(result.status).toBe("ready");
+    expect(result.syncWarning.message).toContain("Workspace bootstrap timed out");
+    expect(nextState.auth.activeUserId).toBe(accountId);
+    expect(nextState.currentUser.email).toBe("casey@example.com");
+    expect(nextState.rounds).toHaveLength(0);
+    expect(nextState.tournaments).toHaveLength(0);
+    expect(nextState.session.roundSetup.selectedCourseId).toBe(FEATURED_COURSE_ID);
+  });
+
+  it("preserves a local round when cloud sync is pending instead of overwriting it with stale remote data", async () => {
+    const store = createStore(createDefaultState());
+    let accountId = "";
+
+    store.setState((draft) => {
+      const created = createEmailAccount(draft, {
+        displayName: "Jordan Hale",
+        email: "jordanhale@example.com",
+        password: "swing123",
+      });
+      accountId = created.account.id;
+      loadAccountIntoState(draft, accountId);
+      draft.rounds = [
+        createRound({
+          currentUser: created.account,
+          courseName: "The Country Club at Golden Nugget",
+          teeBox: "Gold",
+          teeBoxId: "gnlc-gold",
+          courseId: FEATURED_COURSE_ID,
+          weather: "Humid 80F",
+          mode: "stroke",
+          players: [created.account.displayName, "Maya Chen"],
+          status: "completed",
+        }),
+      ];
+      draft.session.summaryRoundId = draft.rounds[0].id;
+      draft.session.cloudSync = {
+        status: "failed",
+        scope: "round-finish",
+        roundId: draft.rounds[0].id,
+        userId: accountId,
+        errorMessage: "Network dropped during save.",
+        lastAttemptAt: Date.now(),
+        lastSuccessAt: 0,
+        retryCount: 1,
+      };
+      return draft;
+    });
+
+    const account = store.getState().accounts.find((entry) => entry.id === accountId);
+    const bridge = {
+      isConfigured: () => true,
+      fetchWorkspace: vi.fn(async () => ({
+        profile: createRemoteProfile(account),
+        workspace: {
+          ...createRemoteWorkspace(account, { courseName: "Remote Stale Copy" }),
+          rounds: [],
+        },
+        session: { access_token: "token" },
+      })),
+      upsertProfile: vi.fn(async () => ({ data: [{}] })),
+      upsertWorkspace: vi.fn(async () => ({ data: [{}] })),
+    };
+
+    const gateway = createSupabaseDataGateway({
+      bridge,
+      fallback: createLocalDataGateway(),
+    });
+
+    const result = await gateway.hydrateAccountAsync(store, accountId);
+    const nextState = store.getState();
+
+    expect(result.preservedLocalWorkspace).toBe(true);
+    expect(nextState.rounds).toHaveLength(1);
+    expect(nextState.rounds[0].courseName).toBe("The Country Club at Golden Nugget");
+    expect(bridge.upsertWorkspace).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves local live-round changes when the event queue is pending, even if cloudSync state looks idle", async () => {
+    const store = createStore(createDefaultState());
+    let accountId = "";
+
+    store.setState((draft) => {
+      const created = createEmailAccount(draft, {
+        displayName: "Signal Safe",
+        email: "signalsafe@example.com",
+        password: "swing123",
+      });
+      accountId = created.account.id;
+      loadAccountIntoState(draft, accountId);
+      draft.rounds = [
+        createRound({
+          currentUser: created.account,
+          courseName: "The Country Club at Golden Nugget",
+          teeBox: "Gold",
+          teeBoxId: "gnlc-gold",
+          courseId: FEATURED_COURSE_ID,
+          weather: "Humid 80F",
+          mode: "stroke",
+          players: [created.account.displayName, "Maya Chen"],
+        }),
+      ];
+      const liveRound = draft.rounds[0];
+      const event = createRoundActionEvent({
+        roundId: liveRound.id,
+        participantId: liveRound.players[0].id,
+        holeNumber: 1,
+        patch: { strokes: 4, putts: 2, gir: true },
+        actorUserId: accountId,
+        occurredAt: Date.now(),
+      });
+      applyRoundActionEvent(liveRound, event);
+      appendRoundAction(liveRound, event);
+      draft.session.cloudSync = {
+        status: "idle",
+        scope: "",
+        roundId: null,
+        userId: accountId,
+        errorMessage: "",
+        lastAttemptAt: 0,
+        lastSuccessAt: 0,
+        retryCount: 0,
+      };
+      return draft;
+    });
+
+    const account = store.getState().accounts.find((entry) => entry.id === accountId);
+    const bridge = {
+      isConfigured: () => true,
+      fetchWorkspace: vi.fn(async () => ({
+        profile: createRemoteProfile(account),
+        workspace: {
+          ...createRemoteWorkspace(account, { courseName: "Remote Older Copy" }),
+          rounds: [],
+        },
+        session: { access_token: "token" },
+      })),
+      upsertProfile: vi.fn(async () => ({ data: [{}] })),
+      upsertWorkspace: vi.fn(async () => ({ data: [{}] })),
+    };
+
+    const gateway = createSupabaseDataGateway({
+      bridge,
+      fallback: createLocalDataGateway(),
+    });
+
+    const result = await gateway.hydrateAccountAsync(store, accountId);
+    const nextState = store.getState();
+
+    expect(result.preservedLocalWorkspace).toBe(true);
+    expect(nextState.rounds[0].holes[0].entries[0].strokes).toBe(4);
+    expect(nextState.rounds[0].sync.pendingActionCount).toBe(1);
+  });
+
+  it("flushes round data to Supabase for the authenticated user only", async () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Devon Hart",
+      email: "devon@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, created.account.id);
+    state.rounds = [
+      createRound({
+        currentUser: created.account,
+        courseName: "The Country Club at Golden Nugget",
+        teeBox: "Gold",
+        teeBoxId: "gnlc-gold",
+        courseId: FEATURED_COURSE_ID,
+        weather: "Humid 79F",
+        mode: "stroke",
+        players: [created.account.displayName, "Jordan Wells"],
+      }),
+    ];
+
+    const bridge = {
+      isConfigured: () => true,
+      upsertProfile: vi.fn(async () => ({ data: [{}] })),
+      upsertWorkspace: vi.fn(async () => ({ data: [{}] })),
+    };
+
+    const gateway = createSupabaseDataGateway({
+      bridge,
+      fallback: createLocalDataGateway(),
+    });
+
+    const result = await gateway.flushSyncAsync(state, created.account.id);
+
+    expect(result.status).toBe("synced");
+    expect(bridge.upsertProfile).toHaveBeenCalledTimes(1);
+    expect(bridge.upsertWorkspace).toHaveBeenCalledTimes(1);
+    expect(bridge.upsertWorkspace).toHaveBeenCalledWith(
+      created.account.id,
+      expect.objectContaining({
+        rounds: expect.arrayContaining([
+          expect.objectContaining({
+            courseName: "The Country Club at Golden Nugget",
+          }),
+        ]),
+      })
+    );
+  });
+});
+
+```
+
+## `tests/factories.test.js`
+
+```js
+import { describe, expect, it } from "vitest";
+
+import { createGearItem, createGroup, createPlayerProfile, createRound, createTournament } from "../src/domain/factories.js";
+
+const currentUser = {
+  id: "user-1",
+  name: "Avery Brooks",
+};
+
+describe("factories", () => {
+  it("creates a stroke-play round with the current user on the card", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "National Pines",
+      teeBox: "Blue",
+      weather: "Clear 72F",
+      mode: "stroke",
+      players: ["Maya Chen", "Theo Grant"],
+    });
+
+    expect(round.mode).toBe("stroke");
+    expect(round.players).toHaveLength(3);
+    expect(round.players[0].name).toBe("Avery Brooks");
+    expect(round.sides).toHaveLength(0);
+    expect(round.holes).toHaveLength(18);
+    expect(round.holes[0].entries).toHaveLength(3);
+    expect(round.holes[0].entries[0].penalties).toBe(0);
+    expect(round.holes[0].entries[0].upAndDown).toBe(false);
+    expect(round.holes[0].entries[0].sandSave).toBe(false);
+  });
+
+  it("creates side-based rounds for scramble mode", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "National Pines",
+      teeBox: "Blue",
+      weather: "Windy 68F",
+      mode: "scramble",
+      players: ["Avery Brooks", "Maya Chen", "Theo Grant", "Jordan Wells"],
+    });
+
+    expect(round.sides).toHaveLength(2);
+    expect(round.sides[0].playerNames).toContain("Avery Brooks");
+    expect(round.holes[0].entries).toHaveLength(2);
+  });
+
+  it("uses selected course hole data when a real tee box is supplied", () => {
+    const round = createRound({
+      currentUser,
+      courseId: "pebble-beach-california",
+      courseName: "Pebble Beach Golf Links",
+      teeBox: "Championship",
+      teeBoxId: "pebble-beach-california-championship",
+      courseCity: "Pebble Beach",
+      courseState: "CA",
+      courseRegion: "California",
+      courseSource: "seeded-curated-demo",
+      courseSeeded: true,
+      holesTemplate: [
+        { number: 1, par: 4, yards: 381 },
+        { number: 2, par: 5, yards: 511 },
+        { number: 3, par: 4, yards: 390 },
+        { number: 4, par: 4, yards: 331 },
+        { number: 5, par: 3, yards: 192 },
+        { number: 6, par: 5, yards: 503 },
+        { number: 7, par: 3, yards: 106 },
+        { number: 8, par: 4, yards: 428 },
+        { number: 9, par: 4, yards: 446 },
+        { number: 10, par: 4, yards: 495 },
+        { number: 11, par: 4, yards: 390 },
+        { number: 12, par: 3, yards: 202 },
+        { number: 13, par: 4, yards: 407 },
+        { number: 14, par: 5, yards: 580 },
+        { number: 15, par: 4, yards: 396 },
+        { number: 16, par: 4, yards: 403 },
+        { number: 17, par: 3, yards: 208 },
+        { number: 18, par: 5, yards: 543 },
+      ],
+      weather: "Marine layer",
+      mode: "stroke",
+      players: ["Maya Chen", "Theo Grant"],
+    });
+
+    expect(round.courseId).toBe("pebble-beach-california");
+    expect(round.courseSeeded).toBe(true);
+    expect(round.courseCity).toBe("Pebble Beach");
+    expect(round.teeBoxId).toBe("pebble-beach-california-championship");
+    expect(round.holes[0].yards).toBe(381);
+    expect(round.holes[6].par).toBe(3);
+  });
+
+  it("creates related group, tournament, and gear records", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "Shadow Ridge",
+      teeBox: "Blue",
+      weather: "Warm 76F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Maya Chen"],
+    });
+    const group = createGroup({
+      round,
+      currentUser,
+      inviteCode: "ABCD12",
+    });
+    const tournament = createTournament({
+      name: "Weekend Cup",
+      courseName: "Shadow Ridge",
+      date: "2026-04-01T12:00:00.000Z",
+      mode: "stroke",
+      fieldSize: 24,
+    });
+    const gearItem = createGearItem({
+      category: "accessory",
+      name: "Rangefinder",
+      notes: "Charge before weekend rounds",
+      packed: true,
+    });
+
+    expect(group.inviteCode).toBe("ABCD12");
+    expect(group.members).toHaveLength(round.players.length);
+    expect(tournament.name).toBe("Weekend Cup");
+    expect(gearItem.packed).toBe(true);
+  });
+
+  it("creates a persistent player profile scaffold for account-based play", () => {
+    const profile = createPlayerProfile({
+      userId: "user-1",
+      displayName: "Avery Brooks",
+      username: "@averybrooks",
+      avatarLabel: "AB",
+      email: "avery@example.com",
+      premiumStatus: "free",
+    });
+
+    expect(profile.publicProfile.displayName).toBe("Avery Brooks");
+    expect(profile.account.email).toBe("avery@example.com");
+    expect(profile.privateProfile.privacy.showRecentForm).toBe(true);
+    expect(profile.publicProfile.fairwayPercentage).toBe(0);
+    expect(profile.publicProfile.smartInsights).toEqual([]);
+  });
+});
+
+```
+
+## `tests/player-service.test.js`
+
+```js
+import { describe, expect, it } from "vitest";
+
+import { createDefaultState } from "../src/state/default-state.js";
+import { buildCompetitivePreview, buildPlayerComparison, ensureProfilesForNames } from "../src/services/player-service.js";
+
+describe("player service", () => {
+  it("creates persistent profile descriptors for round participants", () => {
+    const state = createDefaultState();
+    const startingProfiles = state.profiles.length;
+
+    const descriptors = ensureProfilesForNames(state, ["Avery Brooks", "Reese Hall"]);
+
+    expect(descriptors[0].profileId).toBe(state.currentUser.profileId);
+    expect(descriptors[1].displayName).toBe("Reese Hall");
+    expect(state.profiles.length).toBe(startingProfiles + 1);
+  });
+
+  it("builds a competitive preview from completed profile-linked rounds", () => {
+    const state = createDefaultState();
+    const preview = buildCompetitivePreview(state, state.currentUser.profileId);
+
+    expect(preview.displayName).toBe("Avery Brooks");
+    expect(preview.roundsPlayed).toBeGreaterThan(0);
+    expect(preview.recentFormSummary).not.toBe("First round pending");
+    expect(typeof preview.fairwayPercentage).toBe("number");
+    expect(typeof preview.girPercentage).toBe("number");
+    expect(preview.formLabel).toBeTruthy();
+    expect(preview.strokesGained).toBeTruthy();
+    expect(Array.isArray(preview.hardestHoles)).toBe(true);
+    expect(preview.smartInsights.length).toBeGreaterThan(0);
+  });
+
+  it("builds a side-by-side comparison for public player stats", () => {
+    const state = createDefaultState();
+    const comparison = buildPlayerComparison(state, state.currentUser.profileId, "profile-maya");
+
+    expect(comparison.left.displayName).toBe("Avery Brooks");
+    expect(comparison.right.displayName).toBe("Maya Chen");
+    expect(comparison.metricRows).toHaveLength(6);
+    expect(comparison.metricRows.map((row) => row.label)).toContain("Average score");
+    expect(comparison.metricRows.map((row) => row.label)).toContain("Driving");
+    expect(comparison.right.headToHeadLabel).toContain("shared rounds");
+  });
+});
+
+```
+
+## `tests/product-platform.test.js`
+
+```js
+import { afterEach, describe, expect, it } from "vitest";
+
+import { createProductPlatform } from "../src/services/product-platform.js";
+import { createDefaultState } from "../src/state/default-state.js";
+import { createStore } from "../src/state/store.js";
+
+describe("product platform", () => {
+  afterEach(() => {
+    delete globalThis.__GN_RUNTIME_CONFIG__;
+  });
+
+  it("exposes backend-ready local adapters for auth, data, and realtime", () => {
+    const platform = createProductPlatform();
+
+    expect(platform.capabilities.backendReady).toBe(true);
+    expect(platform.capabilities.authMode).toBe("local-auth-adapter");
+    expect(platform.capabilities.dataMode).toBe("local-device-adapter");
+    expect(platform.capabilities.realtimeMode).toBe("device-realtime-adapter");
+  });
+
+  it("runs signup through the auth gateway and exports a cloud-ready workspace snapshot", () => {
+    const platform = createProductPlatform();
+    const state = createDefaultState();
+
+    const result = platform.auth.signUpWithEmail(state, {
+      displayName: "Morgan Hill",
+      email: "morgan@example.com",
+      password: "swing123",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(state.auth.status).toBe("authenticated");
+
+    const snapshot = platform.data.exportWorkspaceSnapshot(state, state.currentUser.id);
+
+    expect(snapshot.auth_user.email).toBe("morgan@example.com");
+    expect(snapshot.auth_user.subscription_tier).toBe("premium");
+    expect(snapshot.profiles).toHaveLength(1);
+    expect(snapshot.session.selected_profile_id).toBe(state.currentUser.profileId);
+  });
+
+  it("switches to Supabase-backed auth and data adapters when runtime config is present", () => {
+    globalThis.__GN_RUNTIME_CONFIG__ = {
+      supabaseUrl: "https://example.supabase.co",
+      supabaseAnonKey: "test-anon-key",
+    };
+
+    const platform = createProductPlatform();
+
+    expect(platform.capabilities.supabaseEnabled).toBe(true);
+    expect(platform.capabilities.authMode).toBe("supabase-auth-adapter");
+    expect(platform.capabilities.dataMode).toBe("supabase-cloud-adapter");
+  });
+
+  it("creates realtime sessions with backend-friendly method names", () => {
+    const platform = createProductPlatform();
+    const store = createStore(createDefaultState());
+    const session = platform.realtime.createSession({ store });
+
+    expect(typeof session.connect).toBe("function");
+    expect(typeof session.disconnect).toBe("function");
+    expect(typeof session.publishRoundUpdate).toBe("function");
+    expect(typeof session.enableNearbySync).toBe("function");
+    expect(typeof session.enableBluetoothSync).toBe("function");
+  });
+});
+
+```
+
+## `tests/round-sync.test.js`
+
+```js
+import { describe, expect, it } from "vitest";
+
+import { createRound } from "../src/domain/factories.js";
+import {
+  appendRoundAction,
+  applyRoundActionEvent,
+  createRoundActionEvent,
+  getPendingRoundEvents,
+  markRoundEventsRetryNeeded,
+  markRoundEventsSynced,
+  markRoundEventsSyncing,
+  workspaceHasPendingRoundSync,
+} from "../src/domain/round-sync.js";
+
+const currentUser = {
+  id: "user-1",
+  name: "Avery Brooks",
+};
+
+describe("round sync domain helpers", () => {
+  it("creates rounds with host-optional sync scaffolding", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "The Country Club at Golden Nugget",
+      teeBox: "Gold",
+      weather: "Humid 79F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Maya Chen"],
+    });
+
+    expect(round.sync.hostRequired).toBe(false);
+    expect(round.sync.hostOptional).toBe(true);
+    expect(round.sync.saveState).toBe("saved-local");
+    expect(round.eventLog).toEqual([]);
+  });
+
+  it("tracks pending round actions and marks them synced after a successful backup", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "The Country Club at Golden Nugget",
+      teeBox: "Gold",
+      weather: "Humid 79F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Maya Chen"],
+    });
+    const participantId = round.players[0].id;
+    const event = createRoundActionEvent({
+      roundId: round.id,
+      participantId,
+      holeNumber: 1,
+      patch: { strokes: 4, putts: 2, gir: true },
+      actorUserId: currentUser.id,
+      occurredAt: 1000,
+    });
+
+    expect(applyRoundActionEvent(round, event).applied).toBe(true);
+    appendRoundAction(round, event);
+
+    expect(getPendingRoundEvents(round)).toHaveLength(1);
+    expect(round.sync.pendingActionCount).toBe(1);
+    expect(round.holes[0].entries[0].strokes).toBe(4);
+
+    markRoundEventsSyncing(round, [event.id], 1500);
+    expect(round.sync.saveState).toBe("syncing");
+
+    markRoundEventsSynced(round, [event.id], 2000);
+    expect(getPendingRoundEvents(round)).toHaveLength(0);
+    expect(round.sync.pendingActionCount).toBe(0);
+    expect(round.sync.saveState).toBe("synced");
+    expect(round.sync.lastSyncedAt).toBe(2000);
+  });
+
+  it("uses latest update wins for conflicting hole events", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "Golden Nugget",
+      teeBox: "Gold",
+      weather: "Humid 79F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Maya Chen"],
+    });
+    const participantId = round.players[0].id;
+    const newerEvent = createRoundActionEvent({
+      roundId: round.id,
+      participantId,
+      holeNumber: 1,
+      patch: { strokes: 5 },
+      actorUserId: currentUser.id,
+      occurredAt: 3000,
+    });
+    const olderEvent = createRoundActionEvent({
+      roundId: round.id,
+      participantId,
+      holeNumber: 1,
+      patch: { strokes: 4 },
+      actorUserId: currentUser.id,
+      occurredAt: 2000,
+    });
+
+    expect(applyRoundActionEvent(round, newerEvent).applied).toBe(true);
+    expect(applyRoundActionEvent(round, olderEvent).applied).toBe(false);
+    expect(round.holes[0].entries[0].strokes).toBe(5);
+  });
+
+  it("keeps pending round actions flagged for retry after a failed backup", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "Golden Nugget",
+      teeBox: "Gold",
+      weather: "Humid 79F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Maya Chen"],
+    });
+    const participantId = round.players[0].id;
+    const event = createRoundActionEvent({
+      roundId: round.id,
+      participantId,
+      holeNumber: 1,
+      patch: { penalties: 1 },
+      actorUserId: currentUser.id,
+      occurredAt: 1000,
+    });
+
+    applyRoundActionEvent(round, event);
+    appendRoundAction(round, event);
+    markRoundEventsSyncing(round, [event.id], 1200);
+    markRoundEventsRetryNeeded(round, [event.id], "Weak signal.", 1400);
+
+    expect(getPendingRoundEvents(round)).toHaveLength(1);
+    expect(round.sync.saveState).toBe("retry-needed");
+    expect(round.sync.lastSyncError).toContain("Weak signal");
+    expect(workspaceHasPendingRoundSync({ rounds: [round] })).toBe(true);
+  });
+});
+
+```
+
+## `tests/scoring.test.js`
+
+```js
+import { describe, expect, it } from "vitest";
+
+import { createRound } from "../src/domain/factories.js";
+import {
+  applyHoleUpdate,
+  buildLeaderboard,
+  getHistoryMetrics,
+  getRoundSummary,
+  getScoringParticipants,
+} from "../src/domain/scoring.js";
+
+const currentUser = {
+  id: "user-1",
+  name: "Avery Brooks",
+};
+
+function scoreHole(
+  round,
+  participantId,
+  holeNumber,
+  strokes,
+  puttsOrOptions = 2,
+  fairwayHit = false,
+  gir = false,
+  penalties = 0,
+  upAndDown = false,
+  sandSave = false
+) {
+  const options = typeof puttsOrOptions === "object"
+    ? puttsOrOptions
+    : {
+        putts: puttsOrOptions,
+        fairwayHit,
+        gir,
+        penalties,
+        upAndDown,
+        sandSave,
+      };
+
+  applyHoleUpdate(round, holeNumber, participantId, {
+    strokes,
+    putts: options.putts ?? 2,
+    fairwayHit: options.fairwayHit ?? false,
+    gir: options.gir ?? false,
+    penalties: options.penalties ?? 0,
+    upAndDown: options.upAndDown ?? false,
+    sandSave: options.sandSave ?? false,
+  });
+}
+
+describe("scoring", () => {
+  it("builds a stroke-play leaderboard from hole scores", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "National Pines",
+      teeBox: "Blue",
+      weather: "Clear 72F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Maya Chen"],
+    });
+    const [avery, maya] = round.players;
+
+    scoreHole(round, avery.id, 1, 4, 2, true, true);
+    scoreHole(round, avery.id, 2, 5, 2, true, true);
+    scoreHole(round, maya.id, 1, 5, 2, false, false);
+    scoreHole(round, maya.id, 2, 6, 3, false, false);
+
+    const leaderboard = buildLeaderboard(round, currentUser.id);
+    const summary = getRoundSummary(round, currentUser.id);
+
+    expect(leaderboard[0].name).toBe("Avery Brooks");
+    expect(leaderboard[0].displayStatus).toBe("E");
+    expect(leaderboard[1].displayStatus).toBe("+2");
+    expect(summary.holesPlayed).toBe(2);
+    expect(summary.localParticipant.name).toBe("Avery Brooks");
+  });
+
+  it("builds match-play standings using sides", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "North Point",
+      teeBox: "Blue",
+      weather: "Calm 70F",
+      mode: "match",
+      players: ["Avery Brooks", "Maya Chen", "Theo Grant", "Jordan Wells"],
+    });
+    const [sideA, sideB] = getScoringParticipants(round);
+
+    scoreHole(round, sideA.id, 1, 4, 2, true, true);
+    scoreHole(round, sideB.id, 1, 5, 2, false, false);
+    scoreHole(round, sideA.id, 2, 5, 2, true, true);
+    scoreHole(round, sideB.id, 2, 4, 2, true, true);
+    scoreHole(round, sideA.id, 3, 3, 1, false, true);
+    scoreHole(round, sideB.id, 3, 4, 2, false, false);
+
+    const leaderboard = buildLeaderboard(round, currentUser.id);
+
+    expect(leaderboard[0].name).toBe(sideA.name);
+    expect(leaderboard[0].displayStatus).toBe("1 Up");
+    expect(leaderboard[1].displayStatus).toBe("1 Down");
+  });
+
+  it("aggregates completed-round history metrics", () => {
+    const firstRound = createRound({
+      currentUser,
+      courseName: "Shadow Ridge",
+      teeBox: "Blue",
+      weather: "Clear 72F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Maya Chen"],
+      status: "completed",
+    });
+    const secondRound = createRound({
+      currentUser,
+      courseName: "Prairie Lake",
+      teeBox: "Blue",
+      weather: "Warm 76F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Jordan Wells"],
+      status: "completed",
+    });
+
+    scoreHole(firstRound, firstRound.players[0].id, 1, 4, { putts: 2, fairwayHit: true, gir: true });
+    scoreHole(firstRound, firstRound.players[0].id, 2, 5, { putts: 2, fairwayHit: true, gir: true });
+    scoreHole(secondRound, secondRound.players[0].id, 1, 5, {
+      putts: 2,
+      fairwayHit: false,
+      gir: false,
+      penalties: 1,
+      upAndDown: true,
+    });
+    scoreHole(secondRound, secondRound.players[0].id, 2, 6, {
+      putts: 3,
+      fairwayHit: false,
+      gir: false,
+    });
+
+    const metrics = getHistoryMetrics([firstRound, secondRound], currentUser.id);
+
+    expect(metrics.roundsPlayed).toBe(2);
+    expect(metrics.scoringAverage).toBe(10);
+    expect(metrics.fairways).toBe(50);
+    expect(metrics.gir).toBe(50);
+    expect(metrics.putts).toBe(2.25);
+    expect(metrics.penaltiesAverage).toBe(0.5);
+    expect(metrics.upAndDownRate).toBe(50);
+    expect(metrics.scoringByParType[4].averageScore).toBe(4.5);
+    expect(metrics.scoringByParType[5].averageScore).toBe(5.5);
+    expect(metrics.handicapIndex).toBe(0);
+    expect(metrics.strokesGained.driving).toBeTruthy();
+    expect(metrics.trendDirection).toBe("flat");
+    expect(metrics.smartInsights.length).toBeGreaterThan(0);
+  });
+
+  it("builds round insights from live performance data", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "National Pines",
+      teeBox: "Blue",
+      weather: "Windy 66F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Maya Chen"],
+    });
+    const [avery] = round.players;
+
+    scoreHole(round, avery.id, 1, 6, {
+      putts: 3,
+      fairwayHit: false,
+      gir: false,
+      penalties: 1,
+    });
+    scoreHole(round, avery.id, 2, 6, {
+      putts: 3,
+      fairwayHit: false,
+      gir: false,
+    });
+
+    const summary = getRoundSummary(round, currentUser.id);
+
+    expect(summary.localTotals.totalPenalties).toBe(1);
+    expect(summary.localTotals.averagePutts).toBe(3);
+    expect(summary.localTotals.strokesGained.putting.label).toBe("Losing");
+    expect(summary.roundInsights.length).toBeGreaterThan(0);
+  });
+
+  it("identifies hardest and best holes from completed history", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "Links Point",
+      teeBox: "Blue",
+      weather: "Clear 70F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Maya Chen"],
+      status: "completed",
+    });
+    const [avery] = round.players;
+
+    scoreHole(round, avery.id, 1, 5, { putts: 2, fairwayHit: false, gir: false });
+    scoreHole(round, avery.id, 2, 4, { putts: 1, fairwayHit: true, gir: true });
+    scoreHole(round, avery.id, 3, 5, { putts: 2, fairwayHit: false, gir: false, penalties: 1 });
+
+    const metrics = getHistoryMetrics([round], currentUser.id);
+
+    expect(metrics.hardestHoles[0].holeNumber).toBe(3);
+    expect(metrics.bestHoles[0].holeNumber).toBe(2);
+    expect(metrics.holePerformance).toHaveLength(3);
+  });
+});
+
+```
+
+## `tests/storage-service.test.js`
+
+```js
+// @vitest-environment jsdom
+
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { STORAGE_KEY } from "../src/config.js";
+import { createRound } from "../src/domain/factories.js";
+import { createEmailAccount, hydrateActiveAccountState, loadAccountIntoState, prepareStateForPersistence } from "../src/services/account-service.js";
+import { loadStoredState, persistState } from "../src/services/storage-service.js";
+import { createDefaultState } from "../src/state/default-state.js";
+
+function createFallbackState() {
+  return {
+    currentUser: {
+      name: "Avery Brooks",
+      city: "Chicago, IL",
+      appearance: { colorMode: "system", themeId: "forest", textScale: "standard", compactMode: false, contrastMode: "standard" },
+      privacy: { profileVisibility: "friends", showHomeCourse: true },
+      social: {
+        handles: { instagram: "", x: "", ghin: "" },
+        allowProfileSharing: true,
+        allowRoundSharing: true,
+      },
+      subscription: { tier: "free", billingReady: true },
+    },
+    gear: { items: [] },
+    rounds: [],
+    auth: { status: "authenticated", provider: "email", linkedProviders: ["email"] },
+    session: { activeView: "home", selectedHole: 1 },
+    social: { activity: [] },
+  };
+}
+
+describe("storage service", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+  });
+
+  it("returns fallback state when nothing is stored", () => {
+    const loaded = loadStoredState(createFallbackState);
+
+    expect(loaded.currentUser.name).toBe("Avery Brooks");
+    expect(loaded.session.activeView).toBe("home");
+  });
+
+  it("persists and merges stored state with fallback defaults", () => {
+    persistState({
+      currentUser: { city: "Dallas, TX" },
+      session: { activeView: "stats" },
+      social: { activity: [{ id: "1" }] },
+      gear: { items: [{ id: "gear-1" }] },
+    });
+
+    const loaded = loadStoredState(createFallbackState);
+
+    expect(loaded.currentUser.name).toBe("Avery Brooks");
+    expect(loaded.currentUser.city).toBe("Dallas, TX");
+    expect(loaded.session.activeView).toBe("stats");
+    expect(loaded.gear.items).toHaveLength(1);
+  });
+
+  it("preserves nested subscription defaults when older saved profiles are loaded", () => {
+    persistState({
+      currentUser: {
+        name: "Avery Brooks",
+        subscription: { tier: "premium" },
+      },
+    });
+
+    const loaded = loadStoredState(createFallbackState);
+
+    expect(loaded.currentUser.subscription.tier).toBe("premium");
+    expect(loaded.currentUser.subscription.billingReady).toBe(true);
+  });
+
+  it("preserves nested appearance and social defaults when older saved profiles are loaded", () => {
+    persistState({
+      currentUser: {
+        appearance: { themeId: "ocean" },
+        privacy: { profileVisibility: "public" },
+        social: {
+          handles: { instagram: "@averygolf" },
+        },
+      },
+    });
+
+    const loaded = loadStoredState(createFallbackState);
+
+    expect(loaded.currentUser.appearance.themeId).toBe("ocean");
+    expect(loaded.currentUser.appearance.colorMode).toBe("system");
+    expect(loaded.currentUser.appearance.textScale).toBe("standard");
+    expect(loaded.currentUser.appearance.compactMode).toBe(false);
+    expect(loaded.currentUser.appearance.contrastMode).toBe("standard");
+    expect(loaded.currentUser.privacy.profileVisibility).toBe("public");
+    expect(loaded.currentUser.privacy.showHomeCourse).toBe(true);
+    expect(loaded.currentUser.social.handles.instagram).toBe("@averygolf");
+    expect(loaded.currentUser.social.handles.x).toBe("");
+    expect(loaded.currentUser.social.allowProfileSharing).toBe(true);
+  });
+
+  it("merges auth defaults when older saved sessions omit auth fields", () => {
+    persistState({
+      auth: {
+        status: "authenticated",
+      },
+    });
+
+    const loaded = loadStoredState(createFallbackState);
+
+    expect(loaded.auth.status).toBe("authenticated");
+    expect(loaded.auth.provider).toBe("email");
+    expect(loaded.auth.linkedProviders).toEqual(["email"]);
+  });
+
+  it("falls back cleanly when stored JSON is invalid", () => {
+    localStorage.setItem(STORAGE_KEY, "{not-json");
+
+    const loaded = loadStoredState(createFallbackState);
+
+    expect(loaded.session.selectedHole).toBe(1);
+    expect(loaded.social.activity).toHaveLength(0);
+  });
+
+  it("falls back safely when local storage access throws during boot", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const getItemSpy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("Storage blocked");
+    });
+
+    const loaded = loadStoredState(createFallbackState);
+
+    expect(loaded.currentUser.name).toBe("Avery Brooks");
+    expect(loaded.session.activeView).toBe("home");
+
+    getItemSpy.mockRestore();
+  });
+
+  it("does not throw when state persistence fails", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("Quota exceeded");
+    });
+
+    expect(() => persistState({ session: { activeView: "home" } })).not.toThrow();
+
+    setItemSpy.mockRestore();
+  });
+
+  it("restores the signed-in user and that user's rounds after reload", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Taylor Reed",
+      email: "taylor@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, created.account.id);
+    state.rounds.unshift(
+      createRound({
+        currentUser: state.currentUser,
+        courseName: "Cedar Dunes",
+        teeBox: "Blue",
+        weather: "Clear 71F",
+        mode: "stroke",
+        players: [state.currentUser.name, "Maya Chen"],
+      })
+    );
+    state.session.activeRoundId = state.rounds[0].id;
+
+    persistState(prepareStateForPersistence(state));
+
+    const restored = hydrateActiveAccountState(loadStoredState(createDefaultState));
+
+    expect(restored.auth.activeUserId).toBe(created.account.id);
+    expect(restored.auth.status).toBe("authenticated");
+    expect(restored.currentUser.email).toBe("taylor@example.com");
+    expect(restored.rounds).toHaveLength(1);
+    expect(restored.rounds[0].courseName).toBe("Cedar Dunes");
+  });
+});
+
+```
+
+## `tests/sync-service.test.js`
+
+```js
+// @vitest-environment jsdom
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { createSyncService } from "../src/services/sync-service.js";
+import { createDefaultState } from "../src/state/default-state.js";
+import { createStore } from "../src/state/store.js";
+
+class MockBroadcastChannel {
+  static instances = [];
+
+  constructor(name) {
+    this.name = name;
+    this.messages = [];
+    this.listeners = new Map();
+    MockBroadcastChannel.instances.push(this);
+  }
+
+  addEventListener(type, listener) {
+    this.listeners.set(type, listener);
+  }
+
+  postMessage(message) {
+    this.messages.push(message);
+  }
+
+  emit(type, payload) {
+    const listener = this.listeners.get(type);
+    if (listener) {
+      listener(payload);
+    }
+  }
+
+  close() {
+    this.closed = true;
+  }
+}
+
+describe("sync service", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    MockBroadcastChannel.instances = [];
+    globalThis.BroadcastChannel = MockBroadcastChannel;
+    if (window) {
+      window.BroadcastChannel = MockBroadcastChannel;
+    }
+
+    Object.defineProperty(globalThis.navigator, "bluetooth", {
+      configurable: true,
+      value: undefined,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("updates the active round transport when nearby sync is enabled", () => {
+    const store = createStore(createDefaultState());
+    const service = createSyncService({ store });
+    const activeRoundId = store.getState().session.activeRoundId;
+
+    service.enableNearbyPrototype(activeRoundId);
+
+    const activeRound = store.getState().rounds.find((round) => round.id === activeRoundId);
+    expect(activeRound.sync.transport).toBe("nearby");
+    expect(activeRound.sync.label).toBe("Nearby sync");
+  });
+
+  it("broadcasts round updates once initialized", () => {
+    const store = createStore(createDefaultState());
+    const service = createSyncService({ store });
+    const activeRoundId = store.getState().session.activeRoundId;
+
+    service.init();
+    service.notifyRoundUpdated(activeRoundId);
+
+    expect(MockBroadcastChannel.instances[0].messages).toHaveLength(1);
+    expect(MockBroadcastChannel.instances[0].messages[0].roundId).toBe(activeRoundId);
+
+    service.teardown();
+  });
+
+  it("falls back from browser bluetooth to nearby sync when bluetooth is unavailable", async () => {
+    const store = createStore(createDefaultState());
+    const service = createSyncService({ store });
+    const activeRoundId = store.getState().session.activeRoundId;
+
+    await service.tryBluetoothPrototype(activeRoundId);
+
+    const activeRound = store.getState().rounds.find((round) => round.id === activeRoundId);
+    expect(activeRound.sync.transport).toBe("nearby");
+    expect(store.getState().social.activity[0].message).toContain("Browser Bluetooth is unavailable");
+  });
+
+  it("simulates remote score progress for connected rounds", () => {
+    const state = createDefaultState();
+    const activeRoundId = state.session.activeRoundId;
+    const store = createStore(state);
+    const service = createSyncService({ store });
+
+    store.setState((draft) => {
+      const activeRound = draft.rounds.find((round) => round.id === activeRoundId);
+      activeRound.sync.transport = "invite";
+      activeRound.sync.state = "hosting";
+      return draft;
+    });
+
+    const activeRoundBefore = store.getState().rounds.find((round) => round.id === activeRoundId);
+    const remoteParticipantIds = activeRoundBefore.players.slice(1).map((player) => player.id);
+
+    service.init();
+    vi.advanceTimersByTime(12000);
+
+    const activeRoundAfter = store.getState().rounds.find((round) => round.id === activeRoundId);
+    const updatedEntries = activeRoundAfter.holes
+      .flatMap((hole) => hole.entries.filter((entry) => remoteParticipantIds.includes(entry.participantId)))
+      .filter((entry) => entry.strokes !== null);
+
+    expect(updatedEntries.length).toBeGreaterThan(0);
+
+    service.teardown();
+  });
+});
+
+```
+
+## `tests/ui-helpers.test.js`
+
+```js
+import { describe, expect, it, vi } from "vitest";
+
+import { createGroup, createRound } from "../src/domain/factories.js";
+import { appendRoundAction, applyRoundActionEvent, createRoundActionEvent } from "../src/domain/round-sync.js";
+import { createEmailAccount, loadAccountIntoState } from "../src/services/account-service.js";
+import { createDefaultState } from "../src/state/default-state.js";
+import { getFeatureGate, getNextOpenHole, getSyncPresentation, isModeLocked, renderAppTemplate } from "../src/ui/templates.js";
+
+const currentUser = {
+  id: "user-1",
+  name: "Avery Brooks",
+};
+
+describe("ui helpers", () => {
+  it("finds the next incomplete hole after the current selection", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "National Pines",
+      teeBox: "Blue",
+      weather: "Clear 72F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Maya Chen"],
+    });
+
+    round.holes[1].entries[0].strokes = 4;
+    round.holes[1].entries[1].strokes = 5;
+    round.holes[2].entries[0].strokes = 3;
+
+    expect(getNextOpenHole(round, 2)).toBe(3);
+  });
+
+  it("returns a reconnect warning when hosted sync goes stale", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-22T12:00:00.000Z"));
+
+    const round = createRound({
+      currentUser,
+      courseName: "National Pines",
+      teeBox: "Blue",
+      weather: "Clear 72F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Maya Chen"],
+      syncTransport: "invite",
+    });
+    round.sync.state = "hosting";
+    round.sync.lastEventAt = Date.now() - 60000;
+    const group = createGroup({
+      round,
+      currentUser,
+      inviteCode: "ABC123",
+    });
+
+    const presentation = getSyncPresentation(round, group);
+
+    expect(presentation.tone).toBe("warning");
+    expect(presentation.title).toBe("Reconnect check");
+    expect(presentation.message).toContain("ABC123");
+
+    vi.useRealTimers();
+  });
+
+  it("shows local-first trust messaging when live round backup needs a retry", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "National Pines",
+      teeBox: "Blue",
+      weather: "Clear 72F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Maya Chen"],
+      syncTransport: "invite",
+    });
+    const event = createRoundActionEvent({
+      roundId: round.id,
+      participantId: round.players[0].id,
+      holeNumber: 1,
+      patch: { strokes: 5 },
+      actorUserId: currentUser.id,
+      occurredAt: Date.now(),
+    });
+    applyRoundActionEvent(round, event);
+    appendRoundAction(round, event);
+    round.sync.saveState = "retry-needed";
+    round.sync.lastSyncError = "Weak signal.";
+
+    const presentation = getSyncPresentation(round, null);
+
+    expect(presentation.tone).toBe("warning");
+    expect(presentation.title).toBe("Saved locally / retry needed");
+    expect(presentation.message).toContain("safe on this device");
+    expect(presentation.message).toContain("original host leaves");
+  });
+
+  it("locks premium scoring modes for free accounts", () => {
+    expect(isModeLocked("match", { tier: "free" })).toBe(true);
+    expect(isModeLocked("stroke", { tier: "free" })).toBe(false);
+    expect(isModeLocked("scramble", { tier: "premium" })).toBe(false);
+  });
+
+  it("marks premium insights as unlocked for premium accounts", () => {
+    expect(getFeatureGate("advanced-stats", { tier: "free" }).locked).toBe(true);
+    expect(getFeatureGate("advanced-stats", { tier: "premium" }).locked).toBe(false);
+    expect(getFeatureGate("player-comparison", { tier: "free" }).locked).toBe(true);
+  });
+
+  it("renders the help screen when help is opened before sign-in", () => {
+    const state = createDefaultState();
+    state.session.activeView = "help";
+    state.session.helpSection = "playing-round";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Answers that keep the app easy to understand.");
+    expect(markup).toContain("Playing a Round");
+  });
+
+  it("shows the first-round guide for a new authenticated golfer", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "New Golfer",
+      email: "new@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, created.account.id);
+    state.session.activeView = "home";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Step 1 of 3: start your first round");
+  });
+
+  it("renders the seeded course picker inside round setup", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "round";
+    state.rounds = [];
+    state.groups = [];
+    state.session.activeRoundId = null;
+    state.session.roundSetup = {
+      courseQuery: "California",
+      selectedCourseId: "pebble-beach-california",
+      selectedTeeBoxId: "pebble-beach-california-championship",
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Course library");
+    expect(markup).toContain("Pebble Beach Golf Links");
+    expect(markup).toContain("Selected course");
+    expect(markup).toContain('name="selectedCourseId" value="pebble-beach-california"');
+  });
+
+  it("preloads Golden Nugget for a brand-new golfer's first round", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Local Tester",
+      email: "localtester@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, created.account.id);
+    state.rounds = [];
+    state.groups = [];
+    state.session.activeRoundId = null;
+    state.session.activeView = "round";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("The Country Club at Golden Nugget");
+    expect(markup).toContain('name="selectedCourseId" value="golden-nugget-lake-charles"');
+    expect(markup).toContain("Featured local course");
+  });
+
+  it("shows the help center entry in the stats account area", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "stats";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Help Center");
+    expect(markup).toContain("Open Help Center");
+  });
+
+  it("shows a profile and settings action in the signed-in app header", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "home";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Profile & settings");
+    expect(markup).toContain('data-action="open-settings"');
+  });
+
+  it("renders the settings screen with appearance controls and keeps the parent tab active", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "settings";
+    state.session.settingsSection = "appearance";
+    state.session.settingsReturnView = "stats";
+    state.currentUser.appearance = {
+      ...(state.currentUser.appearance || {}),
+      colorMode: "light",
+      themeId: "ocean",
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Profile and settings");
+    expect(markup).toContain("Appearance Mode");
+    expect(markup).toContain("Theme Style");
+    expect(markup).toContain("Display Comfort");
+    expect(markup).toContain("Live preview");
+    expect(markup).toContain('data-active-theme-card="true"');
+    expect(markup).toContain("Ember");
+    expect(markup).toContain('data-theme="ocean"');
+    expect(markup).toContain('data-color-mode="light"');
+    expect(markup).toContain("Log out account");
+    expect(markup).toMatch(/id="tab-stats"[\s\S]*?aria-selected="true"/);
+  });
+
+  it("renders a Netlify-friendly tester feedback form in app support settings", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "settings";
+    state.session.settingsSection = "app-support";
+    state.session.settingsReturnView = "stats";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain('data-form="submit-tester-feedback"');
+    expect(markup).toContain('name="tester-feedback"');
+    expect(markup).toContain("Send tester feedback");
+  });
+
+  it("disables community sync controls when there is no active round", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "No Round Yet",
+      email: "noround@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, created.account.id);
+    state.session.activeView = "community";
+    state.session.activeRoundId = null;
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain('data-action="host-active-round" disabled');
+    expect(markup).toContain("Nearby sync");
+    expect(markup).toContain("Bluetooth sync");
+  });
+
+  it("disables finishing a round before any hole has been scored", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Careful Closer",
+      email: "careful@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, created.account.id);
+    state.session.activeView = "round";
+    state.rounds.unshift(
+      createRound({
+        currentUser: state.currentUser,
+        courseName: "National Pines",
+        teeBox: "Blue",
+        weather: "Clear 72F",
+        mode: "stroke",
+        players: [state.currentUser.name, "Maya Chen"],
+      })
+    );
+    state.session.activeRoundId = state.rounds[0].id;
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Score at least one hole first");
+    expect(markup).toContain(`data-action="finish-round" data-round-id="${state.rounds[0].id}" disabled`);
+  });
+
+  it("shows retry guidance when a cloud round save has failed", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Retry Ready",
+      email: "retry@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, created.account.id);
+    state.session.cloudSync = {
+      status: "failed",
+      scope: "round-finish",
+      roundId: "round-1",
+      userId: created.account.id,
+      errorMessage: "Network timed out before cloud backup finished.",
+      lastAttemptAt: Date.now(),
+      lastSuccessAt: 0,
+      retryCount: 1,
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Cloud backup needs another try");
+    expect(markup).toContain("Retry save");
+  });
+
+  it("shows the finish control as saving while a round backup is in progress", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Saving Golfer",
+      email: "saving@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, created.account.id);
+    state.session.activeView = "round";
+    state.rounds.unshift(
+      createRound({
+        currentUser: state.currentUser,
+        courseName: "National Pines",
+        teeBox: "Blue",
+        weather: "Clear 72F",
+        mode: "stroke",
+        players: [state.currentUser.name, "Maya Chen"],
+      })
+    );
+    state.session.activeRoundId = state.rounds[0].id;
+    state.rounds[0].holes[0].entries[0].strokes = 4;
+    state.session.cloudSync = {
+      status: "syncing",
+      scope: "round-finish",
+      roundId: state.rounds[0].id,
+      userId: created.account.id,
+      errorMessage: "",
+      lastAttemptAt: Date.now(),
+      lastSuccessAt: 0,
+      retryCount: 0,
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Saving...");
+    expect(markup).toContain("backing up to your golfer account");
+    expect(markup).toContain(`data-action="finish-round" data-round-id="${state.rounds[0].id}" disabled`);
+  });
+
+  it("shows visible round safety status inside live scoring when local changes are waiting on cloud backup", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Signal Watch",
+      email: "signalwatch@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, created.account.id);
+    state.session.activeView = "round";
+    state.rounds.unshift(
+      createRound({
+        currentUser: state.currentUser,
+        courseName: "The Country Club at Golden Nugget",
+        teeBox: "Gold",
+        weather: "Humid 79F",
+        mode: "stroke",
+        players: [state.currentUser.name, "Maya Chen"],
+      })
+    );
+    state.session.activeRoundId = state.rounds[0].id;
+    const event = createRoundActionEvent({
+      roundId: state.rounds[0].id,
+      participantId: state.rounds[0].players[0].id,
+      holeNumber: 1,
+      patch: { strokes: 4 },
+      actorUserId: created.account.id,
+      occurredAt: Date.now(),
+    });
+    applyRoundActionEvent(state.rounds[0], event);
+    appendRoundAction(state.rounds[0], event);
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Saved locally");
+    expect(markup).toContain("This phone has the latest scores even if service drops.");
+    expect(markup).toContain("Pending updates");
+  });
+});
+
+```
+

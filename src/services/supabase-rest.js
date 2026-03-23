@@ -1,0 +1,431 @@
+import { SUPABASE_SESSION_STORAGE_KEY, TESTER_FEEDBACK_TABLE } from "../config.js";
+
+function getBrowserStorage(storageOverride = null) {
+  if (storageOverride) {
+    return storageOverride;
+  }
+
+  try {
+    if (typeof localStorage === "undefined") {
+      return null;
+    }
+
+    return localStorage;
+  } catch (error) {
+    console.warn("[Golfers Nation] Supabase session storage is unavailable.", error);
+    return null;
+  }
+}
+
+function normalizeUrl(value = "") {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function parseJsonSafely(text) {
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    return null;
+  }
+}
+
+function normalizeError(payload, response) {
+  return {
+    status: response?.status || 0,
+    message: payload?.msg || payload?.message || payload?.error_description || payload?.error || "Request failed.",
+    code: payload?.code || payload?.error || "",
+  };
+}
+
+function normalizeSessionPayload(payload) {
+  const source = payload?.session || payload || null;
+  const user = payload?.user || source?.user || null;
+
+  if (!source || (!source.access_token && !source.refresh_token)) {
+    return {
+      session: null,
+      user,
+    };
+  }
+
+  const expiresAt = source.expires_at
+    || (source.expires_in ? Math.floor(Date.now() / 1000) + Number(source.expires_in) : null);
+
+  return {
+    session: {
+      access_token: source.access_token,
+      refresh_token: source.refresh_token,
+      expires_in: source.expires_in || null,
+      expires_at: expiresAt,
+      token_type: source.token_type || "bearer",
+      user,
+    },
+    user,
+  };
+}
+
+function isSessionExpired(session) {
+  if (!session?.expires_at) {
+    return false;
+  }
+
+  return (Number(session.expires_at) * 1000) <= (Date.now() + 30_000);
+}
+
+export function createSupabaseRestBridge({
+  config,
+  fetchImpl = typeof fetch === "function" ? fetch.bind(globalThis) : null,
+  storage = null,
+} = {}) {
+  const runtimeConfig = {
+    supabaseUrl: normalizeUrl(config?.supabaseUrl),
+    supabaseAnonKey: String(config?.supabaseAnonKey || "").trim(),
+    supabaseResetRedirectUrl: String(config?.supabaseResetRedirectUrl || config?.siteUrl || "").trim(),
+    siteUrl: String(config?.siteUrl || "").trim(),
+  };
+  const storageRef = getBrowserStorage(storage);
+
+  function isConfigured() {
+    return Boolean(runtimeConfig.supabaseUrl && runtimeConfig.supabaseAnonKey && typeof fetchImpl === "function");
+  }
+
+  function readStoredSession() {
+    if (!storageRef) {
+      return null;
+    }
+
+    try {
+      const raw = storageRef.getItem(SUPABASE_SESSION_STORAGE_KEY);
+      return raw ? parseJsonSafely(raw) : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function writeStoredSession(session) {
+    if (!storageRef) {
+      return session;
+    }
+
+    try {
+      storageRef.setItem(SUPABASE_SESSION_STORAGE_KEY, JSON.stringify(session || null));
+    } catch (error) {
+      console.warn("[Golfers Nation] Failed to store Supabase session.", error);
+    }
+
+    return session;
+  }
+
+  function clearStoredSession() {
+    if (!storageRef) {
+      return;
+    }
+
+    try {
+      storageRef.removeItem(SUPABASE_SESSION_STORAGE_KEY);
+    } catch (error) {
+      console.warn("[Golfers Nation] Failed to clear Supabase session.", error);
+    }
+  }
+
+  async function request(path, {
+    method = "GET",
+    body = null,
+    accessToken = "",
+    headers = {},
+  } = {}) {
+    if (!isConfigured()) {
+      return {
+        error: {
+          status: 0,
+          message: "Supabase is not configured. Add the project URL and anon key first.",
+          code: "supabase_not_configured",
+        },
+      };
+    }
+
+    const response = await fetchImpl(`${runtimeConfig.supabaseUrl}${path}`, {
+      method,
+      headers: {
+        apikey: runtimeConfig.supabaseAnonKey,
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        ...(body ? { "Content-Type": "application/json" } : {}),
+        ...headers,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    const payloadText = await response.text();
+    const payload = parseJsonSafely(payloadText);
+
+    if (!response.ok) {
+      return { error: normalizeError(payload, response) };
+    }
+
+    return { data: payload };
+  }
+
+  async function refreshStoredSession() {
+    const current = readStoredSession();
+
+    if (!current?.refresh_token) {
+      return { error: { status: 401, message: "No refresh token is available.", code: "missing_refresh_token" } };
+    }
+
+    const result = await request("/auth/v1/token?grant_type=refresh_token", {
+      method: "POST",
+      body: {
+        refresh_token: current.refresh_token,
+      },
+    });
+
+    if (result.error) {
+      clearStoredSession();
+      return result;
+    }
+
+    const normalized = normalizeSessionPayload(result.data);
+    if (normalized.session) {
+      writeStoredSession(normalized.session);
+    }
+
+    return normalized;
+  }
+
+  async function getActiveSession() {
+    const stored = readStoredSession();
+    if (!stored) {
+      return { session: null };
+    }
+
+    if (!isSessionExpired(stored)) {
+      return { session: stored };
+    }
+
+    const refreshed = await refreshStoredSession();
+    if (refreshed.error) {
+      return refreshed;
+    }
+
+    return { session: refreshed.session || null };
+  }
+
+  async function signUpWithEmail({ email, password, displayName }) {
+    const result = await request("/auth/v1/signup", {
+      method: "POST",
+      body: {
+        email: String(email || "").trim().toLowerCase(),
+        password: String(password || ""),
+        data: {
+          display_name: String(displayName || "").trim(),
+        },
+      },
+    });
+
+    if (result.error) {
+      return result;
+    }
+
+    const normalized = normalizeSessionPayload(result.data);
+    if (normalized.session) {
+      writeStoredSession(normalized.session);
+    }
+
+    return normalized;
+  }
+
+  async function signInWithEmail({ email, password }) {
+    const result = await request("/auth/v1/token?grant_type=password", {
+      method: "POST",
+      body: {
+        email: String(email || "").trim().toLowerCase(),
+        password: String(password || ""),
+      },
+    });
+
+    if (result.error) {
+      return result;
+    }
+
+    const normalized = normalizeSessionPayload(result.data);
+    if (normalized.session) {
+      writeStoredSession(normalized.session);
+    }
+
+    return normalized;
+  }
+
+  async function signOut() {
+    const active = await getActiveSession();
+    const accessToken = active.session?.access_token || "";
+
+    if (accessToken) {
+      await request("/auth/v1/logout", {
+        method: "POST",
+        accessToken,
+      });
+    }
+
+    clearStoredSession();
+    return { signedOut: true };
+  }
+
+  async function requestPasswordReset(email) {
+    return request("/auth/v1/recover", {
+      method: "POST",
+      body: {
+        email: String(email || "").trim().toLowerCase(),
+        ...(runtimeConfig.supabaseResetRedirectUrl ? { redirect_to: runtimeConfig.supabaseResetRedirectUrl } : {}),
+      },
+    });
+  }
+
+  async function getCurrentUser() {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    const result = await request("/auth/v1/user", {
+      accessToken: active.session.access_token,
+    });
+
+    if (result.error) {
+      if (result.error.status === 401) {
+        clearStoredSession();
+      }
+      return result;
+    }
+
+    return {
+      user: result.data,
+      session: active.session,
+    };
+  }
+
+  async function fetchWorkspace(userId) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    const encodedUserId = encodeURIComponent(String(userId || ""));
+    const [profileResult, workspaceResult] = await Promise.all([
+      request(`/rest/v1/player_profiles?id=eq.${encodedUserId}&select=*`, {
+        accessToken: active.session.access_token,
+      }),
+      request(`/rest/v1/player_workspaces?user_id=eq.${encodedUserId}&select=user_id,workspace,updated_at`, {
+        accessToken: active.session.access_token,
+      }),
+    ]);
+
+    if (profileResult.error) {
+      return profileResult;
+    }
+
+    if (workspaceResult.error) {
+      return workspaceResult;
+    }
+
+    return {
+      profile: Array.isArray(profileResult.data) ? profileResult.data[0] || null : profileResult.data || null,
+      workspace: Array.isArray(workspaceResult.data) ? workspaceResult.data[0]?.workspace || null : workspaceResult.data?.workspace || null,
+      session: active.session,
+    };
+  }
+
+  async function upsertProfile(profileRecord) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    return request("/rest/v1/player_profiles?on_conflict=id", {
+      method: "POST",
+      accessToken: active.session.access_token,
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=representation",
+      },
+      body: profileRecord,
+    });
+  }
+
+  async function upsertWorkspace(userId, workspace) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    return request("/rest/v1/player_workspaces?on_conflict=user_id", {
+      method: "POST",
+      accessToken: active.session.access_token,
+      headers: {
+        Prefer: "resolution=merge-duplicates,return=representation",
+      },
+      body: {
+        user_id: userId,
+        workspace,
+        updated_at: new Date().toISOString(),
+      },
+    });
+  }
+
+  async function submitTesterFeedback(feedbackRecord) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "Sign in before sending tester feedback.", code: "missing_session" } };
+    }
+
+    return request(`/rest/v1/${TESTER_FEEDBACK_TABLE}`, {
+      method: "POST",
+      accessToken: active.session.access_token,
+      headers: {
+        Prefer: "return=representation",
+      },
+      body: feedbackRecord,
+    });
+  }
+
+  return {
+    mode: "supabase-rest-bridge",
+    config: runtimeConfig,
+    isConfigured,
+    readStoredSession,
+    writeStoredSession,
+    clearStoredSession,
+    getActiveSession,
+    signUpWithEmail,
+    signInWithEmail,
+    signOut,
+    requestPasswordReset,
+    getCurrentUser,
+    fetchWorkspace,
+    upsertProfile,
+    upsertWorkspace,
+    submitTesterFeedback,
+  };
+}
