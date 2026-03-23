@@ -616,6 +616,12 @@ export function createSupabaseRealtimeGatewayFactory({
           return;
         }
 
+        console.info("[Golfers Nation] Incoming member-state event received.", {
+          inviteCode: payload.inviteCode,
+          userId: payload.member.userId || null,
+          profileId: payload.member.profileId || null,
+        });
+
         store.setState((draft) => {
           const group = (draft.groups || []).find((entry) => entry.inviteCode === payload.inviteCode);
           if (!group) {
@@ -655,6 +661,13 @@ export function createSupabaseRealtimeGatewayFactory({
           return;
         }
 
+        console.info("[Golfers Nation] Incoming round-event received.", {
+          inviteCode: payload.inviteCode || "",
+          roundId: payload.roundId,
+          eventId: incomingEvent.id,
+          actionType: incomingEvent.actionType,
+        });
+
         store.setState((draft) => {
           const round = getRoundById(draft, payload.roundId);
           if (!round) {
@@ -671,6 +684,26 @@ export function createSupabaseRealtimeGatewayFactory({
 
           const applied = applyRoundActionEvent(round, incomingEvent);
           if (!applied.applied) {
+            if (applied.reason === "missing-entry" && payload?.inviteCode) {
+              void bridge.fetchLiveRoundSessionByInviteCode(payload.inviteCode)
+                .then((response) => {
+                  const session = fromBackendLiveRoundSessionRecord(response?.session);
+                  if (session?.round) {
+                    applyIncomingRoundSnapshot({
+                      session: {
+                        id: session.id,
+                        inviteCode: session.inviteCode,
+                        round: session.round,
+                        group: session.group,
+                        updatedAt: session.updatedAt,
+                      },
+                    });
+                  }
+                })
+                .catch((error) => {
+                  console.warn("[Golfers Nation] Failed to hydrate the latest live session after a missing-entry event.", error);
+                });
+            }
             return draft;
           }
 
@@ -700,6 +733,12 @@ export function createSupabaseRealtimeGatewayFactory({
         if (!incoming?.round || !incoming?.inviteCode) {
           return;
         }
+
+        console.info("[Golfers Nation] Incoming round-snapshot received.", {
+          inviteCode: incoming.inviteCode,
+          roundId: incoming.round?.id || null,
+          sessionId: incoming.id || null,
+        });
 
         store.setState((draft) => {
           const incomingRound = mergeIncomingRound(
@@ -734,21 +773,25 @@ export function createSupabaseRealtimeGatewayFactory({
         }, { reason: "realtime-round-snapshot" });
       }
 
-      async function syncRoundSessionSnapshot(roundId, {
+      async function upsertLiveSessionFromRound(round, group, {
         broadcast = false,
         eventName = "round-snapshot",
       } = {}) {
-        const state = store.getState();
-        const round = getRoundById(state, roundId);
-        const group = getGroupForRound(state, round);
         if (!round?.inviteCode) {
           return { status: "skipped" };
         }
 
+        console.info("[Golfers Nation] Syncing live round session.", {
+          inviteCode: round.inviteCode,
+          roundId: round.id,
+          broadcast,
+          eventName,
+        });
+
         const sessionRecord = toBackendLiveRoundSessionRecord({
           round,
           group,
-          userId: state.currentUser?.id || state.auth?.activeUserId || null,
+          userId: store.getState().currentUser?.id || store.getState().auth?.activeUserId || null,
           sessionId: currentSessionMeta?.sessionId || group?.id || round.groupId || null,
         });
 
@@ -796,6 +839,13 @@ export function createSupabaseRealtimeGatewayFactory({
         };
       }
 
+      async function syncRoundSessionSnapshot(roundId, options = {}) {
+        const state = store.getState();
+        const round = getRoundById(state, roundId);
+        const group = getGroupForRound(state, round);
+        return upsertLiveSessionFromRound(round, group, options);
+      }
+
       async function publishRoundUpdate(roundId) {
         const state = store.getState();
         const round = getRoundById(state, roundId);
@@ -841,6 +891,9 @@ export function createSupabaseRealtimeGatewayFactory({
             note: "Live round changes are moving between connected phones.",
           });
         }, "realtime-broadcast-sent");
+        await syncRoundSessionSnapshot(roundId, {
+          broadcast: false,
+        });
       }
 
       async function hostRoundSession(roundId) {
@@ -870,6 +923,11 @@ export function createSupabaseRealtimeGatewayFactory({
             sessionId: ensured.session?.id || round.groupId || null,
             inviteCode: round.inviteCode,
             roundId: round.id,
+          });
+          console.info("[Golfers Nation] Live host subscription ready.", {
+            inviteCode: round.inviteCode,
+            roundId: round.id,
+            sessionId: ensured.session?.id || null,
           });
         } catch (error) {
           return {
@@ -920,6 +978,12 @@ export function createSupabaseRealtimeGatewayFactory({
           return null;
         }
 
+        console.info("[Golfers Nation] Live join resolved session.", {
+          inviteCode: normalizedCode,
+          sessionId: liveSession.id,
+          roundId: liveSession.round?.id || null,
+        });
+
         const round = ensureRoundSyncScaffold(cloneData(liveSession.round));
         const group = liveSession.group ? cloneData(liveSession.group) : null;
         const ensuredIdentity = ensureCurrentUserOnRound(round, group, store.getState().currentUser);
@@ -936,6 +1000,11 @@ export function createSupabaseRealtimeGatewayFactory({
 
         try {
           await ensureChannel(currentSessionMeta);
+          console.info("[Golfers Nation] Live join subscription ready.", {
+            inviteCode: liveSession.inviteCode,
+            roundId: round.id,
+            participantAdded: ensuredIdentity.added,
+          });
         } catch (error) {
           return {
             error: {
@@ -946,7 +1015,7 @@ export function createSupabaseRealtimeGatewayFactory({
         }
 
         if (ensuredIdentity.added) {
-          await syncRoundSessionSnapshot(round.id, {
+          await upsertLiveSessionFromRound(round, group, {
             broadcast: true,
           });
         } else {

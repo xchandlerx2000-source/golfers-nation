@@ -173,5 +173,15 @@ describe("supabase realtime gateway", () => {
     expect(joined.round.inviteCode).toBe(hosted.inviteCode);
     expect(joined.round.players.some((player) => player.userId === currentUser.id)).toBe(true);
     expect(joined.group.members.some((member) => member.userId === currentUser.id)).toBe(true);
+    expect(bridge.upsertLiveRoundSession).toHaveBeenCalledTimes(1);
+    expect(bridge.broadcastRealtimeMessage).toHaveBeenCalledWith(
+      expect.stringContaining(`gn-live-round:${hosted.inviteCode}`),
+      "round-snapshot",
+      expect.objectContaining({
+        session: expect.objectContaining({
+          inviteCode: hosted.inviteCode,
+        }),
+      })
+    );
   });
 });
