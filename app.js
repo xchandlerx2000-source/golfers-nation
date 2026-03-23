@@ -1710,35 +1710,13 @@ function workspaceHasPendingRoundSync(workspace) {
   });
 }
 
-// ---- src/state/store.js ----
-function createStore(initialState) {
-  let state = cloneData(initialState);
-  const listeners = new Set();
+// ---- src/state/persistence.js ----
+const LIVE_SYNC_RENDER_REASONS = [
+  "realtime-member-state",
+  "realtime-round-event",
+  "realtime-round-snapshot",
+];
 
-  function getState() {
-    return state;
-  }
-
-  function setState(updater, meta = {}) {
-    const draft = cloneData(state);
-    const nextState = typeof updater === "function" ? updater(draft) || draft : updater;
-    state = nextState;
-    listeners.forEach((listener) => listener(state, meta));
-  }
-
-  function subscribe(listener) {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
-  }
-
-  return {
-    getState,
-    setState,
-    subscribe,
-  };
-}
-
-// ---- src/services/storage-service.js ----
 function getAvailableStorage() {
   try {
     if (typeof localStorage === "undefined") {
@@ -1751,7 +1729,7 @@ function getAvailableStorage() {
     return null;
   }
 }
-function loadStoredState(createDefaultState) {
+function loadPersistedState(createDefaultState) {
   const fallback = createDefaultState();
   const storage = getAvailableStorage();
   if (!storage) {
@@ -1765,8 +1743,6 @@ function loadStoredState(createDefaultState) {
     }
 
     const parsed = JSON.parse(saved);
-    // Merge a few nested shells explicitly so future billing/profile fields can be
-    // added without breaking older locally stored payloads.
     return {
       ...cloneData(fallback),
       ...parsed,
@@ -1810,7 +1786,7 @@ function loadStoredState(createDefaultState) {
     return fallback;
   }
 }
-function persistState(state) {
+function persistAppState(state) {
   const storage = getAvailableStorage();
   if (!storage) {
     return false;
@@ -1823,6 +1799,324 @@ function persistState(state) {
     console.warn("[Golfers Nation] State persistence failed.", error);
     return false;
   }
+}
+function persistPlatformState(platform, state) {
+  const prepared = platform.data.prepareForPersistence(state);
+  platform.data.persist(prepared);
+  return prepared;
+}
+function subscribeStorePersistence({
+  store,
+  platform,
+  safeRender,
+  applyAppearanceToDocument = () => {},
+  applyShellModeToDocument = () => {},
+} = {}) {
+  return store.subscribe((state, meta = {}) => {
+    try {
+      persistPlatformState(platform, state);
+    } catch (error) {
+      console.error("[Golfers Nation] Failed to persist app state.", error);
+    }
+
+    if (LIVE_SYNC_RENDER_REASONS.includes(meta.reason)) {
+      console.info("[Golfers Nation] Rerender triggered after live sync update.", {
+        reason: meta.reason,
+        activeRoundId: state.session?.activeRoundId || null,
+      });
+    }
+
+    safeRender(state, "state-render");
+    applyAppearanceToDocument(state);
+    applyShellModeToDocument(state);
+  });
+}
+function renderInitialAppState({
+  store,
+  safeRender,
+  applyAppearanceToDocument = () => {},
+  applyShellModeToDocument = () => {},
+} = {}) {
+  const state = store.getState();
+  if (!safeRender(state, "initial-render")) {
+    return false;
+  }
+
+  applyAppearanceToDocument(state);
+  applyShellModeToDocument(state);
+  return true;
+}
+
+// ---- src/state/store.js ----
+function createStore(initialState) {
+  let state = cloneData(initialState);
+  const listeners = new Set();
+
+  function getState() {
+    return state;
+  }
+
+  function setState(updater, meta = {}) {
+    const draft = cloneData(state);
+    const nextState = typeof updater === "function" ? updater(draft) || draft : updater;
+    state = nextState;
+    listeners.forEach((listener) => listener(state, meta));
+  }
+
+  function subscribe(listener) {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }
+
+  return {
+    getState,
+    setState,
+    subscribe,
+  };
+}
+
+// ---- src/state/session-state.js ----
+function appendActivity(draft, message, type = "product") {
+  draft.social.activity.unshift(
+    createActivity({
+      type,
+      message,
+    })
+  );
+  draft.social.activity = draft.social.activity.slice(0, 16);
+}
+function setFeedback(draft, tone, title, message) {
+  draft.session.feedback = {
+    tone,
+    title,
+    message,
+    updatedAt: Date.now(),
+  };
+  draft.session.pendingLabel = "";
+}
+function clearFeedback(draft) {
+  draft.session.feedback = null;
+  draft.session.pendingLabel = "";
+}
+function getDefaultCloudSyncState() {
+  return {
+    status: "idle",
+    scope: "",
+    roundId: null,
+    userId: null,
+    errorMessage: "",
+    lastAttemptAt: 0,
+    lastSuccessAt: 0,
+    retryCount: 0,
+  };
+}
+function mergeCloudSyncState(current = {}, updates = {}) {
+  return {
+    ...getDefaultCloudSyncState(),
+    ...(current || {}),
+    ...(updates || {}),
+  };
+}
+function setCloudSyncState(draft, updates = {}) {
+  draft.session.cloudSync = mergeCloudSyncState(draft.session.cloudSync, updates);
+}
+function resetCloudSyncState(draft) {
+  draft.session.cloudSync = mergeCloudSyncState(draft.session.cloudSync, {
+    status: "idle",
+    scope: "",
+    roundId: null,
+    userId: null,
+    errorMessage: "",
+    retryCount: 0,
+    lastSuccessAt: Date.now(),
+  });
+}
+function getCloudSyncCopy(scope = "workspace", roundId = null) {
+  if (scope === "round-finish") {
+    return {
+      pendingLabel: "Backing up this round to your golfer account...",
+      successTitle: "Round backed up",
+      successMessage: "This round is now saved to your Golfers Nation account and will restore after refresh or sign-in.",
+      failureTitle: "Round saved on this device",
+      failureMessage: "This round is safe on this phone, but cloud backup needs another try before it appears on restored sessions or another device.",
+      retryLabel: "Retry round save",
+    };
+  }
+
+  return {
+    pendingLabel: "Saving your latest changes to the cloud...",
+    successTitle: "Cloud save complete",
+    successMessage: "Your latest account changes are backed up to this golfer.",
+    failureTitle: "Saved on this device",
+    failureMessage: "Your latest changes are safe on this phone, but cloud backup needs another try.",
+    retryLabel: roundId ? "Retry save" : "Retry cloud save",
+  };
+}
+function normalizeUsernameInput(value, fallbackName = "golfer") {
+  const source = String(value || "").trim() || fallbackName;
+  const base = source
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .slice(0, 16);
+  return base ? `@${base}` : "@golfer";
+}
+function normalizeAvatarLabel(value, fallbackName = "Golfer") {
+  const source = String(value || "").trim().toUpperCase();
+  if (source && source.length <= 2 && !source.includes(" ")) {
+    return source.slice(0, 2);
+  }
+
+  const derived = (source || fallbackName)
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
+  return derived || "GN";
+}
+function syncIdentityAcrossRecords(draft) {
+  draft.rounds.forEach((round) => {
+    round.players.forEach((player) => {
+      if (player.userId === draft.currentUser.id || player.profileId === draft.currentUser.profileId) {
+        player.name = draft.currentUser.name;
+        player.displayName = draft.currentUser.displayName;
+        player.username = draft.currentUser.username;
+        player.avatarLabel = draft.currentUser.avatarLabel;
+      }
+    });
+
+    round.sides.forEach((side) => {
+      side.playerNames = side.playerIds.map((playerId) => {
+        const player = round.players.find((item) => item.id === playerId);
+        return player ? player.name : "";
+      });
+    });
+  });
+
+  draft.groups.forEach((group) => {
+    group.members.forEach((member) => {
+      if (member.userId === draft.currentUser.id || member.profileId === draft.currentUser.profileId) {
+        member.displayName = draft.currentUser.name;
+        member.username = draft.currentUser.username;
+        member.avatarLabel = draft.currentUser.avatarLabel;
+      }
+    });
+  });
+}
+
+// ---- src/state/round-state.js ----
+function findRound(state, roundId) {
+  return state.rounds.find((round) => round.id === roundId);
+}
+function getRoundEventSyncCopy(round, pendingCount = getPendingRoundEvents(round).length) {
+  const courseName = round?.courseName || "This round";
+  const baseSubject = pendingCount === 1 ? "1 live change" : `${pendingCount} live changes`;
+
+  return {
+    pendingLabel: pendingCount ? `Backing up ${baseSubject} from ${courseName}...` : "Checking live round backup...",
+    successTitle: "Live round synced",
+    successMessage: `${courseName} is backed up and safe to reopen on this golfer account.`,
+    failureTitle: "Saved locally",
+    failureMessage: pendingCount
+      ? `${baseSubject} are safe on this phone, and Golfers Nation will keep retrying when the connection improves.`
+      : `${courseName} is still safe on this device, and Golfers Nation will keep retrying when the connection improves.`,
+    retryLabel: "Retry live sync",
+  };
+}
+function hasPendingRoundSyncForUser(state, userId = state.auth?.activeUserId || state.currentUser?.id || null) {
+  if (!userId) {
+    return false;
+  }
+
+  return workspaceHasPendingRoundSync({
+    rounds: state.rounds,
+  });
+}
+function collectPendingRoundEvents(state, userId = state.auth?.activeUserId || state.currentUser?.id || null) {
+  if (!userId) {
+    return [];
+  }
+
+  return (state.rounds || [])
+    .map((round) => ({
+      round,
+      events: getPendingRoundEvents(round),
+    }))
+    .filter(({ events }) => events.length)
+    .map(({ round, events }) => ({
+      roundId: round.id,
+      eventIds: events.map((event) => event.id),
+      pendingCount: events.length,
+      events,
+    }));
+}
+function updateRoundSyncDraft(draft, roundId, updater) {
+  const round = findRound(draft, roundId);
+  if (!round) {
+    return null;
+  }
+
+  ensureRoundSyncScaffold(round);
+  updater(round);
+  return round;
+}
+function getNextIncompleteHoleNumber(round, participantId, currentHoleNumber) {
+  const orderedHoles = round.holes
+    .slice(currentHoleNumber)
+    .concat(round.holes.slice(0, currentHoleNumber));
+  const nextHole = orderedHoles.find((hole) => {
+    const entry = hole.entries.find((item) => item.participantId === participantId);
+    return entry && (entry.strokes === null || entry.strokes === 0);
+  });
+
+  return nextHole ? nextHole.number : currentHoleNumber;
+}
+function finishRound(draft, roundId, dataGateway, setActiveView) {
+  const round = draft.rounds.find((item) => item.id === roundId);
+  if (!round) {
+    return null;
+  }
+
+  const progress = round.holes.filter((hole) => hole.entries.some((entry) => entry.strokes && entry.strokes > 0)).length;
+  if (!progress) {
+    setFeedback(
+      draft,
+      "info",
+      "Score at least one hole",
+      "Enter a score before finishing so the round summary and stats have something real to save."
+    );
+    return null;
+  }
+
+  round.status = "completed";
+  round.completedAt = Date.now();
+  round.updatedAt = Date.now();
+  draft.session.summaryRoundId = round.id;
+  appendActivity(draft, `${round.courseName} was finished and moved into round history.`, "round");
+  setFeedback(
+    draft,
+    "info",
+    "Round finished",
+    `${round.courseName} was added to ${draft.currentUser.displayName}'s history on this device. Cloud backup is finishing now.`
+  );
+  draft.session.activeRoundId = null;
+  draft.session.selectedHole = 1;
+  draft.session.selectedProfileId = draft.currentUser.profileId;
+  setActiveView(draft, "stats", "tab");
+  refreshProfileSnapshots(draft);
+  syncCurrentUserProfile(draft);
+  dataGateway.saveWorkspace(draft, draft.currentUser.id);
+  return round.id;
+}
+
+// ---- src/services/storage-service.js ----
+// Backward-compatible wrapper: the canonical persistence path now lives in
+// src/state/persistence.js, but tests and older callers still import here.
+function loadStoredState(createDefaultState) {
+  return loadPersistedState(createDefaultState);
+}
+function persistState(state) {
+  return persistAppState(state);
 }
 
 // ---- src/services/account-service.js ----
@@ -5252,6 +5546,166 @@ function createSyncService({ store }) {
   };
 }
 
+// ---- src/services/round-flow-service.js ----
+const HOSTED_ROUND_NOTE = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
+const JOINED_ROUND_NOTE = "This device now carries its own safe copy of the live round, even if the original host leaves.";
+function parsePlayers(value, currentUserName) {
+  const names = String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const deduped = [];
+  const seen = new Set();
+
+  names.forEach((name) => {
+    const normalized = name.toLowerCase();
+    if (seen.has(normalized)) {
+      return;
+    }
+
+    seen.add(normalized);
+    deduped.push(name);
+  });
+
+  if (!seen.has(currentUserName.toLowerCase())) {
+    deduped.unshift(currentUserName);
+    seen.add(currentUserName.toLowerCase());
+  } else {
+    const currentIndex = deduped.findIndex((name) => name.toLowerCase() === currentUserName.toLowerCase());
+    if (currentIndex > 0) {
+      const [currentName] = deduped.splice(currentIndex, 1);
+      deduped.unshift(currentName);
+    }
+  }
+
+  const adjustments = [];
+  if (deduped.length < 2) {
+    deduped.push("Maya Chen");
+    adjustments.push("A second golfer was added so the round is ready for a real scorecard.");
+  }
+
+  if (deduped.length > 4) {
+    deduped.length = 4;
+    adjustments.push("This build keeps live rounds to four golfers, so only the first four names were used.");
+  }
+
+  return {
+    names: deduped,
+    note: adjustments.join(" "),
+  };
+}
+function getDefaultRoundSetup() {
+  const featuredCourse = findCourseById(FEATURED_COURSE_ID);
+  const featuredTeeBox = featuredCourse ? getDefaultTeeBox(featuredCourse) : null;
+
+  return {
+    courseQuery: "",
+    selectedCourseId: featuredCourse?.id || "",
+    selectedTeeBoxId: featuredTeeBox?.id || "",
+  };
+}
+function getRoundSetupState(state) {
+  return {
+    ...getDefaultRoundSetup(),
+    ...(state.session?.roundSetup || {}),
+  };
+}
+function resetRoundSetup(draft) {
+  draft.session.roundSetup = getDefaultRoundSetup();
+}
+function setSelectedCourse(draft, courseId, teeBoxId = "") {
+  const course = findCourseById(courseId);
+  if (!course) {
+    draft.session.roundSetup = {
+      ...getRoundSetupState(draft),
+      selectedCourseId: "",
+      selectedTeeBoxId: "",
+    };
+    return;
+  }
+
+  const defaultTee = getDefaultTeeBox(course);
+  draft.session.roundSetup = {
+    ...getRoundSetupState(draft),
+    selectedCourseId: course.id,
+    selectedTeeBoxId: teeBoxId || defaultTee?.id || "",
+  };
+}
+function focusRoundView(draft, roundId, profileId, setActiveView) {
+  draft.session.activeRoundId = roundId;
+  draft.session.selectedHole = 1;
+  draft.session.selectedProfileId = profileId;
+  setActiveView(draft, "round", "focus-round");
+}
+function upsertJoinedRoundIntoState(draft, joined) {
+  if (!joined?.round) {
+    return;
+  }
+
+  const roundIndex = draft.rounds.findIndex((round) =>
+    round.id === joined.round.id
+      || (joined.round.inviteCode && round.inviteCode === joined.round.inviteCode)
+  );
+
+  if (roundIndex >= 0) {
+    draft.rounds[roundIndex] = joined.round;
+  } else {
+    draft.rounds.unshift(joined.round);
+  }
+
+  if (!joined.group) {
+    return;
+  }
+
+  const groupIndex = draft.groups.findIndex((group) =>
+    group.id === joined.group.id
+      || group.roundId === joined.round.id
+      || (joined.group.inviteCode && group.inviteCode === joined.group.inviteCode)
+  );
+
+  if (groupIndex >= 0) {
+    draft.groups[groupIndex] = joined.group;
+  } else {
+    draft.groups.unshift(joined.group);
+  }
+}
+function applyHostedRoundState(round, inviteCode) {
+  round.inviteCode = inviteCode;
+  round.sync.transport = "invite";
+  round.sync.label = "Invite code";
+  round.sync.state = "hosting";
+  round.sync.lastEventAt = Date.now();
+  round.sync.note = HOSTED_ROUND_NOTE;
+}
+function ensureHostedGroupForRound(draft, round) {
+  const existing = draft.groups.find((group) => group.roundId === round.id);
+  if (existing) {
+    round.groupId = existing.id;
+    applyHostedRoundState(round, existing.inviteCode);
+    return {
+      group: existing,
+      created: false,
+    };
+  }
+
+  const hosted = hostRoundGroup({ state: draft, round });
+  round.groupId = hosted.group.id;
+  applyHostedRoundState(round, hosted.inviteCode);
+  draft.groups.unshift(hosted.group);
+
+  return {
+    group: hosted.group,
+    created: true,
+  };
+}
+function applyJoinedRoundConnectionState(round, source) {
+  round.sync.lastEventAt = Date.now();
+  round.sync.state = "connected";
+  round.sync.transport = source === "local" ? "invite" : "cloud";
+  round.sync.label = source === "local" ? "Invite code" : "Live cloud sync";
+  round.sync.note = JOINED_ROUND_NOTE;
+}
+
 // ---- src/services/backend-models.js ----
 function toIsoTimestamp(value) {
   if (!value) {
@@ -5724,13 +6178,13 @@ function createLocalDataGateway() {
     mode: "local-device-adapter",
     backendReady: true,
     loadInitialState(createDefaultState) {
-      return loadStoredState(createDefaultState);
+      return loadPersistedState(createDefaultState);
     },
     prepareForPersistence(state) {
       return prepareStateForPersistence(state);
     },
     persist(snapshot) {
-      persistState(snapshot);
+      persistAppState(snapshot);
       return snapshot;
     },
     saveWorkspace(draft, userId) {
@@ -7176,6 +7630,64 @@ function createSupabaseRealtimeGatewayFactory({
       };
     },
   };
+}
+
+// ---- src/services/realtime-session-service.js ----
+function describeLiveRoomFailure(result) {
+  const code = String(result?.error?.code || result?.code || "");
+  const message = String(result?.error?.message || result?.message || "");
+
+  if (code === "missing_live_round_sessions_table") {
+    return "Live rooms are not ready in Supabase yet. Create the public.live_round_sessions table first.";
+  }
+
+  if (code === "realtime_channel_join_failed") {
+    return "Supabase Realtime rejected the room connection. Check Realtime public access or add authenticated realtime.messages policies.";
+  }
+
+  return message || "The live sync connection is not ready yet.";
+}
+function publishLiveRoundUpdate(realtimeSession, roundId) {
+  if (!roundId) {
+    return;
+  }
+
+  return Promise.resolve(realtimeSession.publishRoundUpdate(roundId))
+    .catch((error) => {
+      console.warn("[Golfers Nation] Live round publish failed. Continuing with local-safe state.", error);
+    });
+}
+async function hostLiveRoundSession(realtimeSession, roundId) {
+  if (!roundId || typeof realtimeSession.hostRoundSession !== "function") {
+    return null;
+  }
+
+  try {
+    return await realtimeSession.hostRoundSession(roundId);
+  } catch (error) {
+    console.warn("[Golfers Nation] Live host setup failed. Keeping the round on this device only.", error);
+    return {
+      error: {
+        message: "Live hosting is unavailable right now.",
+      },
+    };
+  }
+}
+async function joinLiveRoundSession(realtimeSession, code, warningPrefix = "[Golfers Nation] Live join failed.") {
+  if (!code || typeof realtimeSession.joinRoundSession !== "function") {
+    return null;
+  }
+
+  try {
+    return await realtimeSession.joinRoundSession(code);
+  } catch (error) {
+    console.warn(warningPrefix, error);
+    return {
+      error: {
+        message: "Live join is unavailable right now.",
+      },
+    };
+  }
 }
 
 // ---- src/state/default-state.js ----
@@ -11462,258 +11974,10 @@ function createRenderer(root) {
   };
 }
 
-// ---- src/services/product-platform.js ----
-function createProductPlatform({
-  auth = null,
-  data = null,
-  realtime = null,
-} = {}) {
-  const runtimeConfig = getRuntimeConfig();
-  const localAuth = createLocalAuthGateway();
-  const localData = createLocalDataGateway();
-  const localRealtime = createLocalRealtimeGatewayFactory();
-  const supabaseBridge = hasSupabaseRuntimeConfig(runtimeConfig)
-    ? createSupabaseRestBridge({ config: runtimeConfig })
-    : null;
-  const resolvedAuth = auth || (supabaseBridge ? createSupabaseAuthGateway({ bridge: supabaseBridge, fallback: localAuth }) : localAuth);
-  const resolvedData = data || (supabaseBridge ? createSupabaseDataGateway({ bridge: supabaseBridge, fallback: localData }) : localData);
-  const resolvedRealtime = realtime || (supabaseBridge
-    ? createSupabaseRealtimeGatewayFactory({ bridge: supabaseBridge, fallback: localRealtime })
-    : localRealtime);
-
-  return {
-    auth: resolvedAuth,
-    data: resolvedData,
-    realtime: resolvedRealtime,
-    capabilities: {
-      authMode: resolvedAuth.mode,
-      dataMode: resolvedData.mode,
-      realtimeMode: resolvedRealtime.mode,
-      backendReady: Boolean(resolvedAuth.backendReady && resolvedData.backendReady && resolvedRealtime.backendReady),
-      supabaseEnabled: Boolean(supabaseBridge?.isConfigured?.()),
-    },
-  };
-}
-
-// ---- src/main.js ----
-function findRound(state, roundId) {
-  return state.rounds.find((round) => round.id === roundId);
-}
-
-function getLiveRoomFailureMessage(result) {
-  const code = String(result?.error?.code || result?.code || "");
-  const message = String(result?.error?.message || result?.message || "");
-
-  if (code === "missing_live_round_sessions_table") {
-    return "Live rooms are not ready in Supabase yet. Create the public.live_round_sessions table first.";
-  }
-
-  if (code === "realtime_channel_join_failed") {
-    return "Supabase Realtime rejected the room connection. Check Realtime public access or add authenticated realtime.messages policies.";
-  }
-
-  return message || "The live sync connection is not ready yet.";
-}
-
-function getRoundEventSyncCopy(round, pendingCount = getPendingRoundEvents(round).length) {
-  const courseName = round?.courseName || "This round";
-  const baseSubject = pendingCount === 1 ? "1 live change" : `${pendingCount} live changes`;
-
-  return {
-    pendingLabel: pendingCount ? `Backing up ${baseSubject} from ${courseName}...` : "Checking live round backup...",
-    successTitle: "Live round synced",
-    successMessage: `${courseName} is backed up and safe to reopen on this golfer account.`,
-    failureTitle: "Saved locally",
-    failureMessage: pendingCount
-      ? `${baseSubject} are safe on this phone, and Golfers Nation will keep retrying when the connection improves.`
-      : `${courseName} is still safe on this device, and Golfers Nation will keep retrying when the connection improves.`,
-    retryLabel: "Retry live sync",
-  };
-}
-
-function hasPendingRoundSyncForUser(state, userId = state.auth?.activeUserId || state.currentUser?.id || null) {
-  if (!userId) {
-    return false;
-  }
-
-  return workspaceHasPendingRoundSync({
-    rounds: state.rounds,
-  });
-}
-
-function collectPendingRoundEvents(state, userId = state.auth?.activeUserId || state.currentUser?.id || null) {
-  if (!userId) {
-    return [];
-  }
-
-  return (state.rounds || [])
-    .map((round) => ({
-      round,
-      events: getPendingRoundEvents(round),
-    }))
-    .filter(({ events }) => events.length)
-    .map(({ round, events }) => ({
-      roundId: round.id,
-      eventIds: events.map((event) => event.id),
-      pendingCount: events.length,
-      events,
-    }));
-}
-
-function appendActivity(draft, message, type = "product") {
-  draft.social.activity.unshift(
-    createActivity({
-      type,
-      message,
-    })
-  );
-  draft.social.activity = draft.social.activity.slice(0, 16);
-}
-
-function setFeedback(draft, tone, title, message) {
-  draft.session.feedback = {
-    tone,
-    title,
-    message,
-    updatedAt: Date.now(),
-  };
-  draft.session.pendingLabel = "";
-}
-
-function clearFeedback(draft) {
-  draft.session.feedback = null;
-  draft.session.pendingLabel = "";
-}
-
-function getDefaultCloudSyncState() {
-  return {
-    status: "idle",
-    scope: "",
-    roundId: null,
-    userId: null,
-    errorMessage: "",
-    lastAttemptAt: 0,
-    lastSuccessAt: 0,
-    retryCount: 0,
-  };
-}
-
-function mergeCloudSyncState(current = {}, updates = {}) {
-  return {
-    ...getDefaultCloudSyncState(),
-    ...(current || {}),
-    ...(updates || {}),
-  };
-}
-
-function setCloudSyncState(draft, updates = {}) {
-  draft.session.cloudSync = mergeCloudSyncState(draft.session.cloudSync, updates);
-}
-
-function resetCloudSyncState(draft) {
-  draft.session.cloudSync = mergeCloudSyncState(draft.session.cloudSync, {
-    status: "idle",
-    scope: "",
-    roundId: null,
-    userId: null,
-    errorMessage: "",
-    retryCount: 0,
-    lastSuccessAt: Date.now(),
-  });
-}
-
-function getCloudSyncCopy(scope = "workspace", roundId = null) {
-  if (scope === "round-finish") {
-    return {
-      pendingLabel: "Backing up this round to your golfer account...",
-      successTitle: "Round backed up",
-      successMessage: "This round is now saved to your Golfers Nation account and will restore after refresh or sign-in.",
-      failureTitle: "Round saved on this device",
-      failureMessage: "This round is safe on this phone, but cloud backup needs another try before it appears on restored sessions or another device.",
-      retryLabel: "Retry round save",
-    };
-  }
-
-  return {
-    pendingLabel: "Saving your latest changes to the cloud...",
-    successTitle: "Cloud save complete",
-    successMessage: "Your latest account changes are backed up to this golfer.",
-    failureTitle: "Saved on this device",
-    failureMessage: "Your latest changes are safe on this phone, but cloud backup needs another try.",
-    retryLabel: roundId ? "Retry save" : "Retry cloud save",
-  };
-}
-
-function normalizeUsernameInput(value, fallbackName = "golfer") {
-  const source = String(value || "").trim() || fallbackName;
-  const base = source
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "")
-    .slice(0, 16);
-  return base ? `@${base}` : "@golfer";
-}
-
-function normalizeAvatarLabel(value, fallbackName = "Golfer") {
-  const source = String(value || "").trim().toUpperCase();
-  if (source && source.length <= 2 && !source.includes(" ")) {
-    return source.slice(0, 2);
-  }
-
-  const derived = (source || fallbackName)
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() || "")
-    .join("");
-  return derived || "GN";
-}
-
-function syncIdentityAcrossRecords(draft) {
-  draft.rounds.forEach((round) => {
-    round.players.forEach((player) => {
-      if (player.userId === draft.currentUser.id || player.profileId === draft.currentUser.profileId) {
-        player.name = draft.currentUser.name;
-        player.displayName = draft.currentUser.displayName;
-        player.username = draft.currentUser.username;
-        player.avatarLabel = draft.currentUser.avatarLabel;
-      }
-    });
-
-    round.sides.forEach((side) => {
-      side.playerNames = side.playerIds.map((playerId) => {
-        const player = round.players.find((item) => item.id === playerId);
-        return player ? player.name : "";
-      });
-    });
-  });
-
-  draft.groups.forEach((group) => {
-    group.members.forEach((member) => {
-      if (member.userId === draft.currentUser.id || member.profileId === draft.currentUser.profileId) {
-        member.displayName = draft.currentUser.name;
-        member.username = draft.currentUser.username;
-        member.avatarLabel = draft.currentUser.avatarLabel;
-      }
-    });
-  });
-}
-
-function getNextIncompleteHoleNumber(round, participantId, currentHoleNumber) {
-  const orderedHoles = round.holes
-    .slice(currentHoleNumber)
-    .concat(round.holes.slice(0, currentHoleNumber));
-  const nextHole = orderedHoles.find((hole) => {
-    const entry = hole.entries.find((item) => item.participantId === participantId);
-    return entry && (entry.strokes === null || entry.strokes === 0);
-  });
-
-  return nextHole ? nextHole.number : currentHoleNumber;
-}
-
+// ---- src/ui/view-controller.js ----
 function getViewIndex(viewId) {
   return VIEW_ORDER.findIndex((view) => view.id === viewId);
 }
-
 function setActiveView(draft, nextView, transitionKind = "tab") {
   const previousView = draft.session.activeView || "home";
   const previousIndex = getViewIndex(previousView);
@@ -11739,7 +12003,6 @@ function setActiveView(draft, nextView, transitionKind = "tab") {
 
   draft.session.transitionDirection = "steady";
 }
-
 function openHelpView(draft, sectionId = "getting-started") {
   const currentView = draft.session.activeView || "home";
   draft.session.helpReturnView = draft.auth?.status === "authenticated"
@@ -11748,12 +12011,10 @@ function openHelpView(draft, sectionId = "getting-started") {
   draft.session.helpSection = sectionId || draft.session.helpSection || "getting-started";
   setActiveView(draft, "help", "focus");
 }
-
 function closeHelpView(draft) {
   const returnView = draft.session.helpReturnView || "home";
   setActiveView(draft, returnView === "auth" ? "home" : returnView, "return");
 }
-
 function openSettingsView(draft, sectionId = "account") {
   const currentView = draft.session.activeView || "stats";
   draft.session.settingsReturnView = currentView === "settings"
@@ -11762,12 +12023,10 @@ function openSettingsView(draft, sectionId = "account") {
   draft.session.settingsSection = sectionId || draft.session.settingsSection || "account";
   setActiveView(draft, "settings", "focus");
 }
-
 function closeSettingsView(draft) {
   const returnView = draft.session.settingsReturnView || "stats";
   setActiveView(draft, returnView, "return");
 }
-
 function applyJoinedRoundState(draft, joined, successTitle, successMessage) {
   upsertJoinedRoundIntoState(draft, joined);
   applyJoinedRoundConnectionState(joined.round, joined.source);
@@ -11777,231 +12036,7 @@ function applyJoinedRoundState(draft, joined, successTitle, successMessage) {
   setFeedback(draft, "success", successTitle, successMessage);
 }
 
-function getInstallEnvironment(hasDeferredPrompt = false) {
-  if (typeof window === "undefined") {
-    return {
-      standaloneMode: false,
-      installPromptAvailable: false,
-      installState: "browser",
-    };
-  }
-
-  const standaloneMode = (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches)
-    || window.navigator.standalone === true;
-  const userAgent = window.navigator.userAgent || "";
-  const isIOS = /iPhone|iPad|iPod/i.test(userAgent);
-  const isSafari = /Safari/i.test(userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(userAgent);
-
-  return {
-    standaloneMode,
-    installPromptAvailable: hasDeferredPrompt && !standaloneMode,
-    installState: standaloneMode
-      ? "installed"
-      : hasDeferredPrompt
-        ? "prompt"
-        : isIOS && isSafari
-          ? "ios-share"
-          : "browser",
-  };
-}
-
-function registerServiceWorker() {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
-    return;
-  }
-
-  if (window.location.protocol === "file:") {
-    return;
-  }
-
-  const secureContext = window.location.protocol === "https:"
-    || window.location.hostname === "localhost"
-    || window.location.hostname === "127.0.0.1";
-
-  if (!secureContext) {
-    return;
-  }
-
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch(() => {});
-  }, { once: true });
-}
-
-const APP_SHELL_CACHE_PREFIX = "golfers-nation-shell-";
-
-async function clearAppShellCaches() {
-  if (typeof caches === "undefined" || typeof caches.keys !== "function") {
-    return;
-  }
-
-  const keys = await caches.keys();
-  await Promise.all(
-    keys
-      .filter((key) => key.startsWith(APP_SHELL_CACHE_PREFIX))
-      .map((key) => caches.delete(key))
-  );
-}
-
-async function refreshAppBuild({
-  locationRef = typeof window !== "undefined" ? window.location : null,
-  serviceWorkerContainer = typeof navigator !== "undefined" ? navigator.serviceWorker : null,
-} = {}) {
-  let controllerChangeHandler = null;
-  let fallbackTimer = null;
-
-  const triggerReload = () => {
-    if (controllerChangeHandler && serviceWorkerContainer?.removeEventListener) {
-      try {
-        serviceWorkerContainer.removeEventListener("controllerchange", controllerChangeHandler);
-      } catch {}
-      controllerChangeHandler = null;
-    }
-
-    if (fallbackTimer) {
-      clearTimeout(fallbackTimer);
-      fallbackTimer = null;
-    }
-
-    if (locationRef && typeof locationRef.reload === "function") {
-      locationRef.reload();
-    }
-  };
-
-  if (serviceWorkerContainer?.addEventListener) {
-    controllerChangeHandler = () => triggerReload();
-    serviceWorkerContainer.addEventListener("controllerchange", controllerChangeHandler, { once: true });
-    fallbackTimer = setTimeout(triggerReload, 1200);
-  }
-
-  try {
-    if (serviceWorkerContainer?.getRegistration) {
-      const registration = await serviceWorkerContainer.getRegistration("./")
-        .catch(() => serviceWorkerContainer.getRegistration());
-
-      if (registration?.update) {
-        await registration.update().catch(() => {});
-      }
-
-      if (registration?.waiting) {
-        registration.waiting.postMessage({ type: "SKIP_WAITING" });
-      }
-    }
-
-    await clearAppShellCaches();
-  } catch (error) {
-    console.warn("[Golfers Nation] App refresh could not fully clear cached shell files.", error);
-  }
-
-  if (!serviceWorkerContainer?.addEventListener) {
-    triggerReload();
-  }
-}
-
-function applyAppearanceSelectionToDocument(appearance = {}) {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  const colorMode = appearance.colorMode || "system";
-  const themeId = appearance.themeId || "forest";
-  const textScale = appearance.textScale || "standard";
-  const contrastMode = appearance.contrastMode === "high" ? "high" : "standard";
-  const compactMode = appearance.compactMode === true;
-  let resolvedMode = colorMode;
-
-  if (colorMode === "system") {
-    resolvedMode = typeof window !== "undefined"
-      && typeof window.matchMedia === "function"
-      && window.matchMedia("(prefers-color-scheme: light)").matches
-      ? "light"
-      : "dark";
-  }
-
-  document.body.dataset.colorMode = colorMode;
-  document.body.dataset.resolvedMode = resolvedMode === "light" ? "light" : "dark";
-  document.body.dataset.theme = themeId;
-  document.body.dataset.textScale = textScale === "large" ? "large" : "standard";
-  document.body.dataset.contrast = contrastMode;
-  document.body.dataset.density = compactMode ? "compact" : "comfortable";
-  document.body.style.colorScheme = resolvedMode === "light" ? "light" : "dark";
-}
-
-function applyAppearanceToDocument(state) {
-  applyAppearanceSelectionToDocument(state.currentUser?.appearance || {});
-}
-
-function applyShellModeToDocument(state) {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  document.body.dataset.appShellMode = state.session?.standaloneMode ? "standalone" : "browser";
-}
-
-function syncAppearancePreviewSummary(form) {
-  if (!form) {
-    return;
-  }
-
-  const selectedTheme = form.querySelector('input[name="themeId"]:checked');
-  const activeThemeName = form.querySelector('[data-active-theme-name]');
-  const activeThemeDescription = form.querySelector('[data-active-theme-description]');
-  const activeThemeCard = form.querySelector('[data-active-theme-card]');
-
-  if (selectedTheme) {
-    const nextThemeId = String(selectedTheme.value || "forest");
-
-    if (activeThemeName) {
-      activeThemeName.textContent = selectedTheme.dataset.themeLabel || nextThemeId;
-    }
-
-    if (activeThemeDescription) {
-      activeThemeDescription.textContent = selectedTheme.dataset.themeDescription || "";
-    }
-
-    if (activeThemeCard) {
-      activeThemeCard.dataset.themePreview = nextThemeId;
-    }
-  }
-}
-
-function previewAppearanceFromForm(form) {
-  if (!form) {
-    return;
-  }
-
-  const formData = new FormData(form);
-  applyAppearanceSelectionToDocument({
-    colorMode: String(formData.get("colorMode") || "system"),
-    themeId: String(formData.get("themeId") || "forest"),
-    textScale: String(formData.get("textScale") || "standard"),
-    compactMode: formData.get("compactMode") === "on",
-    contrastMode: formData.get("contrastMode") === "high" ? "high" : "standard",
-  });
-  syncAppearancePreviewSummary(form);
-}
-
-function createNoopRealtimeSession() {
-  return {
-    connect() {},
-    disconnect() {},
-    publishRoundUpdate() {
-      return Promise.resolve();
-    },
-    enableNearbySync() {},
-    enableBluetoothSync() {
-      return Promise.resolve();
-    },
-    updateTransport() {},
-    hostRoundSession() {
-      return Promise.resolve({ status: "local-only" });
-    },
-    joinRoundSession() {
-      return Promise.resolve(null);
-    },
-  };
-}
-
+// ---- src/bootstrap/startup-recovery.js ----
 function createBootErrorMessage(stage, error) {
   const stageLabel = String(stage || "startup")
     .replace(/[-_]/g, " ")
@@ -12012,7 +12047,6 @@ function createBootErrorMessage(stage, error) {
     message: message || "Unknown startup error.",
   };
 }
-
 function renderStartupShell(root, caption = "Preparing live rounds, player profiles, and your mobile app shell.") {
   if (!root) {
     return;
@@ -12022,7 +12056,7 @@ function renderStartupShell(root, caption = "Preparing live rounds, player profi
     <div class="app-loading-shell" aria-label="Loading Golfers Nation">
       <div class="loading-card">
         <div class="loading-brand">
-          <img src="./icons/icon-192.png" alt="" width="56" height="56" />
+          <img src="/icons/icon-192.png" alt="" width="56" height="56" />
           <div class="loading-brand-copy">
             <p class="eyebrow">Golfers Nation</p>
             <strong class="loading-title">Opening your golf app</strong>
@@ -12036,7 +12070,6 @@ function renderStartupShell(root, caption = "Preparing live rounds, player profi
     </div>
   `;
 }
-
 function showBootRecoveryScreen(root, {
   stage,
   error,
@@ -12111,7 +12144,6 @@ function showBootRecoveryScreen(root, {
     }
   });
 }
-
 function applyStartupWarning(state, title, message) {
   if (!state?.session || !state?.auth) {
     return state;
@@ -12127,43 +12159,258 @@ function applyStartupWarning(state, title, message) {
   return state;
 }
 
-function finishRound(draft, roundId, dataGateway) {
-  const round = draft.rounds.find((item) => item.id === roundId);
-  if (!round) {
-    return null;
+// ---- src/bootstrap/app-bootstrap.js ----
+const APP_SHELL_CACHE_PREFIX = "golfers-nation-shell-";
+function getInstallEnvironment(hasDeferredPrompt = false) {
+  if (typeof window === "undefined") {
+    return {
+      standaloneMode: false,
+      installPromptAvailable: false,
+      installState: "browser",
+    };
   }
 
-  const progress = round.holes.filter((hole) => hole.entries.some((entry) => entry.strokes && entry.strokes > 0)).length;
-  if (!progress) {
-    setFeedback(
-      draft,
-      "info",
-      "Score at least one hole",
-      "Enter a score before finishing so the round summary and stats have something real to save."
-    );
-    return null;
-  }
+  const standaloneMode = (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches)
+    || window.navigator.standalone === true;
+  const userAgent = window.navigator.userAgent || "";
+  const isIOS = /iPhone|iPad|iPod/i.test(userAgent);
+  const isSafari = /Safari/i.test(userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(userAgent);
 
-  round.status = "completed";
-  round.completedAt = Date.now();
-  round.updatedAt = Date.now();
-  draft.session.summaryRoundId = round.id;
-  appendActivity(draft, `${round.courseName} was finished and moved into round history.`, "round");
-  setFeedback(
-    draft,
-    "info",
-    "Round finished",
-    `${round.courseName} was added to ${draft.currentUser.displayName}'s history on this device. Cloud backup is finishing now.`
-  );
-  draft.session.activeRoundId = null;
-  draft.session.selectedHole = 1;
-  draft.session.selectedProfileId = draft.currentUser.profileId;
-  setActiveView(draft, "stats", "tab");
-  refreshProfileSnapshots(draft);
-  syncCurrentUserProfile(draft);
-  dataGateway.saveWorkspace(draft, draft.currentUser.id);
-  return round.id;
+  return {
+    standaloneMode,
+    installPromptAvailable: hasDeferredPrompt && !standaloneMode,
+    installState: standaloneMode
+      ? "installed"
+      : hasDeferredPrompt
+        ? "prompt"
+        : isIOS && isSafari
+          ? "ios-share"
+          : "browser",
+  };
 }
+function registerServiceWorker() {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+    return;
+  }
+
+  if (window.location.protocol === "file:") {
+    return;
+  }
+
+  const secureContext = window.location.protocol === "https:"
+    || window.location.hostname === "localhost"
+    || window.location.hostname === "127.0.0.1";
+
+  if (!secureContext) {
+    return;
+  }
+
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch(() => {});
+  }, { once: true });
+}
+async function clearAppShellCaches() {
+  if (typeof caches === "undefined" || typeof caches.keys !== "function") {
+    return;
+  }
+
+  const keys = await caches.keys();
+  await Promise.all(
+    keys
+      .filter((key) => key.startsWith(APP_SHELL_CACHE_PREFIX))
+      .map((key) => caches.delete(key))
+  );
+}
+async function refreshAppBuild({
+  locationRef = typeof window !== "undefined" ? window.location : null,
+  serviceWorkerContainer = typeof navigator !== "undefined" ? navigator.serviceWorker : null,
+} = {}) {
+  let controllerChangeHandler = null;
+  let fallbackTimer = null;
+
+  const triggerReload = () => {
+    if (controllerChangeHandler && serviceWorkerContainer?.removeEventListener) {
+      try {
+        serviceWorkerContainer.removeEventListener("controllerchange", controllerChangeHandler);
+      } catch {}
+      controllerChangeHandler = null;
+    }
+
+    if (fallbackTimer) {
+      clearTimeout(fallbackTimer);
+      fallbackTimer = null;
+    }
+
+    if (locationRef && typeof locationRef.reload === "function") {
+      locationRef.reload();
+    }
+  };
+
+  if (serviceWorkerContainer?.addEventListener) {
+    controllerChangeHandler = () => triggerReload();
+    serviceWorkerContainer.addEventListener("controllerchange", controllerChangeHandler, { once: true });
+    fallbackTimer = setTimeout(triggerReload, 1200);
+  }
+
+  try {
+    if (serviceWorkerContainer?.getRegistration) {
+      const registration = await serviceWorkerContainer.getRegistration("./")
+        .catch(() => serviceWorkerContainer.getRegistration());
+
+      if (registration?.update) {
+        await registration.update().catch(() => {});
+      }
+
+      if (registration?.waiting) {
+        registration.waiting.postMessage({ type: "SKIP_WAITING" });
+      }
+    }
+
+    await clearAppShellCaches();
+  } catch (error) {
+    console.warn("[Golfers Nation] App refresh could not fully clear cached shell files.", error);
+  }
+
+  if (!serviceWorkerContainer?.addEventListener) {
+    triggerReload();
+  }
+}
+function applyAppearanceSelectionToDocument(appearance = {}) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const colorMode = appearance.colorMode || "system";
+  const themeId = appearance.themeId || "forest";
+  const textScale = appearance.textScale || "standard";
+  const contrastMode = appearance.contrastMode === "high" ? "high" : "standard";
+  const compactMode = appearance.compactMode === true;
+  let resolvedMode = colorMode;
+
+  if (colorMode === "system") {
+    resolvedMode = typeof window !== "undefined"
+      && typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-color-scheme: light)").matches
+      ? "light"
+      : "dark";
+  }
+
+  document.body.dataset.colorMode = colorMode;
+  document.body.dataset.resolvedMode = resolvedMode === "light" ? "light" : "dark";
+  document.body.dataset.theme = themeId;
+  document.body.dataset.textScale = textScale === "large" ? "large" : "standard";
+  document.body.dataset.contrast = contrastMode;
+  document.body.dataset.density = compactMode ? "compact" : "comfortable";
+  document.body.style.colorScheme = resolvedMode === "light" ? "light" : "dark";
+}
+function applyAppearanceToDocument(state) {
+  applyAppearanceSelectionToDocument(state.currentUser?.appearance || {});
+}
+function applyShellModeToDocument(state) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.body.dataset.appShellMode = state.session?.standaloneMode ? "standalone" : "browser";
+}
+function syncAppearancePreviewSummary(form) {
+  if (!form) {
+    return;
+  }
+
+  const selectedTheme = form.querySelector('input[name="themeId"]:checked');
+  const activeThemeName = form.querySelector('[data-active-theme-name]');
+  const activeThemeDescription = form.querySelector('[data-active-theme-description]');
+  const activeThemeCard = form.querySelector('[data-active-theme-card]');
+
+  if (!selectedTheme) {
+    return;
+  }
+
+  const nextThemeId = String(selectedTheme.value || "forest");
+
+  if (activeThemeName) {
+    activeThemeName.textContent = selectedTheme.dataset.themeLabel || nextThemeId;
+  }
+
+  if (activeThemeDescription) {
+    activeThemeDescription.textContent = selectedTheme.dataset.themeDescription || "";
+  }
+
+  if (activeThemeCard) {
+    activeThemeCard.dataset.themePreview = nextThemeId;
+  }
+}
+function previewAppearanceFromForm(form) {
+  if (!form) {
+    return;
+  }
+
+  const formData = new FormData(form);
+  applyAppearanceSelectionToDocument({
+    colorMode: String(formData.get("colorMode") || "system"),
+    themeId: String(formData.get("themeId") || "forest"),
+    textScale: String(formData.get("textScale") || "standard"),
+    compactMode: formData.get("compactMode") === "on",
+    contrastMode: formData.get("contrastMode") === "high" ? "high" : "standard",
+  });
+  syncAppearancePreviewSummary(form);
+}
+function createNoopRealtimeSession() {
+  return {
+    connect() {},
+    disconnect() {},
+    publishRoundUpdate() {
+      return Promise.resolve();
+    },
+    enableNearbySync() {},
+    enableBluetoothSync() {
+      return Promise.resolve();
+    },
+    updateTransport() {},
+    hostRoundSession() {
+      return Promise.resolve({ status: "local-only" });
+    },
+    joinRoundSession() {
+      return Promise.resolve(null);
+    },
+  };
+}
+
+// ---- src/services/product-platform.js ----
+function createProductPlatform({
+  auth = null,
+  data = null,
+  realtime = null,
+} = {}) {
+  const runtimeConfig = getRuntimeConfig();
+  const localAuth = createLocalAuthGateway();
+  const localData = createLocalDataGateway();
+  const localRealtime = createLocalRealtimeGatewayFactory();
+  const supabaseBridge = hasSupabaseRuntimeConfig(runtimeConfig)
+    ? createSupabaseRestBridge({ config: runtimeConfig })
+    : null;
+  const resolvedAuth = auth || (supabaseBridge ? createSupabaseAuthGateway({ bridge: supabaseBridge, fallback: localAuth }) : localAuth);
+  const resolvedData = data || (supabaseBridge ? createSupabaseDataGateway({ bridge: supabaseBridge, fallback: localData }) : localData);
+  const resolvedRealtime = realtime || (supabaseBridge
+    ? createSupabaseRealtimeGatewayFactory({ bridge: supabaseBridge, fallback: localRealtime })
+    : localRealtime);
+
+  return {
+    auth: resolvedAuth,
+    data: resolvedData,
+    realtime: resolvedRealtime,
+    capabilities: {
+      authMode: resolvedAuth.mode,
+      dataMode: resolvedData.mode,
+      realtimeMode: resolvedRealtime.mode,
+      backendReady: Boolean(resolvedAuth.backendReady && resolvedData.backendReady && resolvedRealtime.backendReady),
+      supabaseEnabled: Boolean(supabaseBridge?.isConfigured?.()),
+    },
+  };
+}
+
+// ---- src/main.js ----
 function bootstrapApp({
   root = typeof document !== "undefined" ? document.querySelector("#app") : null,
   platformFactory = createProductPlatform,
@@ -12458,32 +12705,15 @@ function bootstrapApp({
   };
 
   const requestRealtimeRoundUpdate = (roundId) => {
+    publishLiveRoundUpdate(realtimeSession, roundId);
+  };
+
+  const finalizeHostedRoundSession = async (roundId) => {
     if (!roundId) {
       return;
     }
 
-    Promise.resolve(realtimeSession.publishRoundUpdate(roundId))
-      .catch((error) => {
-        console.warn("[Golfers Nation] Live round publish failed. Continuing with local-safe state.", error);
-      });
-  };
-
-  const finalizeHostedRoundSession = async (roundId) => {
-    if (!roundId || typeof realtimeSession.hostRoundSession !== "function") {
-      return;
-    }
-
-    let result = null;
-    try {
-      result = await realtimeSession.hostRoundSession(roundId);
-    } catch (error) {
-      console.warn("[Golfers Nation] Live host setup failed. Keeping the round on this device only.", error);
-      result = {
-        error: {
-          message: "Live hosting is unavailable right now.",
-        },
-      };
-    }
+    const result = await hostLiveRoundSession(realtimeSession, roundId);
     if (!result?.error && result?.status !== "skipped-missing-table") {
       return;
     }
@@ -12503,51 +12733,32 @@ function bootstrapApp({
         draft,
         "warning",
         "Live room unavailable",
-        getLiveRoomFailureMessage(result)
+        describeLiveRoomFailure(result)
       );
       return draft;
     }, { reason: "host-live-round-fallback" });
   };
 
   const resolveLiveJoinResult = async (code, warningPrefix) => {
-    if (!code || typeof realtimeSession.joinRoundSession !== "function") {
-      return null;
-    }
-
-    try {
-      return await realtimeSession.joinRoundSession(code);
-    } catch (error) {
-      console.warn(warningPrefix, error);
-      return {
-        error: {
-          message: "Live join is unavailable right now.",
-        },
-      };
-    }
+    return joinLiveRoundSession(realtimeSession, code, warningPrefix);
   };
 
-  store.subscribe((state, meta = {}) => {
-    try {
-      platform.data.persist(platform.data.prepareForPersistence(state));
-    } catch (error) {
-      console.error("[Golfers Nation] Failed to persist app state.", error);
-    }
-    if (["realtime-member-state", "realtime-round-event", "realtime-round-snapshot"].includes(meta.reason)) {
-      console.info("[Golfers Nation] Rerender triggered after live sync update.", {
-        reason: meta.reason,
-        activeRoundId: state.session?.activeRoundId || null,
-      });
-    }
-    safeRender(state, "state-render");
-    applyAppearanceToDocument(state);
-    applyShellModeToDocument(state);
+  subscribeStorePersistence({
+    store,
+    platform,
+    safeRender,
+    applyAppearanceToDocument,
+    applyShellModeToDocument,
   });
 
-  if (!safeRender(store.getState(), "initial-render")) {
+  if (!renderInitialAppState({
+    store,
+    safeRender,
+    applyAppearanceToDocument,
+    applyShellModeToDocument,
+  })) {
     return { status: "failed", stage: "initial-render" };
   }
-  applyAppearanceToDocument(store.getState());
-  applyShellModeToDocument(store.getState());
 
   try {
     registerServiceWorker();
@@ -12655,17 +12866,6 @@ function bootstrapApp({
       return draft;
     }, { reason: "hydrate-remote-complete" });
     return result;
-  };
-
-  const updateRoundSyncDraft = (draft, roundId, updater) => {
-    const round = findRound(draft, roundId);
-    if (!round) {
-      return null;
-    }
-
-    ensureRoundSyncScaffold(round);
-    updater(round);
-    return round;
   };
 
   const scheduleRoundSyncRetry = (delayMs = 5000) => {
@@ -13564,7 +13764,7 @@ function bootstrapApp({
             liveJoinResult?.error ? "warning" : "error",
             liveJoinResult?.error ? "Live join unavailable" : "Code not found",
             liveJoinResult?.error
-              ? getLiveRoomFailureMessage(liveJoinResult)
+              ? describeLiveRoomFailure(liveJoinResult)
               : `Invite code ${code} did not match an active round.`
           );
           return draft;
@@ -14362,7 +14562,7 @@ function bootstrapApp({
             liveJoinResult?.error ? "warning" : "error",
             liveJoinResult?.error ? "Live join unavailable" : "Couldn't join round",
             liveJoinResult?.error
-              ? getLiveRoomFailureMessage(liveJoinResult)
+              ? describeLiveRoomFailure(liveJoinResult)
               : "Check the invite code and try again."
           );
           return draft;

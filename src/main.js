@@ -1,4 +1,4 @@
-import { createActivity, createGearItem, createRound, createTournament } from "./domain/factories.js";
+import { createGearItem, createRound, createTournament } from "./domain/factories.js";
 import {
   appendRoundAction,
   applyRoundActionEvent,
@@ -8,15 +8,24 @@ import {
   markRoundEventsRetryNeeded,
   markRoundEventsSynced,
   markRoundEventsSyncing,
-  workspaceHasPendingRoundSync,
 } from "./domain/round-sync.js";
-import { APP_VERSION, STORAGE_KEY, VIEW_ORDER } from "./config.js";
+import {
+  applyAppearanceToDocument,
+  applyShellModeToDocument,
+  createNoopRealtimeSession,
+  getInstallEnvironment,
+  previewAppearanceFromForm,
+  refreshAppBuild,
+  registerServiceWorker,
+} from "./bootstrap/app-bootstrap.js";
+import { applyStartupWarning, renderStartupShell, showBootRecoveryScreen } from "./bootstrap/startup-recovery.js";
+import { APP_VERSION, STORAGE_KEY } from "./config.js";
 import { joinByInviteCode } from "./services/mock-api.js";
 import { ensureProfilesForNames, refreshProfileSnapshots, syncCurrentUserProfile } from "./services/player-service.js";
 import { createProductPlatform } from "./services/product-platform.js";
 import { createManualCourseSelection, createRoundCourseSelection } from "./services/course-library.js";
+import { describeLiveRoomFailure, hostLiveRoundSession, joinLiveRoundSession, publishLiveRoundUpdate } from "./services/realtime-session-service.js";
 import {
-  applyJoinedRoundConnectionState,
   ensureHostedGroupForRound,
   focusRoundView,
   getDefaultRoundSetup,
@@ -24,680 +33,39 @@ import {
   parsePlayers,
   resetRoundSetup,
   setSelectedCourse,
-  upsertJoinedRoundIntoState,
 } from "./services/round-flow-service.js";
 import { createDefaultState } from "./state/default-state.js";
+import {
+  collectPendingRoundEvents,
+  findRound,
+  finishRound,
+  getNextIncompleteHoleNumber,
+  getRoundEventSyncCopy,
+  hasPendingRoundSyncForUser,
+  updateRoundSyncDraft,
+} from "./state/round-state.js";
+import { renderInitialAppState, subscribeStorePersistence } from "./state/persistence.js";
+import {
+  appendActivity,
+  clearFeedback,
+  getCloudSyncCopy,
+  resetCloudSyncState,
+  setCloudSyncState,
+  setFeedback,
+  syncIdentityAcrossRecords,
+  normalizeAvatarLabel,
+  normalizeUsernameInput,
+} from "./state/session-state.js";
 import { createStore } from "./state/store.js";
 import { createRenderer } from "./ui/render.js";
-
-function findRound(state, roundId) {
-  return state.rounds.find((round) => round.id === roundId);
-}
-
-function getLiveRoomFailureMessage(result) {
-  const code = String(result?.error?.code || result?.code || "");
-  const message = String(result?.error?.message || result?.message || "");
-
-  if (code === "missing_live_round_sessions_table") {
-    return "Live rooms are not ready in Supabase yet. Create the public.live_round_sessions table first.";
-  }
-
-  if (code === "realtime_channel_join_failed") {
-    return "Supabase Realtime rejected the room connection. Check Realtime public access or add authenticated realtime.messages policies.";
-  }
-
-  return message || "The live sync connection is not ready yet.";
-}
-
-function getRoundEventSyncCopy(round, pendingCount = getPendingRoundEvents(round).length) {
-  const courseName = round?.courseName || "This round";
-  const baseSubject = pendingCount === 1 ? "1 live change" : `${pendingCount} live changes`;
-
-  return {
-    pendingLabel: pendingCount ? `Backing up ${baseSubject} from ${courseName}...` : "Checking live round backup...",
-    successTitle: "Live round synced",
-    successMessage: `${courseName} is backed up and safe to reopen on this golfer account.`,
-    failureTitle: "Saved locally",
-    failureMessage: pendingCount
-      ? `${baseSubject} are safe on this phone, and Golfers Nation will keep retrying when the connection improves.`
-      : `${courseName} is still safe on this device, and Golfers Nation will keep retrying when the connection improves.`,
-    retryLabel: "Retry live sync",
-  };
-}
-
-function hasPendingRoundSyncForUser(state, userId = state.auth?.activeUserId || state.currentUser?.id || null) {
-  if (!userId) {
-    return false;
-  }
-
-  return workspaceHasPendingRoundSync({
-    rounds: state.rounds,
-  });
-}
-
-function collectPendingRoundEvents(state, userId = state.auth?.activeUserId || state.currentUser?.id || null) {
-  if (!userId) {
-    return [];
-  }
-
-  return (state.rounds || [])
-    .map((round) => ({
-      round,
-      events: getPendingRoundEvents(round),
-    }))
-    .filter(({ events }) => events.length)
-    .map(({ round, events }) => ({
-      roundId: round.id,
-      eventIds: events.map((event) => event.id),
-      pendingCount: events.length,
-      events,
-    }));
-}
-
-function appendActivity(draft, message, type = "product") {
-  draft.social.activity.unshift(
-    createActivity({
-      type,
-      message,
-    })
-  );
-  draft.social.activity = draft.social.activity.slice(0, 16);
-}
-
-function setFeedback(draft, tone, title, message) {
-  draft.session.feedback = {
-    tone,
-    title,
-    message,
-    updatedAt: Date.now(),
-  };
-  draft.session.pendingLabel = "";
-}
-
-function clearFeedback(draft) {
-  draft.session.feedback = null;
-  draft.session.pendingLabel = "";
-}
-
-function getDefaultCloudSyncState() {
-  return {
-    status: "idle",
-    scope: "",
-    roundId: null,
-    userId: null,
-    errorMessage: "",
-    lastAttemptAt: 0,
-    lastSuccessAt: 0,
-    retryCount: 0,
-  };
-}
-
-function mergeCloudSyncState(current = {}, updates = {}) {
-  return {
-    ...getDefaultCloudSyncState(),
-    ...(current || {}),
-    ...(updates || {}),
-  };
-}
-
-function setCloudSyncState(draft, updates = {}) {
-  draft.session.cloudSync = mergeCloudSyncState(draft.session.cloudSync, updates);
-}
-
-function resetCloudSyncState(draft) {
-  draft.session.cloudSync = mergeCloudSyncState(draft.session.cloudSync, {
-    status: "idle",
-    scope: "",
-    roundId: null,
-    userId: null,
-    errorMessage: "",
-    retryCount: 0,
-    lastSuccessAt: Date.now(),
-  });
-}
-
-function getCloudSyncCopy(scope = "workspace", roundId = null) {
-  if (scope === "round-finish") {
-    return {
-      pendingLabel: "Backing up this round to your golfer account...",
-      successTitle: "Round backed up",
-      successMessage: "This round is now saved to your Golfers Nation account and will restore after refresh or sign-in.",
-      failureTitle: "Round saved on this device",
-      failureMessage: "This round is safe on this phone, but cloud backup needs another try before it appears on restored sessions or another device.",
-      retryLabel: "Retry round save",
-    };
-  }
-
-  return {
-    pendingLabel: "Saving your latest changes to the cloud...",
-    successTitle: "Cloud save complete",
-    successMessage: "Your latest account changes are backed up to this golfer.",
-    failureTitle: "Saved on this device",
-    failureMessage: "Your latest changes are safe on this phone, but cloud backup needs another try.",
-    retryLabel: roundId ? "Retry save" : "Retry cloud save",
-  };
-}
-
-function normalizeUsernameInput(value, fallbackName = "golfer") {
-  const source = String(value || "").trim() || fallbackName;
-  const base = source
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "")
-    .slice(0, 16);
-  return base ? `@${base}` : "@golfer";
-}
-
-function normalizeAvatarLabel(value, fallbackName = "Golfer") {
-  const source = String(value || "").trim().toUpperCase();
-  if (source && source.length <= 2 && !source.includes(" ")) {
-    return source.slice(0, 2);
-  }
-
-  const derived = (source || fallbackName)
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() || "")
-    .join("");
-  return derived || "GN";
-}
-
-function syncIdentityAcrossRecords(draft) {
-  draft.rounds.forEach((round) => {
-    round.players.forEach((player) => {
-      if (player.userId === draft.currentUser.id || player.profileId === draft.currentUser.profileId) {
-        player.name = draft.currentUser.name;
-        player.displayName = draft.currentUser.displayName;
-        player.username = draft.currentUser.username;
-        player.avatarLabel = draft.currentUser.avatarLabel;
-      }
-    });
-
-    round.sides.forEach((side) => {
-      side.playerNames = side.playerIds.map((playerId) => {
-        const player = round.players.find((item) => item.id === playerId);
-        return player ? player.name : "";
-      });
-    });
-  });
-
-  draft.groups.forEach((group) => {
-    group.members.forEach((member) => {
-      if (member.userId === draft.currentUser.id || member.profileId === draft.currentUser.profileId) {
-        member.displayName = draft.currentUser.name;
-        member.username = draft.currentUser.username;
-        member.avatarLabel = draft.currentUser.avatarLabel;
-      }
-    });
-  });
-}
-
-function getNextIncompleteHoleNumber(round, participantId, currentHoleNumber) {
-  const orderedHoles = round.holes
-    .slice(currentHoleNumber)
-    .concat(round.holes.slice(0, currentHoleNumber));
-  const nextHole = orderedHoles.find((hole) => {
-    const entry = hole.entries.find((item) => item.participantId === participantId);
-    return entry && (entry.strokes === null || entry.strokes === 0);
-  });
-
-  return nextHole ? nextHole.number : currentHoleNumber;
-}
-
-function getViewIndex(viewId) {
-  return VIEW_ORDER.findIndex((view) => view.id === viewId);
-}
-
-function setActiveView(draft, nextView, transitionKind = "tab") {
-  const previousView = draft.session.activeView || "home";
-  const previousIndex = getViewIndex(previousView);
-  const nextIndex = getViewIndex(nextView);
-
-  draft.session.previousView = previousView;
-  draft.session.activeView = nextView;
-
-  if (transitionKind === "focus-round") {
-    draft.session.transitionDirection = "focus";
-    return;
-  }
-
-  if (transitionKind === "return") {
-    draft.session.transitionDirection = "return";
-    return;
-  }
-
-  if (previousIndex !== -1 && nextIndex !== -1) {
-    draft.session.transitionDirection = nextIndex >= previousIndex ? "forward" : "backward";
-    return;
-  }
-
-  draft.session.transitionDirection = "steady";
-}
-
-function openHelpView(draft, sectionId = "getting-started") {
-  const currentView = draft.session.activeView || "home";
-  draft.session.helpReturnView = draft.auth?.status === "authenticated"
-    ? (currentView === "help" ? draft.session.helpReturnView || "home" : currentView)
-    : "auth";
-  draft.session.helpSection = sectionId || draft.session.helpSection || "getting-started";
-  setActiveView(draft, "help", "focus");
-}
-
-function closeHelpView(draft) {
-  const returnView = draft.session.helpReturnView || "home";
-  setActiveView(draft, returnView === "auth" ? "home" : returnView, "return");
-}
-
-function openSettingsView(draft, sectionId = "account") {
-  const currentView = draft.session.activeView || "stats";
-  draft.session.settingsReturnView = currentView === "settings"
-    ? (draft.session.settingsReturnView || "stats")
-    : currentView;
-  draft.session.settingsSection = sectionId || draft.session.settingsSection || "account";
-  setActiveView(draft, "settings", "focus");
-}
-
-function closeSettingsView(draft) {
-  const returnView = draft.session.settingsReturnView || "stats";
-  setActiveView(draft, returnView, "return");
-}
-
-function applyJoinedRoundState(draft, joined, successTitle, successMessage) {
-  upsertJoinedRoundIntoState(draft, joined);
-  applyJoinedRoundConnectionState(joined.round, joined.source);
-  focusRoundView(draft, joined.round.id, draft.currentUser.profileId, setActiveView);
-  refreshProfileSnapshots(draft);
-  appendActivity(draft, joined.notice, "sync");
-  setFeedback(draft, "success", successTitle, successMessage);
-}
-
-function getInstallEnvironment(hasDeferredPrompt = false) {
-  if (typeof window === "undefined") {
-    return {
-      standaloneMode: false,
-      installPromptAvailable: false,
-      installState: "browser",
-    };
-  }
-
-  const standaloneMode = (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches)
-    || window.navigator.standalone === true;
-  const userAgent = window.navigator.userAgent || "";
-  const isIOS = /iPhone|iPad|iPod/i.test(userAgent);
-  const isSafari = /Safari/i.test(userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(userAgent);
-
-  return {
-    standaloneMode,
-    installPromptAvailable: hasDeferredPrompt && !standaloneMode,
-    installState: standaloneMode
-      ? "installed"
-      : hasDeferredPrompt
-        ? "prompt"
-        : isIOS && isSafari
-          ? "ios-share"
-          : "browser",
-  };
-}
-
-function registerServiceWorker() {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
-    return;
-  }
-
-  if (window.location.protocol === "file:") {
-    return;
-  }
-
-  const secureContext = window.location.protocol === "https:"
-    || window.location.hostname === "localhost"
-    || window.location.hostname === "127.0.0.1";
-
-  if (!secureContext) {
-    return;
-  }
-
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch(() => {});
-  }, { once: true });
-}
-
-const APP_SHELL_CACHE_PREFIX = "golfers-nation-shell-";
-
-async function clearAppShellCaches() {
-  if (typeof caches === "undefined" || typeof caches.keys !== "function") {
-    return;
-  }
-
-  const keys = await caches.keys();
-  await Promise.all(
-    keys
-      .filter((key) => key.startsWith(APP_SHELL_CACHE_PREFIX))
-      .map((key) => caches.delete(key))
-  );
-}
-
-async function refreshAppBuild({
-  locationRef = typeof window !== "undefined" ? window.location : null,
-  serviceWorkerContainer = typeof navigator !== "undefined" ? navigator.serviceWorker : null,
-} = {}) {
-  let controllerChangeHandler = null;
-  let fallbackTimer = null;
-
-  const triggerReload = () => {
-    if (controllerChangeHandler && serviceWorkerContainer?.removeEventListener) {
-      try {
-        serviceWorkerContainer.removeEventListener("controllerchange", controllerChangeHandler);
-      } catch {}
-      controllerChangeHandler = null;
-    }
-
-    if (fallbackTimer) {
-      clearTimeout(fallbackTimer);
-      fallbackTimer = null;
-    }
-
-    if (locationRef && typeof locationRef.reload === "function") {
-      locationRef.reload();
-    }
-  };
-
-  if (serviceWorkerContainer?.addEventListener) {
-    controllerChangeHandler = () => triggerReload();
-    serviceWorkerContainer.addEventListener("controllerchange", controllerChangeHandler, { once: true });
-    fallbackTimer = setTimeout(triggerReload, 1200);
-  }
-
-  try {
-    if (serviceWorkerContainer?.getRegistration) {
-      const registration = await serviceWorkerContainer.getRegistration("./")
-        .catch(() => serviceWorkerContainer.getRegistration());
-
-      if (registration?.update) {
-        await registration.update().catch(() => {});
-      }
-
-      if (registration?.waiting) {
-        registration.waiting.postMessage({ type: "SKIP_WAITING" });
-      }
-    }
-
-    await clearAppShellCaches();
-  } catch (error) {
-    console.warn("[Golfers Nation] App refresh could not fully clear cached shell files.", error);
-  }
-
-  if (!serviceWorkerContainer?.addEventListener) {
-    triggerReload();
-  }
-}
-
-function applyAppearanceSelectionToDocument(appearance = {}) {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  const colorMode = appearance.colorMode || "system";
-  const themeId = appearance.themeId || "forest";
-  const textScale = appearance.textScale || "standard";
-  const contrastMode = appearance.contrastMode === "high" ? "high" : "standard";
-  const compactMode = appearance.compactMode === true;
-  let resolvedMode = colorMode;
-
-  if (colorMode === "system") {
-    resolvedMode = typeof window !== "undefined"
-      && typeof window.matchMedia === "function"
-      && window.matchMedia("(prefers-color-scheme: light)").matches
-      ? "light"
-      : "dark";
-  }
-
-  document.body.dataset.colorMode = colorMode;
-  document.body.dataset.resolvedMode = resolvedMode === "light" ? "light" : "dark";
-  document.body.dataset.theme = themeId;
-  document.body.dataset.textScale = textScale === "large" ? "large" : "standard";
-  document.body.dataset.contrast = contrastMode;
-  document.body.dataset.density = compactMode ? "compact" : "comfortable";
-  document.body.style.colorScheme = resolvedMode === "light" ? "light" : "dark";
-}
-
-function applyAppearanceToDocument(state) {
-  applyAppearanceSelectionToDocument(state.currentUser?.appearance || {});
-}
-
-function applyShellModeToDocument(state) {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  document.body.dataset.appShellMode = state.session?.standaloneMode ? "standalone" : "browser";
-}
-
-function syncAppearancePreviewSummary(form) {
-  if (!form) {
-    return;
-  }
-
-  const selectedTheme = form.querySelector('input[name="themeId"]:checked');
-  const activeThemeName = form.querySelector('[data-active-theme-name]');
-  const activeThemeDescription = form.querySelector('[data-active-theme-description]');
-  const activeThemeCard = form.querySelector('[data-active-theme-card]');
-
-  if (selectedTheme) {
-    const nextThemeId = String(selectedTheme.value || "forest");
-
-    if (activeThemeName) {
-      activeThemeName.textContent = selectedTheme.dataset.themeLabel || nextThemeId;
-    }
-
-    if (activeThemeDescription) {
-      activeThemeDescription.textContent = selectedTheme.dataset.themeDescription || "";
-    }
-
-    if (activeThemeCard) {
-      activeThemeCard.dataset.themePreview = nextThemeId;
-    }
-  }
-}
-
-function previewAppearanceFromForm(form) {
-  if (!form) {
-    return;
-  }
-
-  const formData = new FormData(form);
-  applyAppearanceSelectionToDocument({
-    colorMode: String(formData.get("colorMode") || "system"),
-    themeId: String(formData.get("themeId") || "forest"),
-    textScale: String(formData.get("textScale") || "standard"),
-    compactMode: formData.get("compactMode") === "on",
-    contrastMode: formData.get("contrastMode") === "high" ? "high" : "standard",
-  });
-  syncAppearancePreviewSummary(form);
-}
-
-function createNoopRealtimeSession() {
-  return {
-    connect() {},
-    disconnect() {},
-    publishRoundUpdate() {
-      return Promise.resolve();
-    },
-    enableNearbySync() {},
-    enableBluetoothSync() {
-      return Promise.resolve();
-    },
-    updateTransport() {},
-    hostRoundSession() {
-      return Promise.resolve({ status: "local-only" });
-    },
-    joinRoundSession() {
-      return Promise.resolve(null);
-    },
-  };
-}
-
-function createBootErrorMessage(stage, error) {
-  const stageLabel = String(stage || "startup")
-    .replace(/[-_]/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-  const message = error instanceof Error ? error.message : String(error || "Unknown startup error.");
-  return {
-    stageLabel,
-    message: message || "Unknown startup error.",
-  };
-}
-
-function renderStartupShell(root, caption = "Preparing live rounds, player profiles, and your mobile app shell.") {
-  if (!root) {
-    return;
-  }
-
-  root.innerHTML = `
-    <div class="app-loading-shell" aria-label="Loading Golfers Nation">
-      <div class="loading-card">
-        <div class="loading-brand">
-          <img src="./icons/icon-192.png" alt="" width="56" height="56" />
-          <div class="loading-brand-copy">
-            <p class="eyebrow">Golfers Nation</p>
-            <strong class="loading-title">Opening your golf app</strong>
-          </div>
-        </div>
-        <div class="loading-bar" aria-hidden="true">
-          <span></span>
-        </div>
-        <p class="loading-caption">${caption}</p>
-      </div>
-    </div>
-  `;
-}
-
-function showBootRecoveryScreen(root, {
-  stage,
-  error,
-  locationRef = typeof window !== "undefined" ? window.location : null,
-  storage = null,
-  onRetry = null,
-} = {}) {
-  const detail = createBootErrorMessage(stage, error);
-  console.error(`[Golfers Nation] Startup failed during ${stage || "startup"}.`, error);
-  let availableStorage = storage;
-  if (availableStorage === null) {
-    try {
-      availableStorage = typeof localStorage === "undefined" ? null : localStorage;
-    } catch (storageError) {
-      availableStorage = null;
-    }
-  }
-
-  root.innerHTML = `
-    <section class="boot-recovery-shell" aria-live="polite">
-      <article class="boot-recovery-card" role="alert">
-        <p class="eyebrow">Golfers Nation</p>
-        <h1>We couldn't finish opening the app.</h1>
-        <p class="body-copy">A startup step failed before the product shell was ready. Try launching again, or reset local app data on this device for testing.</p>
-        <div class="boot-recovery-detail">
-          <strong>${detail.stageLabel}</strong>
-          <span>${detail.message}</span>
-        </div>
-        <div class="boot-recovery-actions">
-          <button type="button" class="button button-primary" data-boot-action="retry">Retry</button>
-          <button type="button" class="button button-secondary" data-boot-action="reset">Reset local app data</button>
-        </div>
-      </article>
-    </section>
-  `;
-
-  root.querySelector('[data-boot-action="retry"]')?.addEventListener("click", () => {
-    if (typeof onRetry === "function") {
-      renderStartupShell(root, "Trying startup again with a safe local handoff.");
-      try {
-        onRetry();
-        return;
-      } catch (retryError) {
-        console.error("[Golfers Nation] Retry failed immediately.", retryError);
-      }
-    }
-
-    if (locationRef && typeof locationRef.reload === "function") {
-      locationRef.reload();
-    }
-  });
-
-  root.querySelector('[data-boot-action="reset"]')?.addEventListener("click", () => {
-    try {
-      availableStorage?.removeItem(STORAGE_KEY);
-    } catch (storageError) {
-      console.warn("[Golfers Nation] Failed to clear local app data.", storageError);
-    }
-
-    if (typeof onRetry === "function") {
-      renderStartupShell(root, "Resetting local data and reopening Golfers Nation.");
-      try {
-        onRetry();
-        return;
-      } catch (retryError) {
-        console.error("[Golfers Nation] Reset-and-retry failed immediately.", retryError);
-      }
-    }
-
-    if (locationRef && typeof locationRef.reload === "function") {
-      locationRef.reload();
-    }
-  });
-}
-
-function applyStartupWarning(state, title, message) {
-  if (!state?.session || !state?.auth) {
-    return state;
-  }
-
-  state.session.feedback = {
-    tone: "warning",
-    title,
-    message,
-    updatedAt: Date.now(),
-  };
-  state.auth.notice = message;
-  return state;
-}
-
-function finishRound(draft, roundId, dataGateway) {
-  const round = draft.rounds.find((item) => item.id === roundId);
-  if (!round) {
-    return null;
-  }
-
-  const progress = round.holes.filter((hole) => hole.entries.some((entry) => entry.strokes && entry.strokes > 0)).length;
-  if (!progress) {
-    setFeedback(
-      draft,
-      "info",
-      "Score at least one hole",
-      "Enter a score before finishing so the round summary and stats have something real to save."
-    );
-    return null;
-  }
-
-  round.status = "completed";
-  round.completedAt = Date.now();
-  round.updatedAt = Date.now();
-  draft.session.summaryRoundId = round.id;
-  appendActivity(draft, `${round.courseName} was finished and moved into round history.`, "round");
-  setFeedback(
-    draft,
-    "info",
-    "Round finished",
-    `${round.courseName} was added to ${draft.currentUser.displayName}'s history on this device. Cloud backup is finishing now.`
-  );
-  draft.session.activeRoundId = null;
-  draft.session.selectedHole = 1;
-  draft.session.selectedProfileId = draft.currentUser.profileId;
-  setActiveView(draft, "stats", "tab");
-  refreshProfileSnapshots(draft);
-  syncCurrentUserProfile(draft);
-  dataGateway.saveWorkspace(draft, draft.currentUser.id);
-  return round.id;
-}
+import {
+  applyJoinedRoundState,
+  closeHelpView,
+  closeSettingsView,
+  openHelpView,
+  openSettingsView,
+  setActiveView,
+} from "./ui/view-controller.js";
 
 export function bootstrapApp({
   root = typeof document !== "undefined" ? document.querySelector("#app") : null,
@@ -993,32 +361,15 @@ export function bootstrapApp({
   };
 
   const requestRealtimeRoundUpdate = (roundId) => {
+    publishLiveRoundUpdate(realtimeSession, roundId);
+  };
+
+  const finalizeHostedRoundSession = async (roundId) => {
     if (!roundId) {
       return;
     }
 
-    Promise.resolve(realtimeSession.publishRoundUpdate(roundId))
-      .catch((error) => {
-        console.warn("[Golfers Nation] Live round publish failed. Continuing with local-safe state.", error);
-      });
-  };
-
-  const finalizeHostedRoundSession = async (roundId) => {
-    if (!roundId || typeof realtimeSession.hostRoundSession !== "function") {
-      return;
-    }
-
-    let result = null;
-    try {
-      result = await realtimeSession.hostRoundSession(roundId);
-    } catch (error) {
-      console.warn("[Golfers Nation] Live host setup failed. Keeping the round on this device only.", error);
-      result = {
-        error: {
-          message: "Live hosting is unavailable right now.",
-        },
-      };
-    }
+    const result = await hostLiveRoundSession(realtimeSession, roundId);
     if (!result?.error && result?.status !== "skipped-missing-table") {
       return;
     }
@@ -1038,51 +389,32 @@ export function bootstrapApp({
         draft,
         "warning",
         "Live room unavailable",
-        getLiveRoomFailureMessage(result)
+        describeLiveRoomFailure(result)
       );
       return draft;
     }, { reason: "host-live-round-fallback" });
   };
 
   const resolveLiveJoinResult = async (code, warningPrefix) => {
-    if (!code || typeof realtimeSession.joinRoundSession !== "function") {
-      return null;
-    }
-
-    try {
-      return await realtimeSession.joinRoundSession(code);
-    } catch (error) {
-      console.warn(warningPrefix, error);
-      return {
-        error: {
-          message: "Live join is unavailable right now.",
-        },
-      };
-    }
+    return joinLiveRoundSession(realtimeSession, code, warningPrefix);
   };
 
-  store.subscribe((state, meta = {}) => {
-    try {
-      platform.data.persist(platform.data.prepareForPersistence(state));
-    } catch (error) {
-      console.error("[Golfers Nation] Failed to persist app state.", error);
-    }
-    if (["realtime-member-state", "realtime-round-event", "realtime-round-snapshot"].includes(meta.reason)) {
-      console.info("[Golfers Nation] Rerender triggered after live sync update.", {
-        reason: meta.reason,
-        activeRoundId: state.session?.activeRoundId || null,
-      });
-    }
-    safeRender(state, "state-render");
-    applyAppearanceToDocument(state);
-    applyShellModeToDocument(state);
+  subscribeStorePersistence({
+    store,
+    platform,
+    safeRender,
+    applyAppearanceToDocument,
+    applyShellModeToDocument,
   });
 
-  if (!safeRender(store.getState(), "initial-render")) {
+  if (!renderInitialAppState({
+    store,
+    safeRender,
+    applyAppearanceToDocument,
+    applyShellModeToDocument,
+  })) {
     return { status: "failed", stage: "initial-render" };
   }
-  applyAppearanceToDocument(store.getState());
-  applyShellModeToDocument(store.getState());
 
   try {
     registerServiceWorker();
@@ -1190,17 +522,6 @@ export function bootstrapApp({
       return draft;
     }, { reason: "hydrate-remote-complete" });
     return result;
-  };
-
-  const updateRoundSyncDraft = (draft, roundId, updater) => {
-    const round = findRound(draft, roundId);
-    if (!round) {
-      return null;
-    }
-
-    ensureRoundSyncScaffold(round);
-    updater(round);
-    return round;
   };
 
   const scheduleRoundSyncRetry = (delayMs = 5000) => {
@@ -2099,7 +1420,7 @@ export function bootstrapApp({
             liveJoinResult?.error ? "warning" : "error",
             liveJoinResult?.error ? "Live join unavailable" : "Code not found",
             liveJoinResult?.error
-              ? getLiveRoomFailureMessage(liveJoinResult)
+              ? describeLiveRoomFailure(liveJoinResult)
               : `Invite code ${code} did not match an active round.`
           );
           return draft;
@@ -2897,7 +2218,7 @@ export function bootstrapApp({
             liveJoinResult?.error ? "warning" : "error",
             liveJoinResult?.error ? "Live join unavailable" : "Couldn't join round",
             liveJoinResult?.error
-              ? getLiveRoomFailureMessage(liveJoinResult)
+              ? describeLiveRoomFailure(liveJoinResult)
               : "Check the invite code and try again."
           );
           return draft;

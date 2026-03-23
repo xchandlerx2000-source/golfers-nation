@@ -7,8 +7,8 @@ import {
   upsertRemoteAccount,
 } from "./account-service.js";
 import { workspaceHasPendingRoundSync } from "../domain/round-sync.js";
+import { loadPersistedState, persistAppState } from "../state/persistence.js";
 import { toBackendAccountRecord, toBackendWorkspaceSnapshot } from "./backend-models.js";
-import { loadStoredState, persistState } from "./storage-service.js";
 
 function getSnapshotUserId(snapshot) {
   return snapshot.auth?.activeUserId || snapshot.currentUser?.id || null;
@@ -19,13 +19,13 @@ export function createLocalDataGateway() {
     mode: "local-device-adapter",
     backendReady: true,
     loadInitialState(createDefaultState) {
-      return loadStoredState(createDefaultState);
+      return loadPersistedState(createDefaultState);
     },
     prepareForPersistence(state) {
       return prepareStateForPersistence(state);
     },
     persist(snapshot) {
-      persistState(snapshot);
+      persistAppState(snapshot);
       return snapshot;
     },
     saveWorkspace(draft, userId) {
