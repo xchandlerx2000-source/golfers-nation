@@ -66,6 +66,57 @@ export function updateRoundSyncDraft(draft, roundId, updater) {
   return round;
 }
 
+export function upsertLiveRoundSessionState(draft, incoming, {
+  mergeRound = (existingRound, nextRound) => nextRound,
+} = {}) {
+  if (!incoming?.round) {
+    return {
+      round: null,
+      group: null,
+      roundIndex: -1,
+      groupIndex: -1,
+    };
+  }
+
+  const roundIndex = draft.rounds.findIndex((round) =>
+    round.id === incoming.round.id
+      || (incoming.inviteCode && round.inviteCode === incoming.inviteCode)
+  );
+  const existingRound = roundIndex >= 0 ? draft.rounds[roundIndex] : null;
+  const nextRound = mergeRound(existingRound, incoming.round);
+
+  if (roundIndex >= 0) {
+    draft.rounds[roundIndex] = nextRound;
+  } else {
+    draft.rounds.unshift(nextRound);
+  }
+
+  let nextGroup = incoming.group || null;
+  let groupIndex = -1;
+  if (nextGroup) {
+    groupIndex = draft.groups.findIndex((group) =>
+      group.id === nextGroup.id
+        || group.roundId === nextRound.id
+        || (incoming.inviteCode && group.inviteCode === incoming.inviteCode)
+    );
+
+    if (groupIndex >= 0) {
+      draft.groups[groupIndex] = nextGroup;
+      nextGroup = draft.groups[groupIndex];
+    } else {
+      draft.groups.unshift(nextGroup);
+      groupIndex = 0;
+    }
+  }
+
+  return {
+    round: nextRound,
+    group: nextGroup,
+    roundIndex,
+    groupIndex,
+  };
+}
+
 export function getNextIncompleteHoleNumber(round, participantId, currentHoleNumber) {
   const orderedHoles = round.holes
     .slice(currentHoleNumber)

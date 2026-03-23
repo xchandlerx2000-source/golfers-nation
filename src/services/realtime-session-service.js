@@ -13,6 +13,44 @@ export function describeLiveRoomFailure(result) {
   return message || "The live sync connection is not ready yet.";
 }
 
+export function createLiveSessionMeta({
+  inviteCode = "",
+  roundId = null,
+  sessionId = null,
+  updatedAt = 0,
+  source = "live",
+} = {}) {
+  return {
+    inviteCode: String(inviteCode || "").trim().toUpperCase(),
+    roundId: roundId || null,
+    sessionId: sessionId || null,
+    updatedAt: Number(updatedAt) || 0,
+    source,
+  };
+}
+
+export function shouldApplyLiveSessionSnapshot(currentMeta, incomingSession, { force = false } = {}) {
+  if (force) {
+    return true;
+  }
+
+  if (!incomingSession?.inviteCode) {
+    return false;
+  }
+
+  if (!currentMeta?.inviteCode) {
+    return true;
+  }
+
+  if (currentMeta.inviteCode !== String(incomingSession.inviteCode || "").trim().toUpperCase()) {
+    return true;
+  }
+
+  const incomingUpdatedAt = Number(incomingSession.updatedAt) || 0;
+  const currentUpdatedAt = Number(currentMeta.updatedAt) || 0;
+  return incomingUpdatedAt > currentUpdatedAt;
+}
+
 export function publishLiveRoundUpdate(realtimeSession, roundId) {
   if (!roundId) {
     return;
