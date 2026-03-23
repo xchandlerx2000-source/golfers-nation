@@ -183,6 +183,35 @@ describe("scoring", () => {
     expect(summary.roundInsights.length).toBeGreaterThan(0);
   });
 
+  it("adds live competition cues like hole winner, momentum, and rank movement", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "The Country Club at Golden Nugget",
+      teeBox: "Gold",
+      weather: "Clear 74F",
+      mode: "stroke",
+      players: ["Avery Brooks", "Maya Chen", "Theo Grant"],
+    });
+    const [avery, maya, theo] = round.players;
+
+    scoreHole(round, avery.id, 1, 4, 2, true, true);
+    scoreHole(round, maya.id, 1, 5, 2, false, false);
+    scoreHole(round, theo.id, 1, 6, 2, false, false);
+
+    scoreHole(round, avery.id, 2, 6, 3, false, false);
+    scoreHole(round, maya.id, 2, 4, 2, true, true);
+    scoreHole(round, theo.id, 2, 5, 2, true, false);
+
+    const summary = getRoundSummary(round, currentUser.id);
+    const mayaEntry = summary.leaderboard.find((entry) => entry.name === "Maya Chen");
+
+    expect(summary.holeWinner?.holeNumber).toBe(2);
+    expect(summary.holeWinner?.winnerNames).toContain("Maya Chen");
+    expect(summary.momentum?.label).toBeTruthy();
+    expect(summary.headToHead?.rivalName).toBeTruthy();
+    expect(mayaEntry?.rankTrend).toBe("up");
+  });
+
   it("identifies hardest and best holes from completed history", () => {
     const round = createRound({
       currentUser,

@@ -10,48 +10,28 @@ import {
   markRoundEventsSyncing,
   workspaceHasPendingRoundSync,
 } from "./domain/round-sync.js";
-import { APP_VERSION, FEATURED_COURSE_ID, STORAGE_KEY, VIEW_ORDER } from "./config.js";
-import { joinByInviteCode, hostRoundGroup } from "./services/mock-api.js";
+import { APP_VERSION, STORAGE_KEY, VIEW_ORDER } from "./config.js";
+import { joinByInviteCode } from "./services/mock-api.js";
 import { ensureProfilesForNames, refreshProfileSnapshots, syncCurrentUserProfile } from "./services/player-service.js";
 import { createProductPlatform } from "./services/product-platform.js";
-import { createManualCourseSelection, createRoundCourseSelection, findCourseById, getDefaultTeeBox } from "./services/course-library.js";
+import { createManualCourseSelection, createRoundCourseSelection } from "./services/course-library.js";
+import {
+  applyJoinedRoundConnectionState,
+  ensureHostedGroupForRound,
+  focusRoundView,
+  getDefaultRoundSetup,
+  getRoundSetupState,
+  parsePlayers,
+  resetRoundSetup,
+  setSelectedCourse,
+  upsertJoinedRoundIntoState,
+} from "./services/round-flow-service.js";
 import { createDefaultState } from "./state/default-state.js";
 import { createStore } from "./state/store.js";
 import { createRenderer } from "./ui/render.js";
 
 function findRound(state, roundId) {
   return state.rounds.find((round) => round.id === roundId);
-}
-
-function upsertJoinedRoundIntoState(draft, joined) {
-  if (!joined?.round) {
-    return;
-  }
-
-  const roundIndex = draft.rounds.findIndex((round) =>
-    round.id === joined.round.id
-      || (joined.round.inviteCode && round.inviteCode === joined.round.inviteCode)
-  );
-
-  if (roundIndex >= 0) {
-    draft.rounds[roundIndex] = joined.round;
-  } else {
-    draft.rounds.unshift(joined.round);
-  }
-
-  if (joined.group) {
-    const groupIndex = draft.groups.findIndex((group) =>
-      group.id === joined.group.id
-        || group.roundId === joined.round.id
-        || (joined.group.inviteCode && group.inviteCode === joined.group.inviteCode)
-    );
-
-    if (groupIndex >= 0) {
-      draft.groups[groupIndex] = joined.group;
-    } else {
-      draft.groups.unshift(joined.group);
-    }
-  }
 }
 
 function getLiveRoomFailureMessage(result) {
@@ -112,93 +92,6 @@ function collectPendingRoundEvents(state, userId = state.auth?.activeUserId || s
       pendingCount: events.length,
       events,
     }));
-}
-
-function parsePlayers(value, currentUserName) {
-  const names = String(value || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const deduped = [];
-  const seen = new Set();
-
-  names.forEach((name) => {
-    const normalized = name.toLowerCase();
-    if (seen.has(normalized)) {
-      return;
-    }
-
-    seen.add(normalized);
-    deduped.push(name);
-  });
-
-  if (!seen.has(currentUserName.toLowerCase())) {
-    deduped.unshift(currentUserName);
-    seen.add(currentUserName.toLowerCase());
-  } else {
-    const currentIndex = deduped.findIndex((name) => name.toLowerCase() === currentUserName.toLowerCase());
-    if (currentIndex > 0) {
-      const [currentName] = deduped.splice(currentIndex, 1);
-      deduped.unshift(currentName);
-    }
-  }
-
-  const adjustments = [];
-  if (deduped.length < 2) {
-    deduped.push("Maya Chen");
-    adjustments.push("A second golfer was added so the round is ready for a real scorecard.");
-  }
-
-  if (deduped.length > 4) {
-    deduped.length = 4;
-    adjustments.push("This build keeps live rounds to four golfers, so only the first four names were used.");
-  }
-
-  return {
-    names: deduped,
-    note: adjustments.join(" "),
-  };
-}
-
-function getDefaultRoundSetup() {
-  const featuredCourse = findCourseById(FEATURED_COURSE_ID);
-  const featuredTeeBox = featuredCourse ? getDefaultTeeBox(featuredCourse) : null;
-
-  return {
-    courseQuery: "",
-    selectedCourseId: featuredCourse?.id || "",
-    selectedTeeBoxId: featuredTeeBox?.id || "",
-  };
-}
-
-function getRoundSetupState(state) {
-  return {
-    ...getDefaultRoundSetup(),
-    ...(state.session?.roundSetup || {}),
-  };
-}
-
-function resetRoundSetup(draft) {
-  draft.session.roundSetup = getDefaultRoundSetup();
-}
-
-function setSelectedCourse(draft, courseId, teeBoxId = "") {
-  const course = findCourseById(courseId);
-  if (!course) {
-    draft.session.roundSetup = {
-      ...getRoundSetupState(draft),
-      selectedCourseId: "",
-      selectedTeeBoxId: "",
-    };
-    return;
-  }
-
-  const defaultTee = getDefaultTeeBox(course);
-  draft.session.roundSetup = {
-    ...getRoundSetupState(draft),
-    selectedCourseId: course.id,
-    selectedTeeBoxId: teeBoxId || defaultTee?.id || "",
-  };
 }
 
 function appendActivity(draft, message, type = "product") {
@@ -407,6 +300,15 @@ function openSettingsView(draft, sectionId = "account") {
 function closeSettingsView(draft) {
   const returnView = draft.session.settingsReturnView || "stats";
   setActiveView(draft, returnView, "return");
+}
+
+function applyJoinedRoundState(draft, joined, successTitle, successMessage) {
+  upsertJoinedRoundIntoState(draft, joined);
+  applyJoinedRoundConnectionState(joined.round, joined.source);
+  focusRoundView(draft, joined.round.id, draft.currentUser.profileId, setActiveView);
+  refreshProfileSnapshots(draft);
+  appendActivity(draft, joined.notice, "sync");
+  setFeedback(draft, "success", successTitle, successMessage);
 }
 
 function getInstallEnvironment(hasDeferredPrompt = false) {
@@ -1140,6 +1042,23 @@ export function bootstrapApp({
       );
       return draft;
     }, { reason: "host-live-round-fallback" });
+  };
+
+  const resolveLiveJoinResult = async (code, warningPrefix) => {
+    if (!code || typeof realtimeSession.joinRoundSession !== "function") {
+      return null;
+    }
+
+    try {
+      return await realtimeSession.joinRoundSession(code);
+    } catch (error) {
+      console.warn(warningPrefix, error);
+      return {
+        error: {
+          message: "Live join is unavailable right now.",
+        },
+      };
+    }
   };
 
   store.subscribe((state, meta = {}) => {
@@ -2090,31 +2009,22 @@ export function bootstrapApp({
           return draft;
         }
 
-        const existing = draft.groups.find((group) => group.roundId === round.id);
-        if (existing) {
-          round.inviteCode = existing.inviteCode;
-          round.sync.transport = "invite";
-          round.sync.label = "Invite code";
-          round.sync.state = "hosting";
-          round.sync.lastEventAt = Date.now();
-          round.sync.note = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
-          appendActivity(draft, `${round.courseName} is already live with code ${existing.inviteCode}.`, "sync");
-          setFeedback(draft, "info", "Invite code ready", `This round is already hosted. Share code ${existing.inviteCode} with the group.`);
-          hostedRoundId = round.id;
-          return draft;
-        }
-
-        const hosted = hostRoundGroup({ state: draft, round });
-        round.inviteCode = hosted.inviteCode;
-        round.groupId = hosted.group.id;
-        round.sync.transport = "invite";
-        round.sync.label = "Invite code";
-        round.sync.state = "hosting";
-        round.sync.lastEventAt = Date.now();
-        round.sync.note = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
-        draft.groups.unshift(hosted.group);
-        appendActivity(draft, `${round.courseName} is now hosted with invite code ${hosted.inviteCode}.`, "sync");
-        setFeedback(draft, "success", "Round hosted", `Invite code ${hosted.inviteCode} is ready to share.`);
+        const hosted = ensureHostedGroupForRound(draft, round);
+        appendActivity(
+          draft,
+          hosted.created
+            ? `${round.courseName} is now hosted with invite code ${hosted.group.inviteCode}.`
+            : `${round.courseName} is already live with code ${hosted.group.inviteCode}.`,
+          "sync"
+        );
+        setFeedback(
+          draft,
+          hosted.created ? "success" : "info",
+          hosted.created ? "Round hosted" : "Invite code ready",
+          hosted.created
+            ? `Invite code ${hosted.group.inviteCode} is ready to share.`
+            : `This round is already hosted. Share code ${hosted.group.inviteCode} with the group.`
+        );
         hostedRoundId = round.id;
         return draft;
       }, { reason: "host-active-round" });
@@ -2169,10 +2079,7 @@ export function bootstrapApp({
 
     if (action === "resume-round") {
       store.setState((draft) => {
-        draft.session.activeRoundId = actionElement.dataset.roundId;
-        setActiveView(draft, "round", "focus-round");
-        draft.session.selectedProfileId = draft.currentUser.profileId;
-        draft.session.selectedHole = 1;
+        focusRoundView(draft, actionElement.dataset.roundId, draft.currentUser.profileId, setActiveView);
         return draft;
       }, { reason: "resume-round" });
       return;
@@ -2180,19 +2087,7 @@ export function bootstrapApp({
 
     if (action === "quick-join-code") {
       const code = actionElement.dataset.code;
-      let liveJoinResult = null;
-      if (typeof realtimeSession.joinRoundSession === "function") {
-        try {
-          liveJoinResult = await realtimeSession.joinRoundSession(code);
-        } catch (error) {
-          console.warn("[Golfers Nation] Live join failed. Checking local-safe fallbacks.", error);
-          liveJoinResult = {
-            error: {
-              message: "Live join is unavailable right now.",
-            },
-          };
-        }
-      }
+      const liveJoinResult = await resolveLiveJoinResult(code, "[Golfers Nation] Live join failed. Checking local-safe fallbacks.");
       store.setState((draft) => {
         const joined = liveJoinResult?.round
           ? liveJoinResult
@@ -2210,20 +2105,12 @@ export function bootstrapApp({
           return draft;
         }
 
-        upsertJoinedRoundIntoState(draft, joined);
-
-        joined.round.sync.lastEventAt = Date.now();
-        joined.round.sync.state = "connected";
-        joined.round.sync.transport = joined.source === "local" ? "invite" : "cloud";
-        joined.round.sync.label = joined.source === "local" ? "Invite code" : "Live cloud sync";
-        joined.round.sync.note = "This device now carries its own safe copy of the live round, even if the original host leaves.";
-        draft.session.activeRoundId = joined.round.id;
-        draft.session.selectedProfileId = draft.currentUser.profileId;
-        draft.session.selectedHole = 1;
-        setActiveView(draft, "round", "focus-round");
-        refreshProfileSnapshots(draft);
-        appendActivity(draft, joined.notice, "sync");
-        setFeedback(draft, "success", "Round joined", `${joined.round.courseName} is now open and ready for scoring.`);
+        applyJoinedRoundState(
+          draft,
+          joined,
+          "Round joined",
+          `${joined.round.courseName} is now open and ready for scoring.`
+        );
         return draft;
       }, { reason: "quick-join" });
       return;
@@ -2277,6 +2164,9 @@ export function bootstrapApp({
     if (action === "select-profile-preview") {
       store.setState((draft) => {
         draft.session.selectedProfileId = actionElement.dataset.profileId || draft.session.selectedProfileId;
+        if (actionElement.dataset.previewView) {
+          setActiveView(draft, actionElement.dataset.previewView, "tab");
+        }
         return draft;
       }, { reason: "select-profile-preview" });
       return;
@@ -2948,10 +2838,7 @@ export function bootstrapApp({
         });
 
         draft.rounds.unshift(round);
-        draft.session.activeRoundId = round.id;
-        draft.session.selectedHole = 1;
-        draft.session.selectedProfileId = draft.currentUser.profileId;
-        setActiveView(draft, "round", "focus-round");
+        focusRoundView(draft, round.id, draft.currentUser.profileId, setActiveView);
         appendActivity(draft, `${round.courseName} started in ${round.mode} mode.`, "round");
         setFeedback(
           draft,
@@ -2963,21 +2850,13 @@ export function bootstrapApp({
         );
 
         if (intent === "host") {
-          const hosted = hostRoundGroup({ state: draft, round });
-          round.inviteCode = hosted.inviteCode;
-          round.groupId = hosted.group.id;
-          round.sync.transport = "invite";
-          round.sync.label = "Invite code";
-          round.sync.state = "hosting";
-          round.sync.lastEventAt = Date.now();
-          round.sync.note = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
-          draft.groups.unshift(hosted.group);
-          appendActivity(draft, `${round.courseName} hosted with code ${hosted.inviteCode}.`, "sync");
+          const hosted = ensureHostedGroupForRound(draft, round);
+          appendActivity(draft, `${round.courseName} hosted with code ${hosted.group.inviteCode}.`, "sync");
           setFeedback(
             draft,
             "success",
             "Round hosted",
-            `Invite code ${hosted.inviteCode} is ready to share from the round screen.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
+            `Invite code ${hosted.group.inviteCode} is ready to share from the round screen.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
           );
           hostedRoundId = round.id;
         }
@@ -2998,25 +2877,16 @@ export function bootstrapApp({
 
     if (formName === "join-code") {
       const code = String(data.get("inviteCode") || "").trim().toUpperCase();
-      let liveJoinResult = null;
-      if (code && typeof realtimeSession.joinRoundSession === "function") {
-        try {
-          liveJoinResult = await realtimeSession.joinRoundSession(code);
-        } catch (error) {
-          console.warn("[Golfers Nation] Live join failed. Keeping the join flow in local-safe mode.", error);
-          liveJoinResult = {
-            error: {
-              message: "Live join is unavailable right now.",
-            },
-          };
-        }
-      }
-      store.setState((draft) => {
-        if (!code) {
+      if (!code) {
+        store.setState((draft) => {
           setFeedback(draft, "info", "Enter an invite code", "Ask the host for the round code, then enter it here to join the same live card.");
           return draft;
-        }
+        }, { reason: "join-code-empty" });
+        return;
+      }
 
+      const liveJoinResult = await resolveLiveJoinResult(code, "[Golfers Nation] Live join failed. Keeping the join flow in local-safe mode.");
+      store.setState((draft) => {
         const joined = liveJoinResult?.round
           ? liveJoinResult
           : joinByInviteCode({ code, state: draft });
@@ -3033,20 +2903,12 @@ export function bootstrapApp({
           return draft;
         }
 
-        upsertJoinedRoundIntoState(draft, joined);
-
-        joined.round.sync.lastEventAt = Date.now();
-        joined.round.sync.state = "connected";
-        joined.round.sync.transport = joined.source === "local" ? "invite" : "cloud";
-        joined.round.sync.label = joined.source === "local" ? "Invite code" : "Live cloud sync";
-        joined.round.sync.note = "This device now carries its own safe copy of the live round, even if the original host leaves.";
-        draft.session.activeRoundId = joined.round.id;
-        draft.session.selectedHole = 1;
-        draft.session.selectedProfileId = draft.currentUser.profileId;
-        setActiveView(draft, "round", "focus-round");
-        refreshProfileSnapshots(draft);
-        appendActivity(draft, joined.notice, "sync");
-        setFeedback(draft, "success", "Joined round", `${joined.round.courseName} is ready. Your own score entry is open first, and the rest of the group stays visible underneath.`);
+        applyJoinedRoundState(
+          draft,
+          joined,
+          "Joined round",
+          `${joined.round.courseName} is ready. Your own score entry is open first, and the rest of the group stays visible underneath.`
+        );
         return draft;
       }, { reason: "join-code" });
       form.reset();

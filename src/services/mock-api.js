@@ -46,6 +46,39 @@ const seededRooms = [
   },
 ];
 
+function getProfileVisibility(profile) {
+  return profile?.privateProfile?.privacy?.profileVisibility || "friends";
+}
+
+function isProfileDiscoverable(profile) {
+  return getProfileVisibility(profile) !== "private";
+}
+
+function buildActiveRoundMap(state) {
+  const activeByProfileId = new Map();
+
+  state.groups.forEach((group) => {
+    const round = state.rounds.find((item) => item.id === group.roundId);
+    if (!round || round.status !== "active") {
+      return;
+    }
+
+    round.players.forEach((player) => {
+      if (!player.profileId) {
+        return;
+      }
+
+      activeByProfileId.set(player.profileId, {
+        round,
+        group,
+        player,
+      });
+    });
+  });
+
+  return activeByProfileId;
+}
+
 function generateInviteCode(existingCodes) {
   const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -155,6 +188,9 @@ export function listNearbyGames(state) {
         transport: CONNECTION_COPY[group.transport] || CONNECTION_COPY.invite,
         distance: "On device",
         source: "local",
+        playerCount: round.players.length,
+        hostName: group.members[0]?.displayName || round.players[0]?.name || "Host golfer",
+        statusLabel: `Hole ${round.currentHole} / ${round.players.length} golfers`,
       };
     })
     .filter(Boolean);
@@ -167,9 +203,56 @@ export function listNearbyGames(state) {
     transport: CONNECTION_COPY.cloud,
     distance: room.distance,
     source: "seeded",
+    playerCount: room.players.length,
+    hostName: room.players[0]?.displayName || "Host golfer",
+    statusLabel: `${room.players.length} golfers nearby`,
   }));
 
   return [...localCards, ...seededCards];
+}
+
+export function listNearbyPlayers(state) {
+  const activeRoundMap = buildActiveRoundMap(state);
+
+  return (state.profiles || [])
+    .filter((profile) => profile.id !== state.currentUser.profileId)
+    .filter((profile) => isProfileDiscoverable(profile) || activeRoundMap.has(profile.id))
+    .map((profile) => {
+      const active = activeRoundMap.get(profile.id);
+      const showHomeCourse = profile.privateProfile?.privacy?.showHomeCourse !== false;
+      const showHandicap = profile.privateProfile?.privacy?.showHandicap !== false;
+      const roundsPlayed = profile.publicProfile?.roundsPlayed || 0;
+      const averageScore = profile.publicProfile?.averageScore;
+
+      return {
+        profileId: profile.id,
+        displayName: profile.publicProfile.displayName,
+        username: profile.publicProfile.username,
+        avatarLabel: profile.publicProfile.avatarLabel,
+        homeCourse: showHomeCourse ? profile.publicProfile.homeCourse || "" : "",
+        handicap: showHandicap ? profile.publicProfile.handicap : null,
+        recentFormSummary: profile.publicProfile.recentFormSummary || "Competitive profile ready",
+        statsSummary: roundsPlayed
+          ? `${roundsPlayed} rounds / ${typeof averageScore === "number" ? averageScore.toFixed(1) : "--"} avg`
+          : "New public player card",
+        statusLabel: active
+          ? "In a live nearby round"
+          : roundsPlayed
+            ? "Recently active"
+            : "Available to join",
+        detail: active
+          ? `${active.round.courseName} / Hole ${active.round.currentHole}`
+          : profile.publicProfile.recentFormSummary || "Public profile ready",
+        inviteCode: active?.group.inviteCode || active?.round.inviteCode || "",
+        isLive: Boolean(active),
+        updatedAt: profile.updatedAt || 0,
+      };
+    })
+    .sort((left, right) =>
+      Number(right.isLive) - Number(left.isLive)
+      || (right.updatedAt || 0) - (left.updatedAt || 0)
+      || right.displayName.localeCompare(left.displayName)
+    );
 }
 
 export function getGearRecommendations(weather) {

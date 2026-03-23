@@ -637,6 +637,14 @@ function isPlayedEntry(entry) {
   return Boolean(entry && entry.strokes !== null && entry.strokes > 0);
 }
 
+function getRoundHoles(round, holeLimit = null) {
+  if (!Number.isFinite(holeLimit)) {
+    return round.holes;
+  }
+
+  return round.holes.filter((hole) => hole.number <= holeLimit);
+}
+
 function roundRatio(value, total) {
   return total ? Math.round((value / total) * 100) : 0;
 }
@@ -1015,8 +1023,9 @@ function applyHoleUpdate(round, holeNumber, participantId, patch, options = {}) 
   round.currentHole = hole.number;
   return round;
 }
-function getParticipantTotals(round, participantId) {
-  const holes = round.holes
+function getParticipantTotals(round, participantId, options = {}) {
+  const holeLimit = typeof options === "number" ? options : options?.holeLimit ?? null;
+  const holes = getRoundHoles(round, holeLimit)
     .map((hole) => ({
       hole,
       entry: hole.entries.find((item) => item.participantId === participantId),
@@ -1073,10 +1082,10 @@ function getParticipantTotals(round, participantId) {
   };
 }
 
-function buildStrokeLeaderboard(round, currentUserId) {
+function buildStrokeLeaderboard(round, currentUserId, holeLimit = null) {
   return getScoringParticipants(round)
     .map((participant) => {
-      const totals = getParticipantTotals(round, participant.id);
+      const totals = getParticipantTotals(round, participant.id, { holeLimit });
       const localIds = getLocalParticipantIds(round, currentUserId);
       return {
         id: participant.id,
@@ -1108,12 +1117,12 @@ function buildStrokeLeaderboard(round, currentUserId) {
     }));
 }
 
-function buildMatchLeaderboard(round, currentUserId) {
+function buildMatchLeaderboard(round, currentUserId, holeLimit = null) {
   const sides = getScoringParticipants(round);
   const [left, right] = sides;
 
   if (!left || !right) {
-    return buildStrokeLeaderboard(round, currentUserId);
+    return buildStrokeLeaderboard(round, currentUserId, holeLimit);
   }
 
   let leftWins = 0;
@@ -1121,7 +1130,7 @@ function buildMatchLeaderboard(round, currentUserId) {
   let halved = 0;
   let holesPlayed = 0;
 
-  round.holes.forEach((hole) => {
+  getRoundHoles(round, holeLimit).forEach((hole) => {
     const leftEntry = hole.entries.find((entry) => entry.participantId === left.id);
     const rightEntry = hole.entries.find((entry) => entry.participantId === right.id);
     if (!leftEntry?.strokes || !rightEntry?.strokes) {
@@ -1186,16 +1195,166 @@ function buildMatchLeaderboard(round, currentUserId) {
     },
   ].sort((leftEntry, rightEntry) => leftEntry.rank - rightEntry.rank);
 }
-function buildLeaderboard(round, currentUserId) {
+function buildLeaderboard(round, currentUserId, holeLimit = null) {
   return round.mode === "match"
-    ? buildMatchLeaderboard(round, currentUserId)
-    : buildStrokeLeaderboard(round, currentUserId);
+    ? buildMatchLeaderboard(round, currentUserId, holeLimit)
+    : buildStrokeLeaderboard(round, currentUserId, holeLimit);
+}
+
+function getLastScoredHoleNumber(round) {
+  return round.holes.reduce((highest, hole) => {
+    const hasScore = hole.entries.some((entry) => isPlayedEntry(entry));
+    return hasScore ? hole.number : highest;
+  }, 0);
+}
+
+function buildHoleWinnerSummary(round) {
+  const participants = getScoringParticipants(round);
+  const participantNames = new Map(participants.map((participant) => [participant.id, participant.name]));
+  const latestCompetitiveHole = [...round.holes]
+    .reverse()
+    .find((hole) => hole.entries.filter((entry) => isPlayedEntry(entry)).length >= 2);
+
+  if (!latestCompetitiveHole) {
+    return null;
+  }
+
+  const playedEntries = latestCompetitiveHole.entries.filter((entry) => isPlayedEntry(entry));
+  const winningScore = Math.min(...playedEntries.map((entry) => entry.strokes));
+  const winnerNames = playedEntries
+    .filter((entry) => entry.strokes === winningScore)
+    .map((entry) => participantNames.get(entry.participantId) || "Golfer");
+
+  return {
+    holeNumber: latestCompetitiveHole.number,
+    winningScore,
+    winnerNames,
+    tied: winnerNames.length > 1,
+    label: winnerNames.length > 1
+      ? `Hole ${latestCompetitiveHole.number} halved`
+      : `Hole ${latestCompetitiveHole.number} to ${winnerNames[0]}`,
+    detail: winnerNames.length > 1
+      ? `${winnerNames.join(" and ")} matched ${winningScore}.`
+      : `${winnerNames[0]} won the hole with ${winningScore}.`,
+  };
+}
+
+function buildMomentumSummary(localTotals) {
+  const recentHoles = (localTotals?.holeDetails || []).slice(-3);
+
+  if (!recentHoles.length) {
+    return {
+      label: "Start the card",
+      detail: "Momentum shows up after the first few holes.",
+      tone: "steady",
+    };
+  }
+
+  const totalToPar = recentHoles.reduce((sum, hole) => sum + hole.toPar, 0);
+  const underParCount = recentHoles.filter((hole) => hole.toPar < 0).length;
+  const evenOrBetterCount = recentHoles.filter((hole) => hole.toPar <= 0).length;
+  const bogeyOrWorseCount = recentHoles.filter((hole) => hole.toPar > 0).length;
+
+  if (underParCount >= 2 || (recentHoles.length >= 2 && evenOrBetterCount === recentHoles.length)) {
+    return {
+      label: "Hot streak",
+      detail: `${evenOrBetterCount}/${recentHoles.length} recent holes at par or better.`,
+      tone: "up",
+    };
+  }
+
+  if (totalToPar <= -1) {
+    return {
+      label: "Momentum up",
+      detail: `${Math.abs(totalToPar)} under par over the last ${recentHoles.length} holes.`,
+      tone: "up",
+    };
+  }
+
+  if (bogeyOrWorseCount >= 2) {
+    return {
+      label: "Bounce-back spot",
+      detail: `Last ${recentHoles.length} holes have trended ${totalToPar > 0 ? `${totalToPar} over` : "flat"}.`,
+      tone: "down",
+    };
+  }
+
+  return {
+    label: "Steady stretch",
+    detail: `Last ${recentHoles.length} holes are settling in.`,
+    tone: "steady",
+  };
+}
+
+function buildHeadToHeadSummary(round, leaderboard, localParticipant) {
+  if (!localParticipant || leaderboard.length < 2) {
+    return null;
+  }
+
+  const rival = localParticipant.rank === 1
+    ? leaderboard.find((entry) => entry.id !== localParticipant.id)
+    : leaderboard[Math.max(0, localParticipant.rank - 2)] || leaderboard[0];
+
+  if (!rival) {
+    return null;
+  }
+
+  if (round.mode === "match") {
+    return {
+      rivalName: rival.name,
+      label: localParticipant.rank === 1 ? `Ahead of ${rival.name}` : `Chasing ${rival.name}`,
+      detail: `${localParticipant.displayStatus} vs ${rival.displayStatus}`,
+    };
+  }
+
+  const strokeGap = Math.abs((localParticipant.total || 0) - (rival.total || 0));
+  return {
+    rivalName: rival.name,
+    label: localParticipant.rank === 1 ? `Ahead of ${rival.name}` : `Chasing ${rival.name}`,
+    detail: `${strokeGap} ${strokeGap === 1 ? "stroke" : "strokes"} ${localParticipant.rank === 1 ? "clear" : "back"}`,
+  };
+}
+
+function addRankMovement(round, currentUserId, leaderboard) {
+  const lastScoredHole = getLastScoredHoleNumber(round);
+  if (lastScoredHole <= 1) {
+    return leaderboard.map((entry) => ({
+      ...entry,
+      previousRank: entry.rank,
+      rankDelta: 0,
+      rankTrend: "steady",
+      rankTrendLabel: "Opening stretch",
+    }));
+  }
+
+  const previousLeaderboard = buildLeaderboard(round, currentUserId, lastScoredHole - 1);
+  const previousRanks = new Map(previousLeaderboard.map((entry) => [entry.id, entry.rank]));
+
+  return leaderboard.map((entry) => {
+    const previousRank = previousRanks.get(entry.id) ?? entry.rank;
+    const rankDelta = previousRank - entry.rank;
+
+    return {
+      ...entry,
+      previousRank,
+      rankDelta,
+      rankTrend: rankDelta > 0 ? "up" : rankDelta < 0 ? "down" : "steady",
+      rankTrendLabel: rankDelta > 0
+        ? `Up ${rankDelta}`
+        : rankDelta < 0
+          ? `Down ${Math.abs(rankDelta)}`
+          : "Steady",
+    };
+  });
 }
 function getRoundSummary(round, currentUserId) {
-  const leaderboard = buildLeaderboard(round, currentUserId);
+  const leaderboard = addRankMovement(round, currentUserId, buildLeaderboard(round, currentUserId));
   const localParticipant = leaderboard.find((entry) => entry.isLocal) || leaderboard[0];
   const localTotals = localParticipant ? getParticipantTotals(round, localParticipant.id) : null;
   const holesPlayed = Math.max(...leaderboard.map((entry) => entry.thru), 0);
+  const holeWinner = buildHoleWinnerSummary(round);
+  const momentum = buildMomentumSummary(localTotals);
+  const headToHead = buildHeadToHeadSummary(round, leaderboard, localParticipant);
 
   return {
     leaderboard,
@@ -1207,6 +1366,9 @@ function getRoundSummary(round, currentUserId) {
       ...localTotals,
       ...summarizeHolePerformance([localTotals.holeDetails]),
     }) : [],
+    holeWinner,
+    momentum,
+    headToHead,
     roundLabel: GAME_MODES[round.mode].label,
     averagePutts: localTotals?.averagePutts ?? null,
     completed: round.status === "completed",
@@ -4618,6 +4780,39 @@ const seededRooms = [
   },
 ];
 
+function getProfileVisibility(profile) {
+  return profile?.privateProfile?.privacy?.profileVisibility || "friends";
+}
+
+function isProfileDiscoverable(profile) {
+  return getProfileVisibility(profile) !== "private";
+}
+
+function buildActiveRoundMap(state) {
+  const activeByProfileId = new Map();
+
+  state.groups.forEach((group) => {
+    const round = state.rounds.find((item) => item.id === group.roundId);
+    if (!round || round.status !== "active") {
+      return;
+    }
+
+    round.players.forEach((player) => {
+      if (!player.profileId) {
+        return;
+      }
+
+      activeByProfileId.set(player.profileId, {
+        round,
+        group,
+        player,
+      });
+    });
+  });
+
+  return activeByProfileId;
+}
+
 function generateInviteCode(existingCodes) {
   const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -4724,6 +4919,9 @@ function listNearbyGames(state) {
         transport: CONNECTION_COPY[group.transport] || CONNECTION_COPY.invite,
         distance: "On device",
         source: "local",
+        playerCount: round.players.length,
+        hostName: group.members[0]?.displayName || round.players[0]?.name || "Host golfer",
+        statusLabel: `Hole ${round.currentHole} / ${round.players.length} golfers`,
       };
     })
     .filter(Boolean);
@@ -4736,9 +4934,55 @@ function listNearbyGames(state) {
     transport: CONNECTION_COPY.cloud,
     distance: room.distance,
     source: "seeded",
+    playerCount: room.players.length,
+    hostName: room.players[0]?.displayName || "Host golfer",
+    statusLabel: `${room.players.length} golfers nearby`,
   }));
 
   return [...localCards, ...seededCards];
+}
+function listNearbyPlayers(state) {
+  const activeRoundMap = buildActiveRoundMap(state);
+
+  return (state.profiles || [])
+    .filter((profile) => profile.id !== state.currentUser.profileId)
+    .filter((profile) => isProfileDiscoverable(profile) || activeRoundMap.has(profile.id))
+    .map((profile) => {
+      const active = activeRoundMap.get(profile.id);
+      const showHomeCourse = profile.privateProfile?.privacy?.showHomeCourse !== false;
+      const showHandicap = profile.privateProfile?.privacy?.showHandicap !== false;
+      const roundsPlayed = profile.publicProfile?.roundsPlayed || 0;
+      const averageScore = profile.publicProfile?.averageScore;
+
+      return {
+        profileId: profile.id,
+        displayName: profile.publicProfile.displayName,
+        username: profile.publicProfile.username,
+        avatarLabel: profile.publicProfile.avatarLabel,
+        homeCourse: showHomeCourse ? profile.publicProfile.homeCourse || "" : "",
+        handicap: showHandicap ? profile.publicProfile.handicap : null,
+        recentFormSummary: profile.publicProfile.recentFormSummary || "Competitive profile ready",
+        statsSummary: roundsPlayed
+          ? `${roundsPlayed} rounds / ${typeof averageScore === "number" ? averageScore.toFixed(1) : "--"} avg`
+          : "New public player card",
+        statusLabel: active
+          ? "In a live nearby round"
+          : roundsPlayed
+            ? "Recently active"
+            : "Available to join",
+        detail: active
+          ? `${active.round.courseName} / Hole ${active.round.currentHole}`
+          : profile.publicProfile.recentFormSummary || "Public profile ready",
+        inviteCode: active?.group.inviteCode || active?.round.inviteCode || "",
+        isLive: Boolean(active),
+        updatedAt: profile.updatedAt || 0,
+      };
+    })
+    .sort((left, right) =>
+      Number(right.isLive) - Number(left.isLive)
+      || (right.updatedAt || 0) - (left.updatedAt || 0)
+      || right.displayName.localeCompare(left.displayName)
+    );
 }
 function getGearRecommendations(weather) {
   const lower = String(weather || "").toLowerCase();
@@ -7259,6 +7503,14 @@ function formatPercent(value) {
   return typeof value === "number" ? `${value}%` : "--";
 }
 
+function formatToParValue(value) {
+  if (typeof value !== "number") {
+    return "--";
+  }
+
+  return value === 0 ? "E" : `${value > 0 ? "+" : ""}${value}`;
+}
+
 function formatHandicap(value) {
   return typeof value === "number" ? value.toFixed(1) : "--";
 }
@@ -7277,6 +7529,26 @@ function formatComparisonMetric(label, value) {
   }
 
   return escapeHtml(String(value ?? "--"));
+}
+
+function renderRecentRoundRows(recentForm = []) {
+  if (!recentForm.length) {
+    return "";
+  }
+
+  return `
+    <div class="competitive-recent-list">
+      ${recentForm.slice(0, 3).map((entry) => `
+        <article class="competitive-recent-row">
+          <div>
+            <strong>${escapeHtml(entry.courseName)}</strong>
+            <p>${formatDate(entry.completedAt)}</p>
+          </div>
+          <span class="status-pill">${escapeHtml(formatToParValue(entry.toPar))}</span>
+        </article>
+      `).join("")}
+    </div>
+  `;
 }
 
 function renderHolePerformanceList(title, holes) {
@@ -8145,6 +8417,7 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
     : null;
   const advancedGate = getFeatureGate("advanced-stats", getSubscription(state));
   const comparisonGate = getFeatureGate("player-comparison", getSubscription(state));
+  const isCurrentUser = profileId === state.currentUser.profileId;
 
   if (comparison && !comparisonGate.locked) {
     return `
@@ -8194,6 +8467,17 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
             <span>Handicap</span>
             <strong>${advancedGate.locked ? "Premium" : `${formatHandicap(comparison.left.handicapIndex)} / ${formatHandicap(comparison.right.handicapIndex)}`}</strong>
           </article>
+          <article>
+            <span>Home course</span>
+            <strong>${escapeHtml(comparison.left.homeCourse || "Private")} / ${escapeHtml(comparison.right.homeCourse || "Private")}</strong>
+          </article>
+        </div>
+        <div class="competitive-section-block">
+          <p class="mini-label">Recent rounds</p>
+          <div class="comparison-grid comparison-recent-grid">
+            <div>${renderRecentRoundRows(comparison.left.recentForm)}</div>
+            <div>${renderRecentRoundRows(comparison.right.recentForm)}</div>
+          </div>
         </div>
         ${advancedGate.locked
           ? `
@@ -8209,6 +8493,10 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
               <div class="feature-row">Toughest hole: ${comparison.left.hardestHoles?.[0] ? `Hole ${comparison.left.hardestHoles[0].holeNumber}` : "--"} / ${comparison.right.hardestHoles?.[0] ? `Hole ${comparison.right.hardestHoles[0].holeNumber}` : "--"}</div>
             </div>
           `}
+        <div class="row-actions competitive-action-row">
+          <button class="button subtle" type="button" data-action="share-profile-placeholder">Share your card</button>
+          <button class="button subtle" type="button" data-action="share-round-summary-placeholder">Share round summary</button>
+        </div>
       </article>
     `;
   }
@@ -8225,7 +8513,7 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
         ${renderAvatarChip(preview.avatarLabel, "is-large")}
         <div>
           <strong>${escapeHtml(preview.displayName)}</strong>
-          <p>${escapeHtml(preview.username)}</p>
+          <p>${escapeHtml(preview.username)} / ${escapeHtml(preview.headToHeadLabel)}</p>
         </div>
       </div>
       <div class="summary-grid compact">
@@ -8258,6 +8546,22 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
           <strong>${formatAverageScore(preview.averagePutts)}</strong>
         </article>
       </div>
+      ${(preview.homeCourse || preview.handicap !== null && preview.handicap !== undefined)
+        ? `
+          <div class="competitive-public-strip">
+            ${preview.homeCourse ? `<span>Home course ${escapeHtml(preview.homeCourse)}</span>` : ""}
+            ${preview.handicap !== null && preview.handicap !== undefined ? `<span>Handicap ${escapeHtml(String(preview.handicap))}</span>` : ""}
+          </div>
+        `
+        : ""}
+      ${preview.recentForm?.length
+        ? `
+          <div class="competitive-section-block">
+            <p class="mini-label">Recent rounds</p>
+            ${renderRecentRoundRows(preview.recentForm)}
+          </div>
+        `
+        : ""}
       <div class="stack-list compact-stack">
         <div class="feature-row">Recent form: ${escapeHtml(preview.recentFormSummary)}</div>
         ${preview.homeCourse ? `<div class="feature-row">Home course: ${escapeHtml(preview.homeCourse)}</div>` : ""}
@@ -8274,8 +8578,73 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
           ? preview.smartInsights.map((insight) => `<div class="feature-row">${escapeHtml(insight)}</div>`).join("")
           : ""}
       </div>
+      ${isCurrentUser
+        ? `
+          <div class="row-actions competitive-action-row">
+            <button class="button subtle" type="button" data-action="share-profile-placeholder">Share profile</button>
+            <button class="button subtle" type="button" data-action="share-round-summary-placeholder">Round brag card</button>
+          </div>
+        `
+        : ""}
     </article>
   `;
+}
+
+function renderNearbyRoundRows(nearbyGames, {
+  compact = false,
+  actionLabel = "Join now",
+} = {}) {
+  if (!nearbyGames.length) {
+    return "";
+  }
+
+  return nearbyGames.map((game) => `
+    <article class="list-row ${compact ? "" : "large"} ${compact ? "" : "discovery-list-row"}">
+      <div>
+        <strong>${escapeHtml(game.title)}</strong>
+        <p>${escapeHtml(game.courseName)} / ${escapeHtml(game.modeLabel)} / ${escapeHtml(game.statusLabel || `${game.playerCount || 0} golfers`)}</p>
+      </div>
+      <div class="list-metrics ${compact ? "" : "discovery-list-metrics"}">
+        <span>${escapeHtml(game.distance)}</span>
+        ${compact ? "" : `<span>${escapeHtml(game.transport)}</span>`}
+        <span>${escapeHtml(game.inviteCode)}</span>
+        <button class="button subtle" type="button" data-action="quick-join-code" data-code="${game.inviteCode}">${escapeHtml(actionLabel)}</button>
+      </div>
+    </article>
+  `).join("");
+}
+
+function renderNearbyPlayerRows(nearbyPlayers) {
+  if (!nearbyPlayers.length) {
+    return `
+      <div class="empty-state compact-empty-state">
+        <strong>No nearby golfers visible yet.</strong>
+        <p>As more testers join and host rounds, their public cards will appear here when privacy allows it.</p>
+      </div>
+    `;
+  }
+
+  return nearbyPlayers.slice(0, 5).map((player) => `
+    <article class="nearby-player-row">
+      <div class="nearby-player-main">
+        ${renderAvatarChip(player.avatarLabel)}
+        <div>
+          <strong>${escapeHtml(player.displayName)}</strong>
+          <p>${escapeHtml(player.username)} / ${escapeHtml(player.statusLabel)}</p>
+        </div>
+      </div>
+      <div class="nearby-player-support">
+        <span>${escapeHtml(player.detail)}</span>
+        <span>${escapeHtml(player.statsSummary)}</span>
+        ${player.homeCourse ? `<span>${escapeHtml(player.homeCourse)}</span>` : ""}
+        ${player.handicap !== null && player.handicap !== undefined ? `<span>Hdcp ${escapeHtml(String(player.handicap))}</span>` : ""}
+      </div>
+      <div class="row-actions nearby-player-actions">
+        <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(player.profileId)}">${player.isLive ? "View live card" : "View card"}</button>
+        ${player.inviteCode ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${player.inviteCode}">Join round</button>` : ""}
+      </div>
+    </article>
+  `).join("");
 }
 
 function renderPrimaryActions(state, activeRound) {
@@ -8330,18 +8699,8 @@ function renderJoinRoundQuickCard(state, options = {}) {
       ${nearbyGames.length
         ? `
           <div class="stack-list compact-stack nearby-preview-list">
-            ${nearbyGames.map((game) => `
-              <article class="list-row">
-                <div>
-                  <strong>${escapeHtml(game.title)}</strong>
-                  <p>${escapeHtml(game.courseName)} / ${escapeHtml(game.modeLabel)}</p>
-                </div>
-                <div class="list-metrics">
-                  <span>${escapeHtml(game.inviteCode)}</span>
-                  <button class="button subtle" type="button" data-action="quick-join-code" data-code="${game.inviteCode}">Use code</button>
-                </div>
-              </article>
-            `).join("")}
+            <p class="mini-label">Nearby and discoverable right now</p>
+            ${renderNearbyRoundRows(nearbyGames, { compact: true })}
           </div>
         `
         : ""}
@@ -9640,6 +9999,47 @@ function formatCompetitiveDelta(value) {
   return Number.isInteger(magnitude) ? String(magnitude) : magnitude.toFixed(1).replace(/\.0$/, "");
 }
 
+function renderCompetitiveSpotlights(summary) {
+  const highlights = [
+    summary?.holeWinner
+      ? {
+          label: "Hole winner",
+          value: summary.holeWinner.label,
+          tone: summary.holeWinner.tied ? "steady" : "up",
+        }
+      : null,
+    summary?.momentum
+      ? {
+          label: "Momentum",
+          value: summary.momentum.label,
+          tone: summary.momentum.tone || "steady",
+        }
+      : null,
+    summary?.headToHead
+      ? {
+          label: "Head to head",
+          value: summary.headToHead.label,
+          tone: summary?.localParticipant?.rank === 1 ? "up" : "steady",
+        }
+      : null,
+  ].filter(Boolean);
+
+  if (!highlights.length) {
+    return "";
+  }
+
+  return `
+    <div class="competitive-spotlight-strip">
+      ${highlights.map((item) => `
+        <article class="competitive-spotlight-pill is-${item.tone}">
+          <span>${escapeHtml(item.label)}</span>
+          <strong>${escapeHtml(item.value)}</strong>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
 function getCompetitiveFeedback(round, summary, participantId) {
   const leaderboard = summary?.leaderboard || [];
   const entry = leaderboard.find((item) => item.id === participantId);
@@ -9770,7 +10170,7 @@ function renderHoleEditor(state, round) {
             ${context.isLocal ? `<span class="player-badge is-local">You</span>` : ""}
             ${context.isLeader ? `<span class="player-badge is-leader">Leader</span>` : ""}
             ${context.previewProfileId
-              ? `<button class="button subtle profile-preview-button profile-preview-button--inline" type="button" data-action="select-profile-preview" data-profile-id="${context.previewProfileId}">Profile</button>`
+              ? `<button class="button subtle profile-preview-button profile-preview-button--inline" type="button" data-action="select-profile-preview" data-profile-id="${context.previewProfileId}" data-preview-view="community">View card</button>`
               : ""}
           </div>
         </div>
@@ -9783,6 +10183,7 @@ function renderHoleEditor(state, round) {
             <p class="body-copy compact-copy participant-helper-copy">Use this extra editor only if one phone really needs to score for another golfer too.</p>
             <div class="participant-compact-stats">
               <span>Status ${escapeHtml(context.leaderboardEntry?.displayStatus || "--")}</span>
+              <span>${escapeHtml(context.leaderboardEntry?.rankTrendLabel || "Opening stretch")}</span>
               <span>FW ${context.participantTotals.fairwaysHit}/${context.participantTotals.fairwayOpportunities} / GIR ${context.participantTotals.greensHit}/${context.participantTotals.girOpportunities}</span>
               <span>Putts ${context.participantTotals.averagePutts ?? "--"}</span>
             </div>
@@ -9955,7 +10356,7 @@ function renderHoleEditor(state, round) {
           <span>Hole ${hole.number}</span>
           <strong>${context.entry?.strokes ?? "--"}</strong>
           ${context.previewProfileId
-            ? `<button class="button subtle profile-preview-button" type="button" data-action="select-profile-preview" data-profile-id="${context.previewProfileId}">Preview</button>`
+            ? `<button class="button subtle profile-preview-button" type="button" data-action="select-profile-preview" data-profile-id="${context.previewProfileId}" data-preview-view="community">View card</button>`
             : ""}
         </div>
       </article>
@@ -9994,6 +10395,7 @@ function renderHoleEditor(state, round) {
         </div>
       ` : ""}
       <p class="body-copy compact-copy round-entry-focus">Your score entry opens first. The shared round stays visible below without forcing you to score everyone else.</p>
+      ${renderCompetitiveSpotlights(summary)}
       <div class="participant-grid participant-grid--single">
         ${primaryParticipant ? renderEditableParticipant(primaryParticipant) : ""}
       </div>
@@ -10043,6 +10445,7 @@ function renderLeaderboardCard(state, round) {
         <span class="mini-label">${leader ? `Leader ${leader.name}` : "Leaderboard"}</span>
         <strong>${localEntry ? `You #${localEntry.rank} / ${localEntry.displayStatus}` : leader ? leader.displayStatus : "Waiting on scores"}</strong>
       </div>
+      ${renderCompetitiveSpotlights(summary)}
       <div class="leaderboard-list leaderboard-list--compact">
         ${summary.leaderboard
           .map((entry) => {
@@ -10070,6 +10473,10 @@ function renderLeaderboardCard(state, round) {
                   <span>Thru ${entry.thru}</span>
                   <strong>${escapeHtml(entry.displayStatus)}</strong>
                   <span>${escapeHtml(gapLabel)}</span>
+                  <span class="leader-trend-pill is-${escapeHtml(entry.rankTrend || "steady")}">${escapeHtml(entry.rankTrendLabel || "Steady")}</span>
+                  ${previewProfileId
+                    ? `<button class="button subtle leaderboard-preview-button" type="button" data-action="select-profile-preview" data-profile-id="${previewProfileId}" data-preview-view="community">View card</button>`
+                    : ""}
                 </div>
               </article>
             `;
@@ -10655,8 +11062,10 @@ function renderCommunityView(state) {
   const activeRound = getActiveRound(state);
   const activeGroup = getActiveGroup(state, activeRound);
   const nearbyGames = listNearbyGames(state);
+  const nearbyPlayers = listNearbyPlayers(state);
   const featuredProfileId = state.session.selectedProfileId
     || activeRound?.players.find((player) => !player.userId)?.profileId
+    || nearbyPlayers[0]?.profileId
     || state.currentUser.profileId;
   const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "";
 
@@ -10666,11 +11075,11 @@ function renderCommunityView(state) {
         <div class="section-heading">
           <div>
             <p class="eyebrow">Community</p>
-            <h3>Join or host a shared round</h3>
+            <h3>Join fast and keep golfers visible</h3>
           </div>
           <span class="status-pill">${escapeHtml(inviteCode || "No code yet")}</span>
         </div>
-        <p class="body-copy">This screen is built to do one thing quickly: open the same round on another golfer's phone without making anyone hunt for controls.</p>
+        <p class="body-copy">Use nearby discovery when the group is already around you, or fall back to invite code when someone texts it over. Both paths open straight into the same shared round flow.</p>
         <div class="row-actions help-row">
           ${renderHelpLink("Need help joining a round?", "playing-round", true)}
         </div>
@@ -10736,6 +11145,7 @@ function renderCommunityView(state) {
                 <h3>Who is in this round</h3>
               </div>
             </div>
+            <p class="body-copy compact-copy">Tap any golfer to open their public competitive card. The selected card stays below so you can compare the group without losing your place.</p>
             <div class="participant-preview-row">
               ${activeRound.players.map((player) => `
                 <button class="player-preview-pill" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(player.profileId || "")}">
@@ -10748,42 +11158,51 @@ function renderCommunityView(state) {
         `
         : ""}
       ${renderCompetitivePreviewCard(state, featuredProfileId, featuredProfileId === state.currentUser.profileId ? "Your public matchup card" : "Selected golfer preview")}
-      <article class="card">
+      <article class="card card-span-2 discovery-card">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Nearby games</p>
-            <h3>Quick join suggestions</h3>
+            <p class="eyebrow">Nearby and discover</p>
+            <h3>Open rounds and active golfers</h3>
           </div>
         </div>
-        <div class="stack-list">
-          ${nearbyGames
-            .slice(0, 4)
-            .map(
-              (game) => `
-                <article class="list-row large">
-                  <div>
-                    <strong>${escapeHtml(game.title)}</strong>
-                    <p>${escapeHtml(game.courseName)} / ${escapeHtml(game.modeLabel)}</p>
-                  </div>
-                  <div class="list-metrics">
-                    <span>${escapeHtml(game.distance)}</span>
-                    <span>${escapeHtml(game.transport)}</span>
-                    <button class="button subtle" type="button" data-action="quick-join-code" data-code="${game.inviteCode}">Join</button>
-                  </div>
-                </article>
-              `
-            )
-            .join("")}
+        <p class="body-copy compact-copy">This is the low-friction path real testers asked for: spot a live round, tap once to join, or open another golfer's card before the first tee.</p>
+        <div class="community-discovery-grid">
+          <div class="stack-list discovery-column">
+            <p class="mini-label">Discoverable rounds</p>
+            ${nearbyGames.length
+              ? renderNearbyRoundRows(nearbyGames.slice(0, 4))
+              : `
+                <div class="empty-state compact-empty-state">
+                  <strong>No nearby rounds yet.</strong>
+                  <p>Host the active round or keep code-based join as the fallback.</p>
+                </div>
+              `}
+          </div>
+          <div class="stack-list discovery-column">
+            <p class="mini-label">Nearby golfers</p>
+            ${renderNearbyPlayerRows(nearbyPlayers)}
+          </div>
         </div>
       </article>
       <article class="card card-span-2">
-        <div class="empty-state onboarding-state">
-          <strong>Keep Community simple during testing.</strong>
-          <p>Use this screen to join by code, host the active round, and confirm who is in the group. Tournament and league depth can grow later without slowing the core phone flow now.</p>
-          <div class="row-actions empty-state-actions">
-            <button class="button primary" type="button" data-action="nav-view" data-view="round">Back to round</button>
-            ${renderHelpLink("Shared round guide", "playing-round", true)}
-          </div>
+        <div class="summary-grid compact">
+          <article>
+            <span>Fallback path</span>
+            <strong>Join by code</strong>
+          </article>
+          <article>
+            <span>Fast path</span>
+            <strong>Discover nearby</strong>
+          </article>
+          <article>
+            <span>Player visibility</span>
+            <strong>Tap to view cards</strong>
+          </article>
+        </div>
+        <p class="body-copy compact-copy">Community is now built around fast joining, visible golfers, and easy shared-round confidence. The invite code path still stays ready anytime nearby discovery is not enough.</p>
+        <div class="row-actions empty-state-actions">
+          <button class="button primary" type="button" data-action="nav-view" data-view="round">Back to round</button>
+          ${renderHelpLink("Shared round guide", "playing-round", true)}
         </div>
       </article>
     </section>
@@ -11081,37 +11500,6 @@ function findRound(state, roundId) {
   return state.rounds.find((round) => round.id === roundId);
 }
 
-function upsertJoinedRoundIntoState(draft, joined) {
-  if (!joined?.round) {
-    return;
-  }
-
-  const roundIndex = draft.rounds.findIndex((round) =>
-    round.id === joined.round.id
-      || (joined.round.inviteCode && round.inviteCode === joined.round.inviteCode)
-  );
-
-  if (roundIndex >= 0) {
-    draft.rounds[roundIndex] = joined.round;
-  } else {
-    draft.rounds.unshift(joined.round);
-  }
-
-  if (joined.group) {
-    const groupIndex = draft.groups.findIndex((group) =>
-      group.id === joined.group.id
-        || group.roundId === joined.round.id
-        || (joined.group.inviteCode && group.inviteCode === joined.group.inviteCode)
-    );
-
-    if (groupIndex >= 0) {
-      draft.groups[groupIndex] = joined.group;
-    } else {
-      draft.groups.unshift(joined.group);
-    }
-  }
-}
-
 function getLiveRoomFailureMessage(result) {
   const code = String(result?.error?.code || result?.code || "");
   const message = String(result?.error?.message || result?.message || "");
@@ -11170,93 +11558,6 @@ function collectPendingRoundEvents(state, userId = state.auth?.activeUserId || s
       pendingCount: events.length,
       events,
     }));
-}
-
-function parsePlayers(value, currentUserName) {
-  const names = String(value || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const deduped = [];
-  const seen = new Set();
-
-  names.forEach((name) => {
-    const normalized = name.toLowerCase();
-    if (seen.has(normalized)) {
-      return;
-    }
-
-    seen.add(normalized);
-    deduped.push(name);
-  });
-
-  if (!seen.has(currentUserName.toLowerCase())) {
-    deduped.unshift(currentUserName);
-    seen.add(currentUserName.toLowerCase());
-  } else {
-    const currentIndex = deduped.findIndex((name) => name.toLowerCase() === currentUserName.toLowerCase());
-    if (currentIndex > 0) {
-      const [currentName] = deduped.splice(currentIndex, 1);
-      deduped.unshift(currentName);
-    }
-  }
-
-  const adjustments = [];
-  if (deduped.length < 2) {
-    deduped.push("Maya Chen");
-    adjustments.push("A second golfer was added so the round is ready for a real scorecard.");
-  }
-
-  if (deduped.length > 4) {
-    deduped.length = 4;
-    adjustments.push("This build keeps live rounds to four golfers, so only the first four names were used.");
-  }
-
-  return {
-    names: deduped,
-    note: adjustments.join(" "),
-  };
-}
-
-function getDefaultRoundSetup() {
-  const featuredCourse = findCourseById(FEATURED_COURSE_ID);
-  const featuredTeeBox = featuredCourse ? getDefaultTeeBox(featuredCourse) : null;
-
-  return {
-    courseQuery: "",
-    selectedCourseId: featuredCourse?.id || "",
-    selectedTeeBoxId: featuredTeeBox?.id || "",
-  };
-}
-
-function getRoundSetupState(state) {
-  return {
-    ...getDefaultRoundSetup(),
-    ...(state.session?.roundSetup || {}),
-  };
-}
-
-function resetRoundSetup(draft) {
-  draft.session.roundSetup = getDefaultRoundSetup();
-}
-
-function setSelectedCourse(draft, courseId, teeBoxId = "") {
-  const course = findCourseById(courseId);
-  if (!course) {
-    draft.session.roundSetup = {
-      ...getRoundSetupState(draft),
-      selectedCourseId: "",
-      selectedTeeBoxId: "",
-    };
-    return;
-  }
-
-  const defaultTee = getDefaultTeeBox(course);
-  draft.session.roundSetup = {
-    ...getRoundSetupState(draft),
-    selectedCourseId: course.id,
-    selectedTeeBoxId: teeBoxId || defaultTee?.id || "",
-  };
 }
 
 function appendActivity(draft, message, type = "product") {
@@ -11465,6 +11766,15 @@ function openSettingsView(draft, sectionId = "account") {
 function closeSettingsView(draft) {
   const returnView = draft.session.settingsReturnView || "stats";
   setActiveView(draft, returnView, "return");
+}
+
+function applyJoinedRoundState(draft, joined, successTitle, successMessage) {
+  upsertJoinedRoundIntoState(draft, joined);
+  applyJoinedRoundConnectionState(joined.round, joined.source);
+  focusRoundView(draft, joined.round.id, draft.currentUser.profileId, setActiveView);
+  refreshProfileSnapshots(draft);
+  appendActivity(draft, joined.notice, "sync");
+  setFeedback(draft, "success", successTitle, successMessage);
 }
 
 function getInstallEnvironment(hasDeferredPrompt = false) {
@@ -12197,6 +12507,23 @@ function bootstrapApp({
       );
       return draft;
     }, { reason: "host-live-round-fallback" });
+  };
+
+  const resolveLiveJoinResult = async (code, warningPrefix) => {
+    if (!code || typeof realtimeSession.joinRoundSession !== "function") {
+      return null;
+    }
+
+    try {
+      return await realtimeSession.joinRoundSession(code);
+    } catch (error) {
+      console.warn(warningPrefix, error);
+      return {
+        error: {
+          message: "Live join is unavailable right now.",
+        },
+      };
+    }
   };
 
   store.subscribe((state, meta = {}) => {
@@ -13147,31 +13474,22 @@ function bootstrapApp({
           return draft;
         }
 
-        const existing = draft.groups.find((group) => group.roundId === round.id);
-        if (existing) {
-          round.inviteCode = existing.inviteCode;
-          round.sync.transport = "invite";
-          round.sync.label = "Invite code";
-          round.sync.state = "hosting";
-          round.sync.lastEventAt = Date.now();
-          round.sync.note = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
-          appendActivity(draft, `${round.courseName} is already live with code ${existing.inviteCode}.`, "sync");
-          setFeedback(draft, "info", "Invite code ready", `This round is already hosted. Share code ${existing.inviteCode} with the group.`);
-          hostedRoundId = round.id;
-          return draft;
-        }
-
-        const hosted = hostRoundGroup({ state: draft, round });
-        round.inviteCode = hosted.inviteCode;
-        round.groupId = hosted.group.id;
-        round.sync.transport = "invite";
-        round.sync.label = "Invite code";
-        round.sync.state = "hosting";
-        round.sync.lastEventAt = Date.now();
-        round.sync.note = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
-        draft.groups.unshift(hosted.group);
-        appendActivity(draft, `${round.courseName} is now hosted with invite code ${hosted.inviteCode}.`, "sync");
-        setFeedback(draft, "success", "Round hosted", `Invite code ${hosted.inviteCode} is ready to share.`);
+        const hosted = ensureHostedGroupForRound(draft, round);
+        appendActivity(
+          draft,
+          hosted.created
+            ? `${round.courseName} is now hosted with invite code ${hosted.group.inviteCode}.`
+            : `${round.courseName} is already live with code ${hosted.group.inviteCode}.`,
+          "sync"
+        );
+        setFeedback(
+          draft,
+          hosted.created ? "success" : "info",
+          hosted.created ? "Round hosted" : "Invite code ready",
+          hosted.created
+            ? `Invite code ${hosted.group.inviteCode} is ready to share.`
+            : `This round is already hosted. Share code ${hosted.group.inviteCode} with the group.`
+        );
         hostedRoundId = round.id;
         return draft;
       }, { reason: "host-active-round" });
@@ -13226,10 +13544,7 @@ function bootstrapApp({
 
     if (action === "resume-round") {
       store.setState((draft) => {
-        draft.session.activeRoundId = actionElement.dataset.roundId;
-        setActiveView(draft, "round", "focus-round");
-        draft.session.selectedProfileId = draft.currentUser.profileId;
-        draft.session.selectedHole = 1;
+        focusRoundView(draft, actionElement.dataset.roundId, draft.currentUser.profileId, setActiveView);
         return draft;
       }, { reason: "resume-round" });
       return;
@@ -13237,19 +13552,7 @@ function bootstrapApp({
 
     if (action === "quick-join-code") {
       const code = actionElement.dataset.code;
-      let liveJoinResult = null;
-      if (typeof realtimeSession.joinRoundSession === "function") {
-        try {
-          liveJoinResult = await realtimeSession.joinRoundSession(code);
-        } catch (error) {
-          console.warn("[Golfers Nation] Live join failed. Checking local-safe fallbacks.", error);
-          liveJoinResult = {
-            error: {
-              message: "Live join is unavailable right now.",
-            },
-          };
-        }
-      }
+      const liveJoinResult = await resolveLiveJoinResult(code, "[Golfers Nation] Live join failed. Checking local-safe fallbacks.");
       store.setState((draft) => {
         const joined = liveJoinResult?.round
           ? liveJoinResult
@@ -13267,20 +13570,12 @@ function bootstrapApp({
           return draft;
         }
 
-        upsertJoinedRoundIntoState(draft, joined);
-
-        joined.round.sync.lastEventAt = Date.now();
-        joined.round.sync.state = "connected";
-        joined.round.sync.transport = joined.source === "local" ? "invite" : "cloud";
-        joined.round.sync.label = joined.source === "local" ? "Invite code" : "Live cloud sync";
-        joined.round.sync.note = "This device now carries its own safe copy of the live round, even if the original host leaves.";
-        draft.session.activeRoundId = joined.round.id;
-        draft.session.selectedProfileId = draft.currentUser.profileId;
-        draft.session.selectedHole = 1;
-        setActiveView(draft, "round", "focus-round");
-        refreshProfileSnapshots(draft);
-        appendActivity(draft, joined.notice, "sync");
-        setFeedback(draft, "success", "Round joined", `${joined.round.courseName} is now open and ready for scoring.`);
+        applyJoinedRoundState(
+          draft,
+          joined,
+          "Round joined",
+          `${joined.round.courseName} is now open and ready for scoring.`
+        );
         return draft;
       }, { reason: "quick-join" });
       return;
@@ -13334,6 +13629,9 @@ function bootstrapApp({
     if (action === "select-profile-preview") {
       store.setState((draft) => {
         draft.session.selectedProfileId = actionElement.dataset.profileId || draft.session.selectedProfileId;
+        if (actionElement.dataset.previewView) {
+          setActiveView(draft, actionElement.dataset.previewView, "tab");
+        }
         return draft;
       }, { reason: "select-profile-preview" });
       return;
@@ -14005,10 +14303,7 @@ function bootstrapApp({
         });
 
         draft.rounds.unshift(round);
-        draft.session.activeRoundId = round.id;
-        draft.session.selectedHole = 1;
-        draft.session.selectedProfileId = draft.currentUser.profileId;
-        setActiveView(draft, "round", "focus-round");
+        focusRoundView(draft, round.id, draft.currentUser.profileId, setActiveView);
         appendActivity(draft, `${round.courseName} started in ${round.mode} mode.`, "round");
         setFeedback(
           draft,
@@ -14020,21 +14315,13 @@ function bootstrapApp({
         );
 
         if (intent === "host") {
-          const hosted = hostRoundGroup({ state: draft, round });
-          round.inviteCode = hosted.inviteCode;
-          round.groupId = hosted.group.id;
-          round.sync.transport = "invite";
-          round.sync.label = "Invite code";
-          round.sync.state = "hosting";
-          round.sync.lastEventAt = Date.now();
-          round.sync.note = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
-          draft.groups.unshift(hosted.group);
-          appendActivity(draft, `${round.courseName} hosted with code ${hosted.inviteCode}.`, "sync");
+          const hosted = ensureHostedGroupForRound(draft, round);
+          appendActivity(draft, `${round.courseName} hosted with code ${hosted.group.inviteCode}.`, "sync");
           setFeedback(
             draft,
             "success",
             "Round hosted",
-            `Invite code ${hosted.inviteCode} is ready to share from the round screen.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
+            `Invite code ${hosted.group.inviteCode} is ready to share from the round screen.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
           );
           hostedRoundId = round.id;
         }
@@ -14055,25 +14342,16 @@ function bootstrapApp({
 
     if (formName === "join-code") {
       const code = String(data.get("inviteCode") || "").trim().toUpperCase();
-      let liveJoinResult = null;
-      if (code && typeof realtimeSession.joinRoundSession === "function") {
-        try {
-          liveJoinResult = await realtimeSession.joinRoundSession(code);
-        } catch (error) {
-          console.warn("[Golfers Nation] Live join failed. Keeping the join flow in local-safe mode.", error);
-          liveJoinResult = {
-            error: {
-              message: "Live join is unavailable right now.",
-            },
-          };
-        }
-      }
-      store.setState((draft) => {
-        if (!code) {
+      if (!code) {
+        store.setState((draft) => {
           setFeedback(draft, "info", "Enter an invite code", "Ask the host for the round code, then enter it here to join the same live card.");
           return draft;
-        }
+        }, { reason: "join-code-empty" });
+        return;
+      }
 
+      const liveJoinResult = await resolveLiveJoinResult(code, "[Golfers Nation] Live join failed. Keeping the join flow in local-safe mode.");
+      store.setState((draft) => {
         const joined = liveJoinResult?.round
           ? liveJoinResult
           : joinByInviteCode({ code, state: draft });
@@ -14090,20 +14368,12 @@ function bootstrapApp({
           return draft;
         }
 
-        upsertJoinedRoundIntoState(draft, joined);
-
-        joined.round.sync.lastEventAt = Date.now();
-        joined.round.sync.state = "connected";
-        joined.round.sync.transport = joined.source === "local" ? "invite" : "cloud";
-        joined.round.sync.label = joined.source === "local" ? "Invite code" : "Live cloud sync";
-        joined.round.sync.note = "This device now carries its own safe copy of the live round, even if the original host leaves.";
-        draft.session.activeRoundId = joined.round.id;
-        draft.session.selectedHole = 1;
-        draft.session.selectedProfileId = draft.currentUser.profileId;
-        setActiveView(draft, "round", "focus-round");
-        refreshProfileSnapshots(draft);
-        appendActivity(draft, joined.notice, "sync");
-        setFeedback(draft, "success", "Joined round", `${joined.round.courseName} is ready. Your own score entry is open first, and the rest of the group stays visible underneath.`);
+        applyJoinedRoundState(
+          draft,
+          joined,
+          "Joined round",
+          `${joined.round.courseName} is ready. Your own score entry is open first, and the rest of the group stays visible underneath.`
+        );
         return draft;
       }, { reason: "join-code" });
       form.reset();

@@ -22,7 +22,7 @@ import {
 } from "../domain/scoring.js";
 import { getPendingRoundEvents } from "../domain/round-sync.js";
 import { escapeHtml, formatDate, formatDateTime, formatRelativeSync } from "../utils/formatters.js";
-import { getGearRecommendations, listNearbyGames } from "../services/mock-api.js";
+import { getGearRecommendations, listNearbyGames, listNearbyPlayers } from "../services/mock-api.js";
 import { getReviewAccounts } from "../services/account-service.js";
 import { createManualCourseSelection, findCourseById, findTeeBox, getCourseQuickPicks, getDefaultTeeBox, getRoundSetupCourses } from "../services/course-library.js";
 import { buildCompetitivePreview, buildPlayerComparison, getCurrentProfile, getProfileById, getProfileForPlayer } from "../services/player-service.js";
@@ -252,6 +252,14 @@ function formatPercent(value) {
   return typeof value === "number" ? `${value}%` : "--";
 }
 
+function formatToParValue(value) {
+  if (typeof value !== "number") {
+    return "--";
+  }
+
+  return value === 0 ? "E" : `${value > 0 ? "+" : ""}${value}`;
+}
+
 function formatHandicap(value) {
   return typeof value === "number" ? value.toFixed(1) : "--";
 }
@@ -270,6 +278,26 @@ function formatComparisonMetric(label, value) {
   }
 
   return escapeHtml(String(value ?? "--"));
+}
+
+function renderRecentRoundRows(recentForm = []) {
+  if (!recentForm.length) {
+    return "";
+  }
+
+  return `
+    <div class="competitive-recent-list">
+      ${recentForm.slice(0, 3).map((entry) => `
+        <article class="competitive-recent-row">
+          <div>
+            <strong>${escapeHtml(entry.courseName)}</strong>
+            <p>${formatDate(entry.completedAt)}</p>
+          </div>
+          <span class="status-pill">${escapeHtml(formatToParValue(entry.toPar))}</span>
+        </article>
+      `).join("")}
+    </div>
+  `;
 }
 
 function renderHolePerformanceList(title, holes) {
@@ -1142,6 +1170,7 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
     : null;
   const advancedGate = getFeatureGate("advanced-stats", getSubscription(state));
   const comparisonGate = getFeatureGate("player-comparison", getSubscription(state));
+  const isCurrentUser = profileId === state.currentUser.profileId;
 
   if (comparison && !comparisonGate.locked) {
     return `
@@ -1191,6 +1220,17 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
             <span>Handicap</span>
             <strong>${advancedGate.locked ? "Premium" : `${formatHandicap(comparison.left.handicapIndex)} / ${formatHandicap(comparison.right.handicapIndex)}`}</strong>
           </article>
+          <article>
+            <span>Home course</span>
+            <strong>${escapeHtml(comparison.left.homeCourse || "Private")} / ${escapeHtml(comparison.right.homeCourse || "Private")}</strong>
+          </article>
+        </div>
+        <div class="competitive-section-block">
+          <p class="mini-label">Recent rounds</p>
+          <div class="comparison-grid comparison-recent-grid">
+            <div>${renderRecentRoundRows(comparison.left.recentForm)}</div>
+            <div>${renderRecentRoundRows(comparison.right.recentForm)}</div>
+          </div>
         </div>
         ${advancedGate.locked
           ? `
@@ -1206,6 +1246,10 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
               <div class="feature-row">Toughest hole: ${comparison.left.hardestHoles?.[0] ? `Hole ${comparison.left.hardestHoles[0].holeNumber}` : "--"} / ${comparison.right.hardestHoles?.[0] ? `Hole ${comparison.right.hardestHoles[0].holeNumber}` : "--"}</div>
             </div>
           `}
+        <div class="row-actions competitive-action-row">
+          <button class="button subtle" type="button" data-action="share-profile-placeholder">Share your card</button>
+          <button class="button subtle" type="button" data-action="share-round-summary-placeholder">Share round summary</button>
+        </div>
       </article>
     `;
   }
@@ -1222,7 +1266,7 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
         ${renderAvatarChip(preview.avatarLabel, "is-large")}
         <div>
           <strong>${escapeHtml(preview.displayName)}</strong>
-          <p>${escapeHtml(preview.username)}</p>
+          <p>${escapeHtml(preview.username)} / ${escapeHtml(preview.headToHeadLabel)}</p>
         </div>
       </div>
       <div class="summary-grid compact">
@@ -1255,6 +1299,22 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
           <strong>${formatAverageScore(preview.averagePutts)}</strong>
         </article>
       </div>
+      ${(preview.homeCourse || preview.handicap !== null && preview.handicap !== undefined)
+        ? `
+          <div class="competitive-public-strip">
+            ${preview.homeCourse ? `<span>Home course ${escapeHtml(preview.homeCourse)}</span>` : ""}
+            ${preview.handicap !== null && preview.handicap !== undefined ? `<span>Handicap ${escapeHtml(String(preview.handicap))}</span>` : ""}
+          </div>
+        `
+        : ""}
+      ${preview.recentForm?.length
+        ? `
+          <div class="competitive-section-block">
+            <p class="mini-label">Recent rounds</p>
+            ${renderRecentRoundRows(preview.recentForm)}
+          </div>
+        `
+        : ""}
       <div class="stack-list compact-stack">
         <div class="feature-row">Recent form: ${escapeHtml(preview.recentFormSummary)}</div>
         ${preview.homeCourse ? `<div class="feature-row">Home course: ${escapeHtml(preview.homeCourse)}</div>` : ""}
@@ -1271,8 +1331,73 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
           ? preview.smartInsights.map((insight) => `<div class="feature-row">${escapeHtml(insight)}</div>`).join("")
           : ""}
       </div>
+      ${isCurrentUser
+        ? `
+          <div class="row-actions competitive-action-row">
+            <button class="button subtle" type="button" data-action="share-profile-placeholder">Share profile</button>
+            <button class="button subtle" type="button" data-action="share-round-summary-placeholder">Round brag card</button>
+          </div>
+        `
+        : ""}
     </article>
   `;
+}
+
+function renderNearbyRoundRows(nearbyGames, {
+  compact = false,
+  actionLabel = "Join now",
+} = {}) {
+  if (!nearbyGames.length) {
+    return "";
+  }
+
+  return nearbyGames.map((game) => `
+    <article class="list-row ${compact ? "" : "large"} ${compact ? "" : "discovery-list-row"}">
+      <div>
+        <strong>${escapeHtml(game.title)}</strong>
+        <p>${escapeHtml(game.courseName)} / ${escapeHtml(game.modeLabel)} / ${escapeHtml(game.statusLabel || `${game.playerCount || 0} golfers`)}</p>
+      </div>
+      <div class="list-metrics ${compact ? "" : "discovery-list-metrics"}">
+        <span>${escapeHtml(game.distance)}</span>
+        ${compact ? "" : `<span>${escapeHtml(game.transport)}</span>`}
+        <span>${escapeHtml(game.inviteCode)}</span>
+        <button class="button subtle" type="button" data-action="quick-join-code" data-code="${game.inviteCode}">${escapeHtml(actionLabel)}</button>
+      </div>
+    </article>
+  `).join("");
+}
+
+function renderNearbyPlayerRows(nearbyPlayers) {
+  if (!nearbyPlayers.length) {
+    return `
+      <div class="empty-state compact-empty-state">
+        <strong>No nearby golfers visible yet.</strong>
+        <p>As more testers join and host rounds, their public cards will appear here when privacy allows it.</p>
+      </div>
+    `;
+  }
+
+  return nearbyPlayers.slice(0, 5).map((player) => `
+    <article class="nearby-player-row">
+      <div class="nearby-player-main">
+        ${renderAvatarChip(player.avatarLabel)}
+        <div>
+          <strong>${escapeHtml(player.displayName)}</strong>
+          <p>${escapeHtml(player.username)} / ${escapeHtml(player.statusLabel)}</p>
+        </div>
+      </div>
+      <div class="nearby-player-support">
+        <span>${escapeHtml(player.detail)}</span>
+        <span>${escapeHtml(player.statsSummary)}</span>
+        ${player.homeCourse ? `<span>${escapeHtml(player.homeCourse)}</span>` : ""}
+        ${player.handicap !== null && player.handicap !== undefined ? `<span>Hdcp ${escapeHtml(String(player.handicap))}</span>` : ""}
+      </div>
+      <div class="row-actions nearby-player-actions">
+        <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(player.profileId)}">${player.isLive ? "View live card" : "View card"}</button>
+        ${player.inviteCode ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${player.inviteCode}">Join round</button>` : ""}
+      </div>
+    </article>
+  `).join("");
 }
 
 function renderPrimaryActions(state, activeRound) {
@@ -1327,18 +1452,8 @@ function renderJoinRoundQuickCard(state, options = {}) {
       ${nearbyGames.length
         ? `
           <div class="stack-list compact-stack nearby-preview-list">
-            ${nearbyGames.map((game) => `
-              <article class="list-row">
-                <div>
-                  <strong>${escapeHtml(game.title)}</strong>
-                  <p>${escapeHtml(game.courseName)} / ${escapeHtml(game.modeLabel)}</p>
-                </div>
-                <div class="list-metrics">
-                  <span>${escapeHtml(game.inviteCode)}</span>
-                  <button class="button subtle" type="button" data-action="quick-join-code" data-code="${game.inviteCode}">Use code</button>
-                </div>
-              </article>
-            `).join("")}
+            <p class="mini-label">Nearby and discoverable right now</p>
+            ${renderNearbyRoundRows(nearbyGames, { compact: true })}
           </div>
         `
         : ""}
@@ -2637,6 +2752,47 @@ function formatCompetitiveDelta(value) {
   return Number.isInteger(magnitude) ? String(magnitude) : magnitude.toFixed(1).replace(/\.0$/, "");
 }
 
+function renderCompetitiveSpotlights(summary) {
+  const highlights = [
+    summary?.holeWinner
+      ? {
+          label: "Hole winner",
+          value: summary.holeWinner.label,
+          tone: summary.holeWinner.tied ? "steady" : "up",
+        }
+      : null,
+    summary?.momentum
+      ? {
+          label: "Momentum",
+          value: summary.momentum.label,
+          tone: summary.momentum.tone || "steady",
+        }
+      : null,
+    summary?.headToHead
+      ? {
+          label: "Head to head",
+          value: summary.headToHead.label,
+          tone: summary?.localParticipant?.rank === 1 ? "up" : "steady",
+        }
+      : null,
+  ].filter(Boolean);
+
+  if (!highlights.length) {
+    return "";
+  }
+
+  return `
+    <div class="competitive-spotlight-strip">
+      ${highlights.map((item) => `
+        <article class="competitive-spotlight-pill is-${item.tone}">
+          <span>${escapeHtml(item.label)}</span>
+          <strong>${escapeHtml(item.value)}</strong>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
 function getCompetitiveFeedback(round, summary, participantId) {
   const leaderboard = summary?.leaderboard || [];
   const entry = leaderboard.find((item) => item.id === participantId);
@@ -2767,7 +2923,7 @@ function renderHoleEditor(state, round) {
             ${context.isLocal ? `<span class="player-badge is-local">You</span>` : ""}
             ${context.isLeader ? `<span class="player-badge is-leader">Leader</span>` : ""}
             ${context.previewProfileId
-              ? `<button class="button subtle profile-preview-button profile-preview-button--inline" type="button" data-action="select-profile-preview" data-profile-id="${context.previewProfileId}">Profile</button>`
+              ? `<button class="button subtle profile-preview-button profile-preview-button--inline" type="button" data-action="select-profile-preview" data-profile-id="${context.previewProfileId}" data-preview-view="community">View card</button>`
               : ""}
           </div>
         </div>
@@ -2780,6 +2936,7 @@ function renderHoleEditor(state, round) {
             <p class="body-copy compact-copy participant-helper-copy">Use this extra editor only if one phone really needs to score for another golfer too.</p>
             <div class="participant-compact-stats">
               <span>Status ${escapeHtml(context.leaderboardEntry?.displayStatus || "--")}</span>
+              <span>${escapeHtml(context.leaderboardEntry?.rankTrendLabel || "Opening stretch")}</span>
               <span>FW ${context.participantTotals.fairwaysHit}/${context.participantTotals.fairwayOpportunities} / GIR ${context.participantTotals.greensHit}/${context.participantTotals.girOpportunities}</span>
               <span>Putts ${context.participantTotals.averagePutts ?? "--"}</span>
             </div>
@@ -2952,7 +3109,7 @@ function renderHoleEditor(state, round) {
           <span>Hole ${hole.number}</span>
           <strong>${context.entry?.strokes ?? "--"}</strong>
           ${context.previewProfileId
-            ? `<button class="button subtle profile-preview-button" type="button" data-action="select-profile-preview" data-profile-id="${context.previewProfileId}">Preview</button>`
+            ? `<button class="button subtle profile-preview-button" type="button" data-action="select-profile-preview" data-profile-id="${context.previewProfileId}" data-preview-view="community">View card</button>`
             : ""}
         </div>
       </article>
@@ -2991,6 +3148,7 @@ function renderHoleEditor(state, round) {
         </div>
       ` : ""}
       <p class="body-copy compact-copy round-entry-focus">Your score entry opens first. The shared round stays visible below without forcing you to score everyone else.</p>
+      ${renderCompetitiveSpotlights(summary)}
       <div class="participant-grid participant-grid--single">
         ${primaryParticipant ? renderEditableParticipant(primaryParticipant) : ""}
       </div>
@@ -3040,6 +3198,7 @@ function renderLeaderboardCard(state, round) {
         <span class="mini-label">${leader ? `Leader ${leader.name}` : "Leaderboard"}</span>
         <strong>${localEntry ? `You #${localEntry.rank} / ${localEntry.displayStatus}` : leader ? leader.displayStatus : "Waiting on scores"}</strong>
       </div>
+      ${renderCompetitiveSpotlights(summary)}
       <div class="leaderboard-list leaderboard-list--compact">
         ${summary.leaderboard
           .map((entry) => {
@@ -3067,6 +3226,10 @@ function renderLeaderboardCard(state, round) {
                   <span>Thru ${entry.thru}</span>
                   <strong>${escapeHtml(entry.displayStatus)}</strong>
                   <span>${escapeHtml(gapLabel)}</span>
+                  <span class="leader-trend-pill is-${escapeHtml(entry.rankTrend || "steady")}">${escapeHtml(entry.rankTrendLabel || "Steady")}</span>
+                  ${previewProfileId
+                    ? `<button class="button subtle leaderboard-preview-button" type="button" data-action="select-profile-preview" data-profile-id="${previewProfileId}" data-preview-view="community">View card</button>`
+                    : ""}
                 </div>
               </article>
             `;
@@ -3652,8 +3815,10 @@ function renderCommunityView(state) {
   const activeRound = getActiveRound(state);
   const activeGroup = getActiveGroup(state, activeRound);
   const nearbyGames = listNearbyGames(state);
+  const nearbyPlayers = listNearbyPlayers(state);
   const featuredProfileId = state.session.selectedProfileId
     || activeRound?.players.find((player) => !player.userId)?.profileId
+    || nearbyPlayers[0]?.profileId
     || state.currentUser.profileId;
   const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "";
 
@@ -3663,11 +3828,11 @@ function renderCommunityView(state) {
         <div class="section-heading">
           <div>
             <p class="eyebrow">Community</p>
-            <h3>Join or host a shared round</h3>
+            <h3>Join fast and keep golfers visible</h3>
           </div>
           <span class="status-pill">${escapeHtml(inviteCode || "No code yet")}</span>
         </div>
-        <p class="body-copy">This screen is built to do one thing quickly: open the same round on another golfer's phone without making anyone hunt for controls.</p>
+        <p class="body-copy">Use nearby discovery when the group is already around you, or fall back to invite code when someone texts it over. Both paths open straight into the same shared round flow.</p>
         <div class="row-actions help-row">
           ${renderHelpLink("Need help joining a round?", "playing-round", true)}
         </div>
@@ -3733,6 +3898,7 @@ function renderCommunityView(state) {
                 <h3>Who is in this round</h3>
               </div>
             </div>
+            <p class="body-copy compact-copy">Tap any golfer to open their public competitive card. The selected card stays below so you can compare the group without losing your place.</p>
             <div class="participant-preview-row">
               ${activeRound.players.map((player) => `
                 <button class="player-preview-pill" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(player.profileId || "")}">
@@ -3745,42 +3911,51 @@ function renderCommunityView(state) {
         `
         : ""}
       ${renderCompetitivePreviewCard(state, featuredProfileId, featuredProfileId === state.currentUser.profileId ? "Your public matchup card" : "Selected golfer preview")}
-      <article class="card">
+      <article class="card card-span-2 discovery-card">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Nearby games</p>
-            <h3>Quick join suggestions</h3>
+            <p class="eyebrow">Nearby and discover</p>
+            <h3>Open rounds and active golfers</h3>
           </div>
         </div>
-        <div class="stack-list">
-          ${nearbyGames
-            .slice(0, 4)
-            .map(
-              (game) => `
-                <article class="list-row large">
-                  <div>
-                    <strong>${escapeHtml(game.title)}</strong>
-                    <p>${escapeHtml(game.courseName)} / ${escapeHtml(game.modeLabel)}</p>
-                  </div>
-                  <div class="list-metrics">
-                    <span>${escapeHtml(game.distance)}</span>
-                    <span>${escapeHtml(game.transport)}</span>
-                    <button class="button subtle" type="button" data-action="quick-join-code" data-code="${game.inviteCode}">Join</button>
-                  </div>
-                </article>
-              `
-            )
-            .join("")}
+        <p class="body-copy compact-copy">This is the low-friction path real testers asked for: spot a live round, tap once to join, or open another golfer's card before the first tee.</p>
+        <div class="community-discovery-grid">
+          <div class="stack-list discovery-column">
+            <p class="mini-label">Discoverable rounds</p>
+            ${nearbyGames.length
+              ? renderNearbyRoundRows(nearbyGames.slice(0, 4))
+              : `
+                <div class="empty-state compact-empty-state">
+                  <strong>No nearby rounds yet.</strong>
+                  <p>Host the active round or keep code-based join as the fallback.</p>
+                </div>
+              `}
+          </div>
+          <div class="stack-list discovery-column">
+            <p class="mini-label">Nearby golfers</p>
+            ${renderNearbyPlayerRows(nearbyPlayers)}
+          </div>
         </div>
       </article>
       <article class="card card-span-2">
-        <div class="empty-state onboarding-state">
-          <strong>Keep Community simple during testing.</strong>
-          <p>Use this screen to join by code, host the active round, and confirm who is in the group. Tournament and league depth can grow later without slowing the core phone flow now.</p>
-          <div class="row-actions empty-state-actions">
-            <button class="button primary" type="button" data-action="nav-view" data-view="round">Back to round</button>
-            ${renderHelpLink("Shared round guide", "playing-round", true)}
-          </div>
+        <div class="summary-grid compact">
+          <article>
+            <span>Fallback path</span>
+            <strong>Join by code</strong>
+          </article>
+          <article>
+            <span>Fast path</span>
+            <strong>Discover nearby</strong>
+          </article>
+          <article>
+            <span>Player visibility</span>
+            <strong>Tap to view cards</strong>
+          </article>
+        </div>
+        <p class="body-copy compact-copy">Community is now built around fast joining, visible golfers, and easy shared-round confidence. The invite code path still stays ready anytime nearby discovery is not enough.</p>
+        <div class="row-actions empty-state-actions">
+          <button class="button primary" type="button" data-action="nav-view" data-view="round">Back to round</button>
+          ${renderHelpLink("Shared round guide", "playing-round", true)}
         </div>
       </article>
     </section>

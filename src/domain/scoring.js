@@ -7,6 +7,14 @@ function isPlayedEntry(entry) {
   return Boolean(entry && entry.strokes !== null && entry.strokes > 0);
 }
 
+function getRoundHoles(round, holeLimit = null) {
+  if (!Number.isFinite(holeLimit)) {
+    return round.holes;
+  }
+
+  return round.holes.filter((hole) => hole.number <= holeLimit);
+}
+
 function roundRatio(value, total) {
   return total ? Math.round((value / total) * 100) : 0;
 }
@@ -392,8 +400,9 @@ export function applyHoleUpdate(round, holeNumber, participantId, patch, options
   return round;
 }
 
-export function getParticipantTotals(round, participantId) {
-  const holes = round.holes
+export function getParticipantTotals(round, participantId, options = {}) {
+  const holeLimit = typeof options === "number" ? options : options?.holeLimit ?? null;
+  const holes = getRoundHoles(round, holeLimit)
     .map((hole) => ({
       hole,
       entry: hole.entries.find((item) => item.participantId === participantId),
@@ -450,10 +459,10 @@ export function getParticipantTotals(round, participantId) {
   };
 }
 
-function buildStrokeLeaderboard(round, currentUserId) {
+function buildStrokeLeaderboard(round, currentUserId, holeLimit = null) {
   return getScoringParticipants(round)
     .map((participant) => {
-      const totals = getParticipantTotals(round, participant.id);
+      const totals = getParticipantTotals(round, participant.id, { holeLimit });
       const localIds = getLocalParticipantIds(round, currentUserId);
       return {
         id: participant.id,
@@ -485,12 +494,12 @@ function buildStrokeLeaderboard(round, currentUserId) {
     }));
 }
 
-function buildMatchLeaderboard(round, currentUserId) {
+function buildMatchLeaderboard(round, currentUserId, holeLimit = null) {
   const sides = getScoringParticipants(round);
   const [left, right] = sides;
 
   if (!left || !right) {
-    return buildStrokeLeaderboard(round, currentUserId);
+    return buildStrokeLeaderboard(round, currentUserId, holeLimit);
   }
 
   let leftWins = 0;
@@ -498,7 +507,7 @@ function buildMatchLeaderboard(round, currentUserId) {
   let halved = 0;
   let holesPlayed = 0;
 
-  round.holes.forEach((hole) => {
+  getRoundHoles(round, holeLimit).forEach((hole) => {
     const leftEntry = hole.entries.find((entry) => entry.participantId === left.id);
     const rightEntry = hole.entries.find((entry) => entry.participantId === right.id);
     if (!leftEntry?.strokes || !rightEntry?.strokes) {
@@ -564,17 +573,167 @@ function buildMatchLeaderboard(round, currentUserId) {
   ].sort((leftEntry, rightEntry) => leftEntry.rank - rightEntry.rank);
 }
 
-export function buildLeaderboard(round, currentUserId) {
+export function buildLeaderboard(round, currentUserId, holeLimit = null) {
   return round.mode === "match"
-    ? buildMatchLeaderboard(round, currentUserId)
-    : buildStrokeLeaderboard(round, currentUserId);
+    ? buildMatchLeaderboard(round, currentUserId, holeLimit)
+    : buildStrokeLeaderboard(round, currentUserId, holeLimit);
+}
+
+function getLastScoredHoleNumber(round) {
+  return round.holes.reduce((highest, hole) => {
+    const hasScore = hole.entries.some((entry) => isPlayedEntry(entry));
+    return hasScore ? hole.number : highest;
+  }, 0);
+}
+
+function buildHoleWinnerSummary(round) {
+  const participants = getScoringParticipants(round);
+  const participantNames = new Map(participants.map((participant) => [participant.id, participant.name]));
+  const latestCompetitiveHole = [...round.holes]
+    .reverse()
+    .find((hole) => hole.entries.filter((entry) => isPlayedEntry(entry)).length >= 2);
+
+  if (!latestCompetitiveHole) {
+    return null;
+  }
+
+  const playedEntries = latestCompetitiveHole.entries.filter((entry) => isPlayedEntry(entry));
+  const winningScore = Math.min(...playedEntries.map((entry) => entry.strokes));
+  const winnerNames = playedEntries
+    .filter((entry) => entry.strokes === winningScore)
+    .map((entry) => participantNames.get(entry.participantId) || "Golfer");
+
+  return {
+    holeNumber: latestCompetitiveHole.number,
+    winningScore,
+    winnerNames,
+    tied: winnerNames.length > 1,
+    label: winnerNames.length > 1
+      ? `Hole ${latestCompetitiveHole.number} halved`
+      : `Hole ${latestCompetitiveHole.number} to ${winnerNames[0]}`,
+    detail: winnerNames.length > 1
+      ? `${winnerNames.join(" and ")} matched ${winningScore}.`
+      : `${winnerNames[0]} won the hole with ${winningScore}.`,
+  };
+}
+
+function buildMomentumSummary(localTotals) {
+  const recentHoles = (localTotals?.holeDetails || []).slice(-3);
+
+  if (!recentHoles.length) {
+    return {
+      label: "Start the card",
+      detail: "Momentum shows up after the first few holes.",
+      tone: "steady",
+    };
+  }
+
+  const totalToPar = recentHoles.reduce((sum, hole) => sum + hole.toPar, 0);
+  const underParCount = recentHoles.filter((hole) => hole.toPar < 0).length;
+  const evenOrBetterCount = recentHoles.filter((hole) => hole.toPar <= 0).length;
+  const bogeyOrWorseCount = recentHoles.filter((hole) => hole.toPar > 0).length;
+
+  if (underParCount >= 2 || (recentHoles.length >= 2 && evenOrBetterCount === recentHoles.length)) {
+    return {
+      label: "Hot streak",
+      detail: `${evenOrBetterCount}/${recentHoles.length} recent holes at par or better.`,
+      tone: "up",
+    };
+  }
+
+  if (totalToPar <= -1) {
+    return {
+      label: "Momentum up",
+      detail: `${Math.abs(totalToPar)} under par over the last ${recentHoles.length} holes.`,
+      tone: "up",
+    };
+  }
+
+  if (bogeyOrWorseCount >= 2) {
+    return {
+      label: "Bounce-back spot",
+      detail: `Last ${recentHoles.length} holes have trended ${totalToPar > 0 ? `${totalToPar} over` : "flat"}.`,
+      tone: "down",
+    };
+  }
+
+  return {
+    label: "Steady stretch",
+    detail: `Last ${recentHoles.length} holes are settling in.`,
+    tone: "steady",
+  };
+}
+
+function buildHeadToHeadSummary(round, leaderboard, localParticipant) {
+  if (!localParticipant || leaderboard.length < 2) {
+    return null;
+  }
+
+  const rival = localParticipant.rank === 1
+    ? leaderboard.find((entry) => entry.id !== localParticipant.id)
+    : leaderboard[Math.max(0, localParticipant.rank - 2)] || leaderboard[0];
+
+  if (!rival) {
+    return null;
+  }
+
+  if (round.mode === "match") {
+    return {
+      rivalName: rival.name,
+      label: localParticipant.rank === 1 ? `Ahead of ${rival.name}` : `Chasing ${rival.name}`,
+      detail: `${localParticipant.displayStatus} vs ${rival.displayStatus}`,
+    };
+  }
+
+  const strokeGap = Math.abs((localParticipant.total || 0) - (rival.total || 0));
+  return {
+    rivalName: rival.name,
+    label: localParticipant.rank === 1 ? `Ahead of ${rival.name}` : `Chasing ${rival.name}`,
+    detail: `${strokeGap} ${strokeGap === 1 ? "stroke" : "strokes"} ${localParticipant.rank === 1 ? "clear" : "back"}`,
+  };
+}
+
+function addRankMovement(round, currentUserId, leaderboard) {
+  const lastScoredHole = getLastScoredHoleNumber(round);
+  if (lastScoredHole <= 1) {
+    return leaderboard.map((entry) => ({
+      ...entry,
+      previousRank: entry.rank,
+      rankDelta: 0,
+      rankTrend: "steady",
+      rankTrendLabel: "Opening stretch",
+    }));
+  }
+
+  const previousLeaderboard = buildLeaderboard(round, currentUserId, lastScoredHole - 1);
+  const previousRanks = new Map(previousLeaderboard.map((entry) => [entry.id, entry.rank]));
+
+  return leaderboard.map((entry) => {
+    const previousRank = previousRanks.get(entry.id) ?? entry.rank;
+    const rankDelta = previousRank - entry.rank;
+
+    return {
+      ...entry,
+      previousRank,
+      rankDelta,
+      rankTrend: rankDelta > 0 ? "up" : rankDelta < 0 ? "down" : "steady",
+      rankTrendLabel: rankDelta > 0
+        ? `Up ${rankDelta}`
+        : rankDelta < 0
+          ? `Down ${Math.abs(rankDelta)}`
+          : "Steady",
+    };
+  });
 }
 
 export function getRoundSummary(round, currentUserId) {
-  const leaderboard = buildLeaderboard(round, currentUserId);
+  const leaderboard = addRankMovement(round, currentUserId, buildLeaderboard(round, currentUserId));
   const localParticipant = leaderboard.find((entry) => entry.isLocal) || leaderboard[0];
   const localTotals = localParticipant ? getParticipantTotals(round, localParticipant.id) : null;
   const holesPlayed = Math.max(...leaderboard.map((entry) => entry.thru), 0);
+  const holeWinner = buildHoleWinnerSummary(round);
+  const momentum = buildMomentumSummary(localTotals);
+  const headToHead = buildHeadToHeadSummary(round, leaderboard, localParticipant);
 
   return {
     leaderboard,
@@ -586,6 +745,9 @@ export function getRoundSummary(round, currentUserId) {
       ...localTotals,
       ...summarizeHolePerformance([localTotals.holeDetails]),
     }) : [],
+    holeWinner,
+    momentum,
+    headToHead,
     roundLabel: GAME_MODES[round.mode].label,
     averagePutts: localTotals?.averagePutts ?? null,
     completed: round.status === "completed",
