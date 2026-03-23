@@ -5,7 +5,7 @@ import {
   ensureRoundSyncScaffold,
   getPendingRoundEvents,
 } from "../domain/round-sync.js";
-import { upsertLiveRoundSessionState } from "../state/round-state.js";
+import { resolveLiveRoundSessionEntities, upsertLiveRoundSessionState } from "../state/round-state.js";
 import { toBackendLiveRoundSessionRecord, fromBackendLiveRoundSessionRecord } from "./backend-models.js";
 import { createLiveSessionMeta, shouldApplyLiveSessionSnapshot } from "./realtime-session-service.js";
 import { createSyncService } from "./sync-service.js";
@@ -390,6 +390,7 @@ export function createSupabaseRealtimeGatewayFactory({
       let currentJoinRef = null;
       let currentSessionMeta = null;
       let sessionReconcileTimer = null;
+      let pendingFollowupReconcile = null;
       let manualDisconnect = false;
       let refCounter = 0;
       const pendingReplies = new Map();
@@ -433,6 +434,13 @@ export function createSupabaseRealtimeGatewayFactory({
         }
       }
 
+      function clearFollowupReconcileTimer() {
+        if (pendingFollowupReconcile && clearTimeoutFn) {
+          clearTimeoutFn(pendingFollowupReconcile);
+          pendingFollowupReconcile = null;
+        }
+      }
+
       function activateSessionMeta(meta = {}) {
         const previousInviteCode = currentSessionMeta?.inviteCode || "";
         currentSessionMeta = createLiveSessionMeta({
@@ -462,6 +470,7 @@ export function createSupabaseRealtimeGatewayFactory({
         }
 
         clearSessionReconcileTimer();
+        clearFollowupReconcileTimer();
 
         if (socket) {
           try {
@@ -476,6 +485,23 @@ export function createSupabaseRealtimeGatewayFactory({
         currentChannel = null;
         currentJoinRef = null;
         cleanupPendingReplies();
+      }
+
+      function scheduleFollowupReconcile(reason = "realtime-followup-reconcile", delayMs = 350) {
+        if (!setTimeoutFn || !currentSessionMeta?.inviteCode) {
+          return;
+        }
+
+        clearFollowupReconcileTimer();
+        pendingFollowupReconcile = setTimeoutFn(() => {
+          pendingFollowupReconcile = null;
+          void reconcileCurrentSession({
+            force: false,
+            reason,
+          }).catch((error) => {
+            console.warn("[Golfers Nation] Follow-up live session reconcile failed.", error);
+          });
+        }, delayMs);
       }
 
       function scheduleReconnect() {
@@ -810,18 +836,43 @@ export function createSupabaseRealtimeGatewayFactory({
           return;
         }
 
+        const resolvedInviteCode = normalizeInviteCode(payload.inviteCode);
+
         console.info("[Golfers Nation] Incoming member-state event received.", {
-          inviteCode: payload.inviteCode,
+          inviteCode: resolvedInviteCode,
           userId: payload.member.userId || null,
           profileId: payload.member.profileId || null,
+          roundId: payload.roundId || null,
+          sessionId: payload.sessionId || null,
         });
 
         store.setState((draft) => {
-          const group = (draft.groups || []).find((entry) => entry.inviteCode === payload.inviteCode);
-          const round = (draft.rounds || []).find((entry) =>
-            entry.inviteCode === payload.inviteCode || (group && entry.id === group.roundId)
-          );
-          if (!group && !round) {
+          const resolved = resolveLiveRoundSessionEntities(draft, {
+            inviteCode: resolvedInviteCode,
+            roundId: payload.roundId || currentSessionMeta?.roundId || null,
+            sessionId: payload.sessionId || currentSessionMeta?.sessionId || null,
+            createGroupIfMissing: true,
+          });
+          const group = resolved.group;
+          const round = resolved.round;
+
+          console.info("[Golfers Nation] Host member-state lookup result.", {
+            inviteCode: resolvedInviteCode,
+            lookupRoundId: payload.roundId || currentSessionMeta?.roundId || null,
+            lookupSessionId: payload.sessionId || currentSessionMeta?.sessionId || null,
+            foundRound: Boolean(round),
+            foundGroup: Boolean(group),
+            createdGroup: resolved.createdGroup,
+            resolvedRoundId: round?.id || null,
+            resolvedGroupId: group?.id || null,
+          });
+
+          if (!round) {
+            console.warn("[Golfers Nation] Host member-state lookup missed the local round. Scheduling a forced reconcile.", {
+              inviteCode: resolvedInviteCode,
+              lookupRoundId: payload.roundId || currentSessionMeta?.roundId || null,
+              lookupSessionId: payload.sessionId || currentSessionMeta?.sessionId || null,
+            });
             void reconcileCurrentSession({
               force: true,
               reason: "realtime-member-state-reconcile",
@@ -838,7 +889,10 @@ export function createSupabaseRealtimeGatewayFactory({
             group.members = Array.isArray(group.members) ? group.members : [];
           }
           let member = group?.members?.find((entry) =>
-            entry.userId === payload.member.userId || entry.profileId === payload.member.profileId
+            entry.id === payload.member.id
+              || entry.playerId === payload.member.playerId
+              || entry.userId === payload.member.userId
+              || entry.profileId === payload.member.profileId
           ) || null;
 
           if (!member) {
@@ -862,11 +916,15 @@ export function createSupabaseRealtimeGatewayFactory({
             group.updatedAt = now();
           }
 
+          const ensuredMember = ensureMemberOnRound(round, {
+            ...payload.member,
+            playerId: payload.member.playerId || member?.playerId || null,
+          });
+          if (member && ensuredMember.participantId && member.playerId !== ensuredMember.participantId) {
+            member.playerId = ensuredMember.participantId;
+          }
+
           if (round) {
-            ensureMemberOnRound(round, {
-              ...payload.member,
-              playerId: payload.member.playerId || member?.playerId || null,
-            });
             markRoundConnected(round, {
               at: now(),
               note: `${payload.member.displayName || "A golfer"} joined the live round.`,
@@ -874,7 +932,7 @@ export function createSupabaseRealtimeGatewayFactory({
           }
 
           console.info("[Golfers Nation] Host participant merge after member-state.", {
-            inviteCode: payload.inviteCode,
+            inviteCode: resolvedInviteCode,
             membersBefore: beforeMemberCount,
             membersAfter: group?.members?.length || 0,
             playersBefore: beforePlayerCount,
@@ -884,10 +942,11 @@ export function createSupabaseRealtimeGatewayFactory({
         }, { reason: "realtime-member-state" });
 
         activateSessionMeta({
-          inviteCode: payload.inviteCode,
-          roundId: store.getState().session?.activeRoundId || currentSessionMeta?.roundId || null,
-          updatedAt: now(),
+          inviteCode: resolvedInviteCode,
+          roundId: payload.roundId || store.getState().session?.activeRoundId || currentSessionMeta?.roundId || null,
+          sessionId: payload.sessionId || currentSessionMeta?.sessionId || null,
         });
+        scheduleFollowupReconcile("realtime-member-state-followup");
       }
 
       function applyIncomingRoundEvent(payload) {
@@ -962,8 +1021,8 @@ export function createSupabaseRealtimeGatewayFactory({
         activateSessionMeta({
           inviteCode: payload.inviteCode || currentSessionMeta?.inviteCode || "",
           roundId: payload.roundId,
-          updatedAt: payload.sentAt || incomingEvent.occurredAt || now(),
         });
+        scheduleFollowupReconcile("realtime-round-event-followup");
       }
 
       function applyIncomingRoundSnapshot(payload) {
@@ -1245,20 +1304,35 @@ export function createSupabaseRealtimeGatewayFactory({
               username: store.getState().currentUser.username,
               avatarLabel: store.getState().currentUser.avatarLabel,
               role: "player",
-              connectionState: "connected",
-            };
+                connectionState: "connected",
+              };
           const topic = createRealtimeTopic(liveSession.inviteCode);
-          await bridge.broadcastRealtimeMessage(topic, "member-state", {
-            inviteCode: liveSession.inviteCode,
-            member: joiningMember,
-          });
           await upsertLiveSessionFromRound(round, group, {
             broadcast: true,
           });
+          const memberBroadcast = await bridge.broadcastRealtimeMessage(topic, "member-state", {
+            inviteCode: liveSession.inviteCode,
+            roundId: round.id,
+            sessionId: currentSessionMeta?.sessionId || liveSession.id,
+            member: joiningMember,
+          });
+          if (!memberBroadcast?.error) {
+            console.info("[Golfers Nation] Joiner member-state broadcast sent.", {
+              inviteCode: liveSession.inviteCode,
+              roundId: round.id,
+              sessionId: currentSessionMeta?.sessionId || liveSession.id,
+              participantId: ensuredIdentity.participantId,
+            });
+          }
         } else {
           const topic = createRealtimeTopic(liveSession.inviteCode);
-          await bridge.broadcastRealtimeMessage(topic, "member-state", {
+          await upsertLiveSessionFromRound(round, group, {
+            broadcast: false,
+          });
+          const memberBroadcast = await bridge.broadcastRealtimeMessage(topic, "member-state", {
             inviteCode: liveSession.inviteCode,
+            roundId: round.id,
+            sessionId: currentSessionMeta?.sessionId || liveSession.id,
             member: group?.members?.find((member) => member.userId === store.getState().currentUser.id)
               || {
                 id: uid("member"),
@@ -1272,6 +1346,14 @@ export function createSupabaseRealtimeGatewayFactory({
                 connectionState: "connected",
               },
           });
+          if (!memberBroadcast?.error) {
+            console.info("[Golfers Nation] Joiner member-state broadcast sent.", {
+              inviteCode: liveSession.inviteCode,
+              roundId: round.id,
+              sessionId: currentSessionMeta?.sessionId || liveSession.id,
+              participantId: ensuredIdentity.participantId,
+            });
+          }
         }
 
         return {
@@ -1319,6 +1401,7 @@ export function createSupabaseRealtimeGatewayFactory({
           reconnectTimer = null;
         }
         clearSessionReconcileTimer();
+        clearFollowupReconcileTimer();
         teardownSocket();
       }
 

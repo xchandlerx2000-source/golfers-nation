@@ -66,6 +66,119 @@ export function updateRoundSyncDraft(draft, roundId, updater) {
   return round;
 }
 
+function normalizeInviteCode(value = "") {
+  return String(value || "").trim().toUpperCase();
+}
+
+function createGroupMemberFromPlayer(player, index = 0) {
+  return {
+    id: `member-${player.id || player.profileId || player.userId || index}`,
+    playerId: player.id || null,
+    profileId: player.profileId || null,
+    userId: player.userId || null,
+    displayName: player.displayName || player.name || "Golfer",
+    username: player.username || "",
+    avatarLabel: player.avatarLabel || "GN",
+    role: index === 0 ? "host" : "player",
+    connectionState: index === 0 ? "ready" : "connected",
+  };
+}
+
+export function ensureLiveRoundGroupState(draft, round, {
+  inviteCode = "",
+  sessionId = null,
+} = {}) {
+  if (!round) {
+    return null;
+  }
+
+  const normalizedInviteCode = normalizeInviteCode(inviteCode || round.inviteCode);
+  const nextGroup = {
+    id: sessionId || round.groupId || `group-${round.id}`,
+    roundId: round.id,
+    title: `${round.courseName} live round`,
+    inviteCode: normalizedInviteCode,
+    status: "active",
+    transport: round.sync?.transport || "cloud",
+    hostUserId: round.players?.[0]?.userId || null,
+    createdAt: round.createdAt || Date.now(),
+    updatedAt: Date.now(),
+    hostRequired: false,
+    hostOptional: true,
+    members: (round.players || []).map((player, index) => createGroupMemberFromPlayer(player, index)),
+    feed: [],
+  };
+
+  if (normalizedInviteCode) {
+    round.inviteCode = normalizedInviteCode;
+  }
+  round.groupId = nextGroup.id;
+  draft.groups.unshift(nextGroup);
+  return nextGroup;
+}
+
+export function resolveLiveRoundSessionEntities(draft, {
+  inviteCode = "",
+  roundId = null,
+  sessionId = null,
+  createGroupIfMissing = false,
+} = {}) {
+  const normalizedInviteCode = normalizeInviteCode(inviteCode);
+  let round = roundId ? draft.rounds.find((entry) => entry.id === roundId) || null : null;
+  let group = sessionId ? draft.groups.find((entry) => entry.id === sessionId) || null : null;
+
+  if (!group && normalizedInviteCode) {
+    group = draft.groups.find((entry) => entry.inviteCode === normalizedInviteCode) || null;
+  }
+
+  if (!round && group?.roundId) {
+    round = draft.rounds.find((entry) => entry.id === group.roundId) || null;
+  }
+
+  if (!round && normalizedInviteCode) {
+    round = draft.rounds.find((entry) => entry.inviteCode === normalizedInviteCode) || null;
+  }
+
+  if (!group && round) {
+    group = draft.groups.find((entry) =>
+      entry.roundId === round.id
+        || (round.groupId && entry.id === round.groupId)
+    ) || null;
+  }
+
+  let createdGroup = false;
+  if (!group && round && createGroupIfMissing) {
+    group = ensureLiveRoundGroupState(draft, round, {
+      inviteCode: normalizedInviteCode,
+      sessionId,
+    });
+    createdGroup = Boolean(group);
+  }
+
+  if (round && normalizedInviteCode && !round.inviteCode) {
+    round.inviteCode = normalizedInviteCode;
+  }
+
+  if (group) {
+    if (!group.roundId && round?.id) {
+      group.roundId = round.id;
+    }
+    if (normalizedInviteCode && !group.inviteCode) {
+      group.inviteCode = normalizedInviteCode;
+    }
+  }
+
+  if (round && group?.id && !round.groupId) {
+    round.groupId = group.id;
+  }
+
+  return {
+    round,
+    group,
+    createdGroup,
+  };
+}
+
 export function upsertLiveRoundSessionState(draft, incoming, {
   mergeRound = (existingRound, nextRound) => nextRound,
 } = {}) {
@@ -84,6 +197,22 @@ export function upsertLiveRoundSessionState(draft, incoming, {
   );
   const existingRound = roundIndex >= 0 ? draft.rounds[roundIndex] : null;
   const nextRound = mergeRound(existingRound, incoming.round);
+  const canonicalInviteCode = incoming.inviteCode
+    || incoming.group?.inviteCode
+    || existingRound?.inviteCode
+    || "";
+  const canonicalGroupId = incoming.group?.id
+    || nextRound.groupId
+    || existingRound?.groupId
+    || null;
+
+  if (canonicalInviteCode) {
+    nextRound.inviteCode = canonicalInviteCode;
+  }
+
+  if (canonicalGroupId) {
+    nextRound.groupId = canonicalGroupId;
+  }
 
   if (roundIndex >= 0) {
     draft.rounds[roundIndex] = nextRound;
