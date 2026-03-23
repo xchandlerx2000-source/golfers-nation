@@ -138,6 +138,43 @@ describe("account service", () => {
     expect(state.currentUser.social.allowFriendConnections).toBe(false);
   });
 
+  it("persists Spotify companion settings per golfer account", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Spotify Tester",
+      email: "spotify@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, created.account.id);
+    state.currentUser.integrations = {
+      ...(state.currentUser.integrations || {}),
+      spotify: {
+        ...(state.currentUser.integrations?.spotify || {}),
+        status: "connected",
+        controlsEnabled: true,
+        playbackState: "paused",
+        deviceName: "This browser",
+        nowPlaying: {
+          id: "golden-hour-drive",
+          title: "Golden Hour Drive",
+          artist: "Fairway Echoes",
+          artworkLabel: "GH",
+          artworkVariant: "forest",
+        },
+      },
+    };
+
+    saveWorkspaceToVault(state, created.account.id);
+    signOutAccount(state);
+    loadAccountIntoState(state, created.account.id);
+
+    expect(state.currentUser.integrations.spotify.status).toBe("connected");
+    expect(state.currentUser.integrations.spotify.controlsEnabled).toBe(true);
+    expect(state.currentUser.integrations.spotify.deviceName).toBe("This browser");
+    expect(state.currentUser.integrations.spotify.nowPlaying.title).toBe("Golden Hour Drive");
+  });
+
   it("hydrates the last active user when a saved session is reopened", () => {
     const state = createDefaultState();
     state.auth.activeUserId = "user-demo-premium";

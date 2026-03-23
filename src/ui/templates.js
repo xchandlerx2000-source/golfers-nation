@@ -26,6 +26,7 @@ import { getGearRecommendations, listNearbyGames, listNearbyPlayers } from "../s
 import { getReviewAccounts } from "../services/account-service.js";
 import { createManualCourseSelection, findCourseById, findTeeBox, getCourseQuickPicks, getDefaultTeeBox, getRoundSetupCourses } from "../services/course-library.js";
 import { buildCompetitivePreview, buildPlayerComparison, getCurrentProfile, getProfileById, getProfileForPlayer } from "../services/player-service.js";
+import { renderSpotifyNowPlayingBar, renderSpotifySettingsPanel } from "./spotify-controls.js";
 
 const PREMIUM_FEATURES = new Set([
   "advanced-stats",
@@ -1913,6 +1914,7 @@ function renderAccountSettingsCard(state) {
           <button class="button primary" type="submit">Save account</button>
         </div>
       </form>
+      ${renderSpotifySettingsPanel(state)}
       ${passwordScaffold}
     </article>
   `;
@@ -4187,6 +4189,7 @@ export function renderAppTemplate(state) {
         ${renderAppShellHeader(state, activeRound, subscription)}
         <section class="app-stage">
           ${renderGlobalFeedback(state)}
+          ${renderSpotifyNowPlayingBar(state)}
           ${renderScreenHeader(state, activeRound)}
           ${summaryRound && state.session.activeView !== "round" ? renderSummarySpotlight(state, summaryRound) : ""}
           <section

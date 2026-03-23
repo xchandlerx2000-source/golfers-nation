@@ -224,6 +224,61 @@ describe("ui helpers", () => {
     expect(markup).toMatch(/id="tab-stats"[\s\S]*?aria-selected="true"/);
   });
 
+  it("renders Spotify connection scaffolding in settings and a compact now playing bar when connected", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "settings";
+    state.session.settingsSection = "account";
+    state.currentUser.integrations = {
+      spotify: {
+        status: "connected",
+        controlsEnabled: true,
+        playbackState: "playing",
+        previewMode: true,
+        deviceName: "This installed app",
+        nowPlaying: {
+          id: "lake-charles-loop",
+          title: "Lake Charles Loop",
+          artist: "Pin High FM",
+          artworkLabel: "LC",
+          artworkVariant: "ocean",
+        },
+      },
+    };
+
+    const settingsMarkup = renderAppTemplate(state);
+
+    expect(settingsMarkup).toContain("Spotify companion");
+    expect(settingsMarkup).toContain("Disconnect Spotify");
+    expect(settingsMarkup).toContain("Lake Charles Loop");
+    expect(settingsMarkup).toContain('data-action="spotify-play-pause"');
+
+    state.session.activeView = "round";
+    state.session.spotify = {
+      barCollapsed: true,
+      lastAction: "toggle",
+      lastUpdatedAt: Date.now(),
+    };
+    state.rounds.unshift(
+      createRound({
+        currentUser: state.currentUser,
+        courseName: "The Country Club at Golden Nugget",
+        teeBox: "Gold",
+        weather: "Humid 79F",
+        mode: "stroke",
+        players: [state.currentUser.name, "Maya Chen"],
+      })
+    );
+    state.session.activeRoundId = state.rounds[0].id;
+
+    const roundMarkup = renderAppTemplate(state);
+
+    expect(roundMarkup).toContain("spotify-minibar");
+    expect(roundMarkup).toContain("Lake Charles Loop");
+    expect(roundMarkup).toContain('data-action="toggle-spotify-bar"');
+  });
+
   it("renders the in-app tester feedback form in app support settings", () => {
     const state = createDefaultState();
     state.auth.status = "authenticated";

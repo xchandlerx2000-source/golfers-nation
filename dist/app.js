@@ -1753,6 +1753,10 @@ function loadPersistedState(createDefaultState) {
           ...(fallback.session?.cloudSync || {}),
           ...(parsed.session?.cloudSync || {}),
         },
+        spotify: {
+          ...(fallback.session?.spotify || {}),
+          ...(parsed.session?.spotify || {}),
+        },
       },
       auth: { ...(fallback.auth || {}), ...(parsed.auth || {}) },
       social: { ...fallback.social, ...parsed.social },
@@ -1774,6 +1778,14 @@ function loadPersistedState(createDefaultState) {
           handles: {
             ...(fallback.currentUser?.social?.handles || {}),
             ...(parsed.currentUser?.social?.handles || {}),
+          },
+        },
+        integrations: {
+          ...(fallback.currentUser?.integrations || {}),
+          ...(parsed.currentUser?.integrations || {}),
+          spotify: {
+            ...(fallback.currentUser?.integrations?.spotify || {}),
+            ...(parsed.currentUser?.integrations?.spotify || {}),
           },
         },
         subscription: {
@@ -2169,6 +2181,202 @@ function persistState(state) {
   return persistAppState(state);
 }
 
+// ---- src/integrations/spotify-service.js ----
+const SPOTIFY_WEB_URL = "https://open.spotify.com/";
+
+const SPOTIFY_PREVIEW_QUEUE = [
+  {
+    id: "golden-hour-drive",
+    title: "Golden Hour Drive",
+    artist: "Fairway Echoes",
+    album: "Late Tee Time",
+    artworkLabel: "GH",
+    artworkVariant: "forest",
+    webUrl: SPOTIFY_WEB_URL,
+    deepLink: "spotify://",
+  },
+  {
+    id: "lake-charles-loop",
+    title: "Lake Charles Loop",
+    artist: "Pin High FM",
+    album: "Local Fairways",
+    artworkLabel: "LC",
+    artworkVariant: "ocean",
+    webUrl: SPOTIFY_WEB_URL,
+    deepLink: "spotify://",
+  },
+  {
+    id: "clubhouse-close",
+    title: "Clubhouse Close",
+    artist: "The Scorecards",
+    album: "After the 18th",
+    artworkLabel: "CC",
+    artworkVariant: "sand",
+    webUrl: SPOTIFY_WEB_URL,
+    deepLink: "spotify://",
+  },
+];
+
+function getPreviewTrackAtIndex(index = 0) {
+  const safeIndex = Number.isInteger(index) ? index : 0;
+  const normalizedIndex = ((safeIndex % SPOTIFY_PREVIEW_QUEUE.length) + SPOTIFY_PREVIEW_QUEUE.length) % SPOTIFY_PREVIEW_QUEUE.length;
+  return {
+    queueIndex: normalizedIndex,
+    track: cloneData(SPOTIFY_PREVIEW_QUEUE[normalizedIndex]),
+  };
+}
+
+function normalizeSpotifyTrack(track = null, fallbackIndex = 0) {
+  if (!track) {
+    return null;
+  }
+
+  const defaultTrack = getPreviewTrackAtIndex(fallbackIndex).track;
+  return {
+    id: String(track.id || defaultTrack.id),
+    title: String(track.title || defaultTrack.title),
+    artist: String(track.artist || defaultTrack.artist),
+    album: String(track.album || defaultTrack.album),
+    artworkLabel: String(track.artworkLabel || defaultTrack.artworkLabel || "SP").slice(0, 2).toUpperCase(),
+    artworkVariant: String(track.artworkVariant || defaultTrack.artworkVariant || "forest"),
+    webUrl: String(track.webUrl || defaultTrack.webUrl || SPOTIFY_WEB_URL),
+    deepLink: String(track.deepLink || defaultTrack.deepLink || "spotify://"),
+  };
+}
+function createSpotifyIntegrationState(overrides = {}) {
+  const queueIndex = Number.isInteger(overrides.queueIndex) ? overrides.queueIndex : 0;
+  const connected = overrides.status === "connected";
+  const fallbackTrack = connected ? getPreviewTrackAtIndex(queueIndex).track : null;
+  const nowPlaying = normalizeSpotifyTrack(
+    overrides.nowPlaying || fallbackTrack,
+    queueIndex
+  );
+  const playbackState = overrides.playbackState === "playing"
+    ? "playing"
+    : connected && overrides.playbackState === "paused"
+      ? "paused"
+      : connected
+        ? "playing"
+        : "idle";
+
+  return {
+    status: connected ? "connected" : "disconnected",
+    previewMode: overrides.previewMode !== false,
+    controlsEnabled: connected ? overrides.controlsEnabled !== false : false,
+    accountLabel: String(overrides.accountLabel || ""),
+    deviceName: String(overrides.deviceName || ""),
+    lastConnectedAt: overrides.lastConnectedAt || null,
+    lastError: String(overrides.lastError || ""),
+    queueIndex,
+    playbackState,
+    showOnRoundScreen: overrides.showOnRoundScreen !== false,
+    nowPlaying,
+  };
+}
+function createSpotifySessionState(overrides = {}) {
+  return {
+    barCollapsed: overrides.barCollapsed === true,
+    lastAction: String(overrides.lastAction || ""),
+    lastUpdatedAt: overrides.lastUpdatedAt || 0,
+  };
+}
+function createIntegrationSettings(overrides = {}) {
+  const next = cloneData(overrides || {});
+  return {
+    spotify: createSpotifyIntegrationState(next.spotify || {}),
+  };
+}
+function getSpotifyIntegration(stateOrUser = {}) {
+  const source = stateOrUser?.currentUser ? stateOrUser.currentUser : stateOrUser;
+  return createSpotifyIntegrationState(source?.integrations?.spotify || {});
+}
+function getSpotifySession(state = {}) {
+  return createSpotifySessionState(state?.session?.spotify || {});
+}
+function isSpotifyConnected(state = {}) {
+  return getSpotifyIntegration(state).status === "connected";
+}
+function getSpotifyOpenTarget(spotifyState = null) {
+  const spotify = createSpotifyIntegrationState(spotifyState || {});
+  return {
+    deepLink: spotify.nowPlaying?.deepLink || "spotify://",
+    webUrl: spotify.nowPlaying?.webUrl || SPOTIFY_WEB_URL,
+  };
+}
+function connectSpotifyCompanion(current = {}, options = {}) {
+  const queueIndex = Number.isInteger(current?.queueIndex) ? current.queueIndex : 0;
+  const previewTrack = getPreviewTrackAtIndex(queueIndex).track;
+  return createSpotifyIntegrationState({
+    ...current,
+    status: "connected",
+    previewMode: true,
+    controlsEnabled: true,
+    queueIndex,
+    accountLabel: options.accountLabel || current?.accountLabel || "",
+    deviceName: options.deviceName || current?.deviceName || "This phone",
+    lastConnectedAt: Date.now(),
+    lastError: "",
+    playbackState: current?.playbackState === "paused" ? "paused" : "playing",
+    nowPlaying: current?.nowPlaying || previewTrack,
+  });
+}
+function disconnectSpotifyCompanion(current = {}) {
+  return createSpotifyIntegrationState({
+    ...current,
+    status: "disconnected",
+    controlsEnabled: false,
+    playbackState: "idle",
+    nowPlaying: null,
+    lastError: "",
+  });
+}
+function toggleSpotifyPlayback(current = {}) {
+  const spotify = createSpotifyIntegrationState(current);
+  if (spotify.status !== "connected" || !spotify.controlsEnabled) {
+    return spotify;
+  }
+
+  return createSpotifyIntegrationState({
+    ...spotify,
+    playbackState: spotify.playbackState === "playing" ? "paused" : "playing",
+  });
+}
+function stepSpotifyQueue(current = {}, direction = 1) {
+  const spotify = createSpotifyIntegrationState(current);
+  if (spotify.status !== "connected" || !spotify.controlsEnabled) {
+    return spotify;
+  }
+
+  const nextIndex = spotify.queueIndex + (direction >= 0 ? 1 : -1);
+  const previewTrack = getPreviewTrackAtIndex(nextIndex);
+  return createSpotifyIntegrationState({
+    ...spotify,
+    queueIndex: previewTrack.queueIndex,
+    nowPlaying: previewTrack.track,
+    playbackState: "playing",
+  });
+}
+function getSpotifyConnectionSummary(spotifyState = null) {
+  const spotify = createSpotifyIntegrationState(spotifyState || {});
+  if (spotify.status !== "connected") {
+    return {
+      statusLabel: "Disconnected",
+      title: "Connect Spotify",
+      message: "Connect Spotify to unlock a compact Now Playing bar and quick playback actions inside Golfers Nation.",
+      detail: "This first pass is a companion control scaffold only. Real Spotify OAuth, device selection, and playback transfer come next.",
+    };
+  }
+
+  return {
+    statusLabel: spotify.previewMode ? "Connected preview" : "Connected",
+    title: spotify.playbackState === "playing" ? "Now playing in the companion bar" : "Playback ready in the companion bar",
+    message: `${spotify.nowPlaying?.title || "Spotify"} / ${spotify.nowPlaying?.artist || "Connected account"} / ${spotify.deviceName || "This phone"}`,
+    detail: spotify.previewMode
+      ? "This scaffold preview proves the mobile control flow. Full Spotify auth, playback SDK support, and device handoff can be layered in later."
+      : "Spotify is connected and ready for lightweight in-app controls.",
+  };
+}
+
 // ---- src/services/account-service.js ----
 const DEFAULT_PASSWORD = "fairway123";
 
@@ -2239,6 +2447,10 @@ function createSocialSettings(overrides = {}) {
     inviteFriendsReady: true,
     ...next,
   };
+}
+
+function createIntegrationsState(overrides = {}) {
+  return createIntegrationSettings(overrides || {});
 }
 
 function formatRecentFormLabel(result) {
@@ -2637,6 +2849,7 @@ function sanitizeCurrentUser(account) {
     privacy: createPrivacySettings(account.privacy),
     appearance: createAppearanceSettings(account.appearance),
     social: createSocialSettings(account.social),
+    integrations: createIntegrationsState(account.integrations),
     seededDemo: Boolean(account.seededDemo),
     subscription: cloneData(account.subscription),
     roundsPlayed: account.roundsPlayed || 0,
@@ -2665,6 +2878,7 @@ function mergeCurrentUserIntoAccount(account, currentUser, auth) {
   account.privacy = createPrivacySettings(currentUser.privacy || {});
   account.appearance = createAppearanceSettings(currentUser.appearance || account.appearance);
   account.social = createSocialSettings(currentUser.social || account.social);
+  account.integrations = createIntegrationsState(currentUser.integrations || account.integrations);
   account.subscription = cloneData(currentUser.subscription || account.subscription);
   account.premiumStatus = account.subscription.tier;
   account.roundsPlayed = currentUser.roundsPlayed ?? account.roundsPlayed ?? 0;
@@ -2703,6 +2917,7 @@ function createAccountRecord({
   createdAt = Date.now(),
   appearance = {},
   social = {},
+  integrations = {},
 }) {
   const safeDisplayName = String(displayName || "").trim() || "Golfer";
   const username = normalizeUsername(safeDisplayName);
@@ -2732,6 +2947,7 @@ function createAccountRecord({
     privacy: createPrivacySettings(),
     appearance: createAppearanceSettings(appearance),
     social: createSocialSettings(social),
+    integrations: createIntegrationsState(integrations),
     subscription: createSubscription(tier),
     premiumStatus: tier,
     roundsPlayed: 0,
@@ -2820,6 +3036,7 @@ function upsertRemoteAccount(draft, fields = {}) {
       createdAt: nextCreatedAt,
       appearance: fields.appearance || {},
       social: fields.social || {},
+      integrations: fields.integrations || {},
     });
     draft.accounts.push(account);
   } else {
@@ -2840,6 +3057,7 @@ function upsertRemoteAccount(draft, fields = {}) {
     account.createdAt = nextCreatedAt;
     account.appearance = createAppearanceSettings(fields.appearance || account.appearance);
     account.social = createSocialSettings(fields.social || account.social);
+    account.integrations = createIntegrationsState(fields.integrations || account.integrations);
     account.privacy = createPrivacySettings(fields.privacy || account.privacy);
     account.subscription = createSubscription(nextTier);
     account.premiumStatus = nextTier;
@@ -3009,6 +3227,7 @@ function hydrateActiveAccountState(state) {
       ...(next.session.roundSetup || {}),
       ...(previewWorkspace.userSession?.roundSetup || {}),
     };
+    next.session.spotify = createSpotifySessionState(next.session.spotify);
   }
 
   next.auth.activeUserId = null;
@@ -3020,6 +3239,7 @@ function hydrateActiveAccountState(state) {
   next.session.activeView = "home";
   next.session.previousView = "home";
   next.session.transitionDirection = "steady";
+  next.session.spotify = createSpotifySessionState(next.session.spotify);
 
   return next;
 }
@@ -3085,6 +3305,7 @@ function loadAccountIntoState(draft, userId) {
     ...(draft.session.roundSetup || {}),
     ...(workspace.userSession?.roundSetup || {}),
   };
+  draft.session.spotify = createSpotifySessionState(draft.session.spotify);
   draft.session.activeView = "home";
   draft.session.previousView = "home";
   draft.session.transitionDirection = "steady";
@@ -3121,6 +3342,7 @@ function signOutAccount(draft) {
     ...(draft.session.roundSetup || {}),
     ...createDefaultRoundSetup(),
   };
+  draft.session.spotify = createSpotifySessionState();
 }
 function findAccountByEmail(state, email) {
   const normalized = String(email || "").trim().toLowerCase();
@@ -7927,6 +8149,7 @@ function createDefaultState() {
       privacy: cloneData(currentAccount.privacy),
       appearance: cloneData(currentAccount.appearance),
       social: cloneData(currentAccount.social),
+      integrations: cloneData(currentAccount.integrations),
       seededDemo: currentAccount.seededDemo,
       subscription: cloneData(currentAccount.subscription),
       roundsPlayed: currentAccount.roundsPlayed || 0,
@@ -7991,8 +8214,147 @@ function createDefaultState() {
         selectedCourseId: "",
         selectedTeeBoxId: "",
       },
+      spotify: createSpotifySessionState(),
     },
   };
+}
+
+// ---- src/ui/spotify-controls.js ----
+function renderArtworkThumb(track) {
+  return `
+    <div class="spotify-artwork-thumb" data-artwork-variant="${escapeHtml(track?.artworkVariant || "forest")}" aria-hidden="true">
+      <span>${escapeHtml(track?.artworkLabel || "SP")}</span>
+    </div>
+  `;
+}
+
+function renderSpotifyControlButton({ action, label, ariaLabel, disabled = false, tone = "subtle" }) {
+  return `
+    <button
+      class="spotify-control-button spotify-control-button--${tone}"
+      type="button"
+      data-action="${escapeHtml(action)}"
+      aria-label="${escapeHtml(ariaLabel || label)}"
+      ${disabled ? "disabled" : ""}
+    >
+      ${escapeHtml(label)}
+    </button>
+  `;
+}
+function renderSpotifySettingsPanel(state) {
+  const spotify = getSpotifyIntegration(state);
+  const summary = getSpotifyConnectionSummary(spotify);
+  const connected = spotify.status === "connected";
+  const connectedAt = spotify.lastConnectedAt ? formatRelativeSync(spotify.lastConnectedAt) : "Not connected yet";
+
+  return `
+    <article class="settings-support-panel spotify-settings-panel">
+      <div class="spotify-settings-header">
+        <div>
+          <span class="mini-label">Spotify companion</span>
+          <strong>${escapeHtml(summary.title)}</strong>
+        </div>
+        <span class="status-pill ${connected ? "is-live" : ""}">${escapeHtml(summary.statusLabel)}</span>
+      </div>
+      <p>${escapeHtml(summary.message)}</p>
+      <p class="spotify-settings-detail">${escapeHtml(summary.detail)}</p>
+      <div class="summary-grid compact spotify-settings-meta">
+        <article>
+          <span>Connection</span>
+          <strong>${escapeHtml(connected ? "Ready for in-app controls" : "Not connected")}</strong>
+        </article>
+        <article>
+          <span>Last update</span>
+          <strong>${escapeHtml(connectedAt)}</strong>
+        </article>
+      </div>
+      ${connected && spotify.nowPlaying ? `
+        <div class="spotify-settings-preview">
+          ${renderArtworkThumb(spotify.nowPlaying)}
+          <div class="spotify-settings-preview-copy">
+            <span class="mini-label">${escapeHtml(spotify.previewMode ? "Preview track" : "Now playing")}</span>
+            <strong>${escapeHtml(spotify.nowPlaying.title)}</strong>
+            <p>${escapeHtml(spotify.nowPlaying.artist)} / ${escapeHtml(spotify.deviceName || "This phone")}</p>
+          </div>
+        </div>
+      ` : ""}
+      <div class="row-actions spotify-settings-actions">
+        <button class="button primary" type="button" data-action="${connected ? "disconnect-spotify" : "connect-spotify"}">
+          ${connected ? "Disconnect Spotify" : "Connect Spotify"}
+        </button>
+        <button class="button secondary" type="button" data-action="spotify-open">
+          Open Spotify
+        </button>
+      </div>
+    </article>
+  `;
+}
+function renderSpotifyNowPlayingBar(state) {
+  if (!isSpotifyConnected(state)) {
+    return "";
+  }
+
+  const spotify = getSpotifyIntegration(state);
+  const session = getSpotifySession(state);
+  const track = spotify.nowPlaying;
+  if (state.session?.activeView === "round" && spotify.showOnRoundScreen === false) {
+    return "";
+  }
+  if (!track) {
+    return "";
+  }
+
+  const isRoundView = state.session?.activeView === "round";
+  const collapsed = isRoundView && session.barCollapsed;
+  const statusLabel = spotify.playbackState === "playing" ? "Playing" : "Paused";
+
+  if (collapsed) {
+    return `
+      <section class="spotify-shell spotify-shell--collapsed" aria-label="Spotify now playing">
+        <button class="spotify-minibar" type="button" data-action="toggle-spotify-bar" aria-expanded="false">
+          ${renderArtworkThumb(track)}
+          <span class="spotify-minibar-copy">
+            <strong>${escapeHtml(track.title)}</strong>
+            <span>${escapeHtml(track.artist)}</span>
+          </span>
+          <span class="spotify-minibar-status">${escapeHtml(statusLabel)}</span>
+        </button>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="spotify-shell" aria-label="Spotify now playing">
+      <article class="spotify-now-playing-bar">
+        <div class="spotify-now-playing-main">
+          ${renderArtworkThumb(track)}
+          <div class="spotify-track-copy">
+            <div class="spotify-track-copy-top">
+              <span class="mini-label">Now Playing</span>
+              <span class="spotify-preview-badge">${escapeHtml(spotify.previewMode ? "Companion preview" : "Connected")}</span>
+            </div>
+            <strong>${escapeHtml(track.title)}</strong>
+            <p>${escapeHtml(track.artist)} / ${escapeHtml(statusLabel)} / ${escapeHtml(spotify.deviceName || "This phone")}</p>
+          </div>
+        </div>
+        <div class="spotify-control-row">
+          ${renderSpotifyControlButton({ action: "spotify-prev", label: "Prev", ariaLabel: "Previous track", disabled: !spotify.controlsEnabled })}
+          ${renderSpotifyControlButton({
+            action: "spotify-play-pause",
+            label: spotify.playbackState === "playing" ? "Pause" : "Play",
+            ariaLabel: spotify.playbackState === "playing" ? "Pause playback" : "Resume playback",
+            tone: "primary",
+            disabled: !spotify.controlsEnabled,
+          })}
+          ${renderSpotifyControlButton({ action: "spotify-next", label: "Next", ariaLabel: "Next track", disabled: !spotify.controlsEnabled })}
+          ${renderSpotifyControlButton({ action: "spotify-open", label: "Open Spotify", ariaLabel: "Open Spotify", tone: "secondary" })}
+          ${isRoundView
+            ? renderSpotifyControlButton({ action: "toggle-spotify-bar", label: "Minimize", ariaLabel: "Minimize Spotify controls" })
+            : ""}
+        </div>
+      </article>
+    </section>
+  `;
 }
 
 // ---- src/ui/templates.js ----
@@ -9878,6 +10240,7 @@ function renderAccountSettingsCard(state) {
           <button class="button primary" type="submit">Save account</button>
         </div>
       </form>
+      ${renderSpotifySettingsPanel(state)}
       ${passwordScaffold}
     </article>
   `;
@@ -12151,6 +12514,7 @@ function renderAppTemplate(state) {
         ${renderAppShellHeader(state, activeRound, subscription)}
         <section class="app-stage">
           ${renderGlobalFeedback(state)}
+          ${renderSpotifyNowPlayingBar(state)}
           ${renderScreenHeader(state, activeRound)}
           ${summaryRound && state.session.activeView !== "round" ? renderSummarySpotlight(state, summaryRound) : ""}
           <section
@@ -13362,6 +13726,32 @@ function bootstrapApp({
     }
   }
 
+  const mutateSpotifyState = (draft, updater) => {
+    draft.currentUser.integrations = {
+      ...(draft.currentUser.integrations || {}),
+      spotify: updater(getSpotifyIntegration(draft)),
+    };
+    draft.session.spotify = createSpotifySessionState(draft.session.spotify);
+  };
+
+  const openSpotifyDestination = () => {
+    const target = getSpotifyOpenTarget(getSpotifyIntegration(store.getState()));
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    try {
+      if (typeof window.open === "function") {
+        const opened = window.open(target.webUrl, "_blank", "noopener");
+        return Boolean(opened) || typeof opened === "undefined";
+      }
+    } catch (error) {
+      console.warn("[Golfers Nation] Spotify open request failed.", error);
+    }
+
+    return false;
+  };
+
   const handleAsyncEmailSignUp = async (form, data) => {
     store.setState((draft) => {
       draft.auth.error = "";
@@ -13611,6 +14001,106 @@ function bootstrapApp({
         draft.session.settingsSection = actionElement.dataset.section || draft.session.settingsSection || "account";
         return draft;
       }, { reason: "set-settings-section" });
+      return;
+    }
+
+    if (action === "connect-spotify") {
+      store.setState((draft) => {
+        mutateSpotifyState(draft, (currentSpotify) => connectSpotifyCompanion(currentSpotify, {
+          accountLabel: draft.currentUser.displayName || draft.currentUser.name,
+          deviceName: draft.session.standaloneMode ? "This installed app" : "This browser",
+        }));
+        draft.session.spotify = createSpotifySessionState({
+          ...draft.session.spotify,
+          barCollapsed: false,
+          lastAction: "connect",
+          lastUpdatedAt: Date.now(),
+        });
+        appendActivity(draft, `${draft.currentUser.displayName} connected the Spotify companion preview.`, "product");
+        setFeedback(
+          draft,
+          "success",
+          "Spotify companion connected",
+          "The compact Now Playing bar is ready in the app. Real Spotify auth and playback device control can be layered in next."
+        );
+        return draft;
+      }, { reason: "connect-spotify" });
+      return;
+    }
+
+    if (action === "disconnect-spotify") {
+      store.setState((draft) => {
+        mutateSpotifyState(draft, (currentSpotify) => disconnectSpotifyCompanion(currentSpotify));
+        draft.session.spotify = createSpotifySessionState({
+          barCollapsed: false,
+          lastAction: "disconnect",
+          lastUpdatedAt: Date.now(),
+        });
+        appendActivity(draft, `${draft.currentUser.displayName} disconnected the Spotify companion preview.`, "product");
+        setFeedback(
+          draft,
+          "info",
+          "Spotify disconnected",
+          "Spotify controls are hidden again. The golf app stays fully usable without the music companion."
+        );
+        return draft;
+      }, { reason: "disconnect-spotify" });
+      return;
+    }
+
+    if (action === "toggle-spotify-bar") {
+      store.setState((draft) => {
+        draft.session.spotify = createSpotifySessionState({
+          ...draft.session.spotify,
+          barCollapsed: !draft.session.spotify?.barCollapsed,
+          lastAction: "toggle",
+          lastUpdatedAt: Date.now(),
+        });
+        return draft;
+      }, { reason: "toggle-spotify-bar" });
+      return;
+    }
+
+    if (action === "spotify-play-pause") {
+      store.setState((draft) => {
+        mutateSpotifyState(draft, (currentSpotify) => toggleSpotifyPlayback(currentSpotify));
+        draft.session.spotify = createSpotifySessionState({
+          ...draft.session.spotify,
+          lastAction: "play-pause",
+          lastUpdatedAt: Date.now(),
+        });
+        return draft;
+      }, { reason: "spotify-play-pause" });
+      return;
+    }
+
+    if (action === "spotify-next" || action === "spotify-prev") {
+      const direction = action === "spotify-next" ? 1 : -1;
+      store.setState((draft) => {
+        mutateSpotifyState(draft, (currentSpotify) => stepSpotifyQueue(currentSpotify, direction));
+        draft.session.spotify = createSpotifySessionState({
+          ...draft.session.spotify,
+          lastAction: action === "spotify-next" ? "next" : "prev",
+          lastUpdatedAt: Date.now(),
+        });
+        return draft;
+      }, { reason: action });
+      return;
+    }
+
+    if (action === "spotify-open") {
+      const opened = openSpotifyDestination();
+      if (!opened) {
+        store.setState((draft) => {
+          setFeedback(
+            draft,
+            "info",
+            "Open Spotify",
+            "Spotify will open through the browser or installed app once the device allows external app handoff."
+          );
+          return draft;
+        }, { reason: "spotify-open-fallback" });
+      }
       return;
     }
 

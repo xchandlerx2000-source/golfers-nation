@@ -1,4 +1,5 @@
 import { createDefaultAccountState } from "../services/account-service.js";
+import { createSpotifySessionState } from "../integrations/spotify-service.js";
 import { cloneData } from "../utils/formatters.js";
 
 export function createDefaultState() {
@@ -31,6 +32,7 @@ export function createDefaultState() {
       privacy: cloneData(currentAccount.privacy),
       appearance: cloneData(currentAccount.appearance),
       social: cloneData(currentAccount.social),
+      integrations: cloneData(currentAccount.integrations),
       seededDemo: currentAccount.seededDemo,
       subscription: cloneData(currentAccount.subscription),
       roundsPlayed: currentAccount.roundsPlayed || 0,
@@ -95,6 +97,7 @@ export function createDefaultState() {
         selectedCourseId: "",
         selectedTeeBoxId: "",
       },
+      spotify: createSpotifySessionState(),
     },
   };
 }

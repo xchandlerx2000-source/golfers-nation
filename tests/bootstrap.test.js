@@ -574,6 +574,33 @@ describe("bootstrap app", () => {
     result.destroy();
   });
 
+  it("connects the Spotify companion scaffold from settings and shows the now playing bar", () => {
+    const state = createDefaultState();
+    loadAccountIntoState(state, "user-demo-free");
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    document.querySelector('[data-action="open-settings"]').click();
+    document.querySelector('[data-action="connect-spotify"]').click();
+
+    expect(result.store.getState().currentUser.integrations.spotify.status).toBe("connected");
+    expect(result.store.getState().currentUser.integrations.spotify.nowPlaying.title).toBe("Golden Hour Drive");
+    expect(document.body.textContent).toContain("Spotify companion connected");
+    expect(document.querySelector('[data-action="spotify-play-pause"]')).not.toBeNull();
+
+    document.querySelector('[data-action="nav-view"][data-view="round"]').click();
+    document.querySelector('[data-action="toggle-spotify-bar"]').click();
+
+    expect(result.store.getState().session.spotify.barCollapsed).toBe(true);
+    expect(document.querySelector(".spotify-minibar")).not.toBeNull();
+
+    result.destroy();
+  });
+
   it("submits tester feedback through the in-app cloud feedback flow", async () => {
     const submitTesterFeedbackAsync = vi.fn().mockResolvedValue({
       status: "submitted",

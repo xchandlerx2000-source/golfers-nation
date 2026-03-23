@@ -21,6 +21,15 @@ import {
 import { applyStartupWarning, renderStartupShell, showBootRecoveryScreen } from "./bootstrap/startup-recovery.js";
 import { APP_VERSION, STORAGE_KEY } from "./config.js";
 import { joinByInviteCode } from "./services/mock-api.js";
+import {
+  connectSpotifyCompanion,
+  createSpotifySessionState,
+  disconnectSpotifyCompanion,
+  getSpotifyIntegration,
+  getSpotifyOpenTarget,
+  stepSpotifyQueue,
+  toggleSpotifyPlayback,
+} from "./integrations/spotify-service.js";
 import { ensureProfilesForNames, refreshProfileSnapshots, syncCurrentUserProfile } from "./services/player-service.js";
 import { createProductPlatform } from "./services/product-platform.js";
 import { createManualCourseSelection, createRoundCourseSelection } from "./services/course-library.js";
@@ -812,6 +821,32 @@ export function bootstrapApp({
     }
   }
 
+  const mutateSpotifyState = (draft, updater) => {
+    draft.currentUser.integrations = {
+      ...(draft.currentUser.integrations || {}),
+      spotify: updater(getSpotifyIntegration(draft)),
+    };
+    draft.session.spotify = createSpotifySessionState(draft.session.spotify);
+  };
+
+  const openSpotifyDestination = () => {
+    const target = getSpotifyOpenTarget(getSpotifyIntegration(store.getState()));
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    try {
+      if (typeof window.open === "function") {
+        const opened = window.open(target.webUrl, "_blank", "noopener");
+        return Boolean(opened) || typeof opened === "undefined";
+      }
+    } catch (error) {
+      console.warn("[Golfers Nation] Spotify open request failed.", error);
+    }
+
+    return false;
+  };
+
   const handleAsyncEmailSignUp = async (form, data) => {
     store.setState((draft) => {
       draft.auth.error = "";
@@ -1061,6 +1096,106 @@ export function bootstrapApp({
         draft.session.settingsSection = actionElement.dataset.section || draft.session.settingsSection || "account";
         return draft;
       }, { reason: "set-settings-section" });
+      return;
+    }
+
+    if (action === "connect-spotify") {
+      store.setState((draft) => {
+        mutateSpotifyState(draft, (currentSpotify) => connectSpotifyCompanion(currentSpotify, {
+          accountLabel: draft.currentUser.displayName || draft.currentUser.name,
+          deviceName: draft.session.standaloneMode ? "This installed app" : "This browser",
+        }));
+        draft.session.spotify = createSpotifySessionState({
+          ...draft.session.spotify,
+          barCollapsed: false,
+          lastAction: "connect",
+          lastUpdatedAt: Date.now(),
+        });
+        appendActivity(draft, `${draft.currentUser.displayName} connected the Spotify companion preview.`, "product");
+        setFeedback(
+          draft,
+          "success",
+          "Spotify companion connected",
+          "The compact Now Playing bar is ready in the app. Real Spotify auth and playback device control can be layered in next."
+        );
+        return draft;
+      }, { reason: "connect-spotify" });
+      return;
+    }
+
+    if (action === "disconnect-spotify") {
+      store.setState((draft) => {
+        mutateSpotifyState(draft, (currentSpotify) => disconnectSpotifyCompanion(currentSpotify));
+        draft.session.spotify = createSpotifySessionState({
+          barCollapsed: false,
+          lastAction: "disconnect",
+          lastUpdatedAt: Date.now(),
+        });
+        appendActivity(draft, `${draft.currentUser.displayName} disconnected the Spotify companion preview.`, "product");
+        setFeedback(
+          draft,
+          "info",
+          "Spotify disconnected",
+          "Spotify controls are hidden again. The golf app stays fully usable without the music companion."
+        );
+        return draft;
+      }, { reason: "disconnect-spotify" });
+      return;
+    }
+
+    if (action === "toggle-spotify-bar") {
+      store.setState((draft) => {
+        draft.session.spotify = createSpotifySessionState({
+          ...draft.session.spotify,
+          barCollapsed: !draft.session.spotify?.barCollapsed,
+          lastAction: "toggle",
+          lastUpdatedAt: Date.now(),
+        });
+        return draft;
+      }, { reason: "toggle-spotify-bar" });
+      return;
+    }
+
+    if (action === "spotify-play-pause") {
+      store.setState((draft) => {
+        mutateSpotifyState(draft, (currentSpotify) => toggleSpotifyPlayback(currentSpotify));
+        draft.session.spotify = createSpotifySessionState({
+          ...draft.session.spotify,
+          lastAction: "play-pause",
+          lastUpdatedAt: Date.now(),
+        });
+        return draft;
+      }, { reason: "spotify-play-pause" });
+      return;
+    }
+
+    if (action === "spotify-next" || action === "spotify-prev") {
+      const direction = action === "spotify-next" ? 1 : -1;
+      store.setState((draft) => {
+        mutateSpotifyState(draft, (currentSpotify) => stepSpotifyQueue(currentSpotify, direction));
+        draft.session.spotify = createSpotifySessionState({
+          ...draft.session.spotify,
+          lastAction: action === "spotify-next" ? "next" : "prev",
+          lastUpdatedAt: Date.now(),
+        });
+        return draft;
+      }, { reason: action });
+      return;
+    }
+
+    if (action === "spotify-open") {
+      const opened = openSpotifyDestination();
+      if (!opened) {
+        store.setState((draft) => {
+          setFeedback(
+            draft,
+            "info",
+            "Open Spotify",
+            "Spotify will open through the browser or installed app once the device allows external app handoff."
+          );
+          return draft;
+        }, { reason: "spotify-open-fallback" });
+      }
       return;
     }
 

@@ -44,6 +44,10 @@ export function loadPersistedState(createDefaultState) {
           ...(fallback.session?.cloudSync || {}),
           ...(parsed.session?.cloudSync || {}),
         },
+        spotify: {
+          ...(fallback.session?.spotify || {}),
+          ...(parsed.session?.spotify || {}),
+        },
       },
       auth: { ...(fallback.auth || {}), ...(parsed.auth || {}) },
       social: { ...fallback.social, ...parsed.social },
@@ -65,6 +69,14 @@ export function loadPersistedState(createDefaultState) {
           handles: {
             ...(fallback.currentUser?.social?.handles || {}),
             ...(parsed.currentUser?.social?.handles || {}),
+          },
+        },
+        integrations: {
+          ...(fallback.currentUser?.integrations || {}),
+          ...(parsed.currentUser?.integrations || {}),
+          spotify: {
+            ...(fallback.currentUser?.integrations?.spotify || {}),
+            ...(parsed.currentUser?.integrations?.spotify || {}),
           },
         },
         subscription: {

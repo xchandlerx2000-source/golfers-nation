@@ -1,5 +1,6 @@
 import { createActivity, createGearItem, createPlayerProfile, createRound, createTournament } from "../domain/factories.js";
 import { getPendingRoundEvents } from "../domain/round-sync.js";
+import { createIntegrationSettings, createSpotifySessionState } from "../integrations/spotify-service.js";
 import { applyHoleUpdate, getParticipantTotals } from "../domain/scoring.js";
 import { FEATURED_COURSE_ID, TESTER_DEFAULT_SUBSCRIPTION_TIER } from "../config.js";
 import { findCourseById, getDefaultTeeBox } from "./course-library.js";
@@ -74,6 +75,10 @@ function createSocialSettings(overrides = {}) {
     inviteFriendsReady: true,
     ...next,
   };
+}
+
+function createIntegrationsState(overrides = {}) {
+  return createIntegrationSettings(overrides || {});
 }
 
 function formatRecentFormLabel(result) {
@@ -473,6 +478,7 @@ function sanitizeCurrentUser(account) {
     privacy: createPrivacySettings(account.privacy),
     appearance: createAppearanceSettings(account.appearance),
     social: createSocialSettings(account.social),
+    integrations: createIntegrationsState(account.integrations),
     seededDemo: Boolean(account.seededDemo),
     subscription: cloneData(account.subscription),
     roundsPlayed: account.roundsPlayed || 0,
@@ -501,6 +507,7 @@ function mergeCurrentUserIntoAccount(account, currentUser, auth) {
   account.privacy = createPrivacySettings(currentUser.privacy || {});
   account.appearance = createAppearanceSettings(currentUser.appearance || account.appearance);
   account.social = createSocialSettings(currentUser.social || account.social);
+  account.integrations = createIntegrationsState(currentUser.integrations || account.integrations);
   account.subscription = cloneData(currentUser.subscription || account.subscription);
   account.premiumStatus = account.subscription.tier;
   account.roundsPlayed = currentUser.roundsPlayed ?? account.roundsPlayed ?? 0;
@@ -540,6 +547,7 @@ export function createAccountRecord({
   createdAt = Date.now(),
   appearance = {},
   social = {},
+  integrations = {},
 }) {
   const safeDisplayName = String(displayName || "").trim() || "Golfer";
   const username = normalizeUsername(safeDisplayName);
@@ -569,6 +577,7 @@ export function createAccountRecord({
     privacy: createPrivacySettings(),
     appearance: createAppearanceSettings(appearance),
     social: createSocialSettings(social),
+    integrations: createIntegrationsState(integrations),
     subscription: createSubscription(tier),
     premiumStatus: tier,
     roundsPlayed: 0,
@@ -660,6 +669,7 @@ export function upsertRemoteAccount(draft, fields = {}) {
       createdAt: nextCreatedAt,
       appearance: fields.appearance || {},
       social: fields.social || {},
+      integrations: fields.integrations || {},
     });
     draft.accounts.push(account);
   } else {
@@ -680,6 +690,7 @@ export function upsertRemoteAccount(draft, fields = {}) {
     account.createdAt = nextCreatedAt;
     account.appearance = createAppearanceSettings(fields.appearance || account.appearance);
     account.social = createSocialSettings(fields.social || account.social);
+    account.integrations = createIntegrationsState(fields.integrations || account.integrations);
     account.privacy = createPrivacySettings(fields.privacy || account.privacy);
     account.subscription = createSubscription(nextTier);
     account.premiumStatus = nextTier;
@@ -852,6 +863,7 @@ export function hydrateActiveAccountState(state) {
       ...(next.session.roundSetup || {}),
       ...(previewWorkspace.userSession?.roundSetup || {}),
     };
+    next.session.spotify = createSpotifySessionState(next.session.spotify);
   }
 
   next.auth.activeUserId = null;
@@ -863,6 +875,7 @@ export function hydrateActiveAccountState(state) {
   next.session.activeView = "home";
   next.session.previousView = "home";
   next.session.transitionDirection = "steady";
+  next.session.spotify = createSpotifySessionState(next.session.spotify);
 
   return next;
 }
@@ -930,6 +943,7 @@ export function loadAccountIntoState(draft, userId) {
     ...(draft.session.roundSetup || {}),
     ...(workspace.userSession?.roundSetup || {}),
   };
+  draft.session.spotify = createSpotifySessionState(draft.session.spotify);
   draft.session.activeView = "home";
   draft.session.previousView = "home";
   draft.session.transitionDirection = "steady";
@@ -967,6 +981,7 @@ export function signOutAccount(draft) {
     ...(draft.session.roundSetup || {}),
     ...createDefaultRoundSetup(),
   };
+  draft.session.spotify = createSpotifySessionState();
 }
 
 export function findAccountByEmail(state, email) {
