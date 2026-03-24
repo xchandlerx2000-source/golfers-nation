@@ -221,6 +221,13 @@ See `docs/product-foundation.md` for:
 - native app migration plan
 - roadmap from MVP to production
 
+See `docs/developer-review-map.md` for:
+
+- the source-of-truth workflow
+- the fastest way for engineers to review the repo
+- the main backend/service seams
+- what is live today vs still scaffolded
+
 See `docs/supabase-setup.md` for:
 
 - Supabase table and RLS setup

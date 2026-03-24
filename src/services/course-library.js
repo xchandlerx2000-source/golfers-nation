@@ -644,16 +644,8 @@ export function getCourseQuickPicks(limit = 4) {
   return searchCourseLibrary("").slice(0, limit);
 }
 
-export function getSeededCourseQuickPicks(limit = 4) {
-  return getCourseQuickPicks(limit);
-}
-
 export function getRoundSetupCourses(query = "", limit = 10) {
   return searchCourseLibrary(query).slice(0, limit);
-}
-
-export function getSeededRoundSetupCourses(query = "", limit = 10) {
-  return getRoundSetupCourses(query, limit);
 }
 
 export function createManualCourseSelection(courseName = "", teeBox = "") {
@@ -722,8 +714,4 @@ export function createRoundCourseSelection(courseId, teeBoxId = "") {
     slope: teeBox.slope ?? null,
     rating: teeBox.rating ?? null,
   };
-}
-
-export function findSeededCourseById(courseId) {
-  return findCourseById(courseId);
 }

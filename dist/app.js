@@ -3606,14 +3606,8 @@ function searchCourseLibrary(query = "") {
 function getCourseQuickPicks(limit = 4) {
   return searchCourseLibrary("").slice(0, limit);
 }
-function getSeededCourseQuickPicks(limit = 4) {
-  return getCourseQuickPicks(limit);
-}
 function getRoundSetupCourses(query = "", limit = 10) {
   return searchCourseLibrary(query).slice(0, limit);
-}
-function getSeededRoundSetupCourses(query = "", limit = 10) {
-  return getRoundSetupCourses(query, limit);
 }
 function createManualCourseSelection(courseName = "", teeBox = "") {
   return {
@@ -3680,9 +3674,6 @@ function createRoundCourseSelection(courseId, teeBoxId = "") {
     slope: teeBox.slope ?? null,
     rating: teeBox.rating ?? null,
   };
-}
-function findSeededCourseById(courseId) {
-  return findCourseById(courseId);
 }
 
 // ---- src/services/course-providers/local-course-provider.js ----
@@ -3754,13 +3745,13 @@ const localCourseProvider = {
       .map((course) => normalizeLocalCourse(course));
   },
   getCourseQuickPicks(limit = 4) {
-    return getSeededCourseQuickPicks(limit).map((course) => normalizeLocalCourse(course));
+    return getCourseQuickPicks(limit).map((course) => normalizeLocalCourse(course));
   },
   getRoundSetupCourses(query = "", limit = 10) {
-    return getSeededRoundSetupCourses(query, limit).map((course) => normalizeLocalCourse(course));
+    return getRoundSetupCourses(query, limit).map((course) => normalizeLocalCourse(course));
   },
   getCourseById(courseId) {
-    const course = findSeededCourseById(courseId);
+    const course = findCourseById(courseId);
     return course ? normalizeLocalCourse(course) : null;
   },
   findNearbyCourses(lat, lng, { limit = 6, radiusMiles = 50 } = {}) {
@@ -4024,10 +4015,10 @@ function getCourseById(courseId = "", options = {}) {
 
   return null;
 }
-function getCourseQuickPicks(limit = 4, options = {}) {
+function getProviderCourseQuickPicks(limit = 4, options = {}) {
   return collectCourses("getCourseQuickPicks", [limit], options).slice(0, limit);
 }
-function getRoundSetupCourses(query = "", limit = 10, options = {}) {
+function getProviderRoundSetupCourses(query = "", limit = 10, options = {}) {
   return collectCourses("getRoundSetupCourses", [query, limit], options).slice(0, limit);
 }
 function getDefaultCourseTeeBox(course) {
@@ -4127,8 +4118,8 @@ function getRoundSetupDiscoveryState(roundSetup = {}, nearbyState = {}, options 
   const selectedTeeBox = selectedCourse
     ? findCourseTeeBox(selectedCourse, setup.selectedTeeBoxId || getDefaultCourseTeeBox(selectedCourse)?.id || "")
     : null;
-  const searchResults = getRoundSetupCourses(setup.courseQuery, setup.courseQuery ? 10 : 8, options);
-  const quickPicks = setup.courseQuery ? [] : getCourseQuickPicks(4, options);
+  const searchResults = getProviderRoundSetupCourses(setup.courseQuery, setup.courseQuery ? 10 : 8, options);
+  const quickPicks = setup.courseQuery ? [] : getProviderCourseQuickPicks(4, options);
   const nearbyCourses = nearbyState?.coordinates
     ? findNearbyCourses(
         Number(nearbyState.coordinates.latitude || 0),

@@ -112,11 +112,11 @@ export function getCourseById(courseId = "", options = {}) {
   return null;
 }
 
-export function getCourseQuickPicks(limit = 4, options = {}) {
+export function getProviderCourseQuickPicks(limit = 4, options = {}) {
   return collectCourses("getCourseQuickPicks", [limit], options).slice(0, limit);
 }
 
-export function getRoundSetupCourses(query = "", limit = 10, options = {}) {
+export function getProviderRoundSetupCourses(query = "", limit = 10, options = {}) {
   return collectCourses("getRoundSetupCourses", [query, limit], options).slice(0, limit);
 }
 
@@ -223,8 +223,8 @@ export function getRoundSetupDiscoveryState(roundSetup = {}, nearbyState = {}, o
   const selectedTeeBox = selectedCourse
     ? findCourseTeeBox(selectedCourse, setup.selectedTeeBoxId || getDefaultCourseTeeBox(selectedCourse)?.id || "")
     : null;
-  const searchResults = getRoundSetupCourses(setup.courseQuery, setup.courseQuery ? 10 : 8, options);
-  const quickPicks = setup.courseQuery ? [] : getCourseQuickPicks(4, options);
+  const searchResults = getProviderRoundSetupCourses(setup.courseQuery, setup.courseQuery ? 10 : 8, options);
+  const quickPicks = setup.courseQuery ? [] : getProviderCourseQuickPicks(4, options);
   const nearbyCourses = nearbyState?.coordinates
     ? findNearbyCourses(
         Number(nearbyState.coordinates.latitude || 0),

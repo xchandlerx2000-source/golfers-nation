@@ -1,7 +1,7 @@
 import {
-  findCourseById as findSeededCourseById,
-  getCourseQuickPicks as getSeededCourseQuickPicks,
-  getRoundSetupCourses as getSeededRoundSetupCourses,
+  findCourseById,
+  getCourseQuickPicks,
+  getRoundSetupCourses,
   listSeededCourses,
   searchCourseLibrary,
 } from "../course-library.js";
@@ -81,13 +81,13 @@ export const localCourseProvider = {
       .map((course) => normalizeLocalCourse(course));
   },
   getCourseQuickPicks(limit = 4) {
-    return getSeededCourseQuickPicks(limit).map((course) => normalizeLocalCourse(course));
+    return getCourseQuickPicks(limit).map((course) => normalizeLocalCourse(course));
   },
   getRoundSetupCourses(query = "", limit = 10) {
-    return getSeededRoundSetupCourses(query, limit).map((course) => normalizeLocalCourse(course));
+    return getRoundSetupCourses(query, limit).map((course) => normalizeLocalCourse(course));
   },
   getCourseById(courseId) {
-    const course = findSeededCourseById(courseId);
+    const course = findCourseById(courseId);
     return course ? normalizeLocalCourse(course) : null;
   },
   findNearbyCourses(lat, lng, { limit = 6, radiusMiles = 50 } = {}) {
