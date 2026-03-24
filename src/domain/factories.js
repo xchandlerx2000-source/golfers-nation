@@ -145,6 +145,8 @@ export function createRound({
   courseId = null,
   courseCity = "",
   courseState = "",
+  courseCountry = "",
+  courseAddress = "",
   courseRegion = "",
   courseLatitude = null,
   courseLongitude = null,
@@ -152,6 +154,7 @@ export function createRound({
   courseSeeded = false,
   courseMetadata = null,
   holesTemplate = null,
+  selectedHoleCount = null,
   courseRating = null,
   courseSlope = null,
 }) {
@@ -162,7 +165,7 @@ export function createRound({
     createPlayer(player, index, currentUser.id, currentUserName)
   );
   const sideRecords = createSides(safeMode, playerRecords);
-  const sourceHoles = Array.isArray(holesTemplate) && holesTemplate.length === 18
+  const sourceHoles = Array.isArray(holesTemplate) && holesTemplate.length > 0
     ? holesTemplate
     : COURSE_TEMPLATE;
   const holes = sourceHoles.map((hole) => ({
@@ -180,12 +183,16 @@ export function createRound({
     courseId,
     courseCity,
     courseState,
+    courseCountry,
+    courseAddress,
     courseRegion,
     courseLatitude,
     courseLongitude,
     courseSource,
     courseSeeded,
     courseMetadata: cloneData(courseMetadata || {}),
+    selectedHoleCount: Number(selectedHoleCount || sourceHoles.length || 18),
+    courseHoleCount: sourceHoles.length,
     courseRating,
     courseSlope,
     weather: weather || "Calm 72F",

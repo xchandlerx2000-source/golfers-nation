@@ -11,19 +11,19 @@ function getViewIndex(viewId) {
   return VIEW_ORDER.findIndex((view) => view.id === viewId);
 }
 
-const PROFILE_SETTINGS_SECTIONS = new Set(["profile-identity", "golf-profile", "social"]);
-const APP_SETTINGS_SECTIONS = new Set(["account", "appearance", "spotify", "app-support"]);
+const PROFILE_SETTINGS_SECTION_IDS = new Set(["profile-identity", "golf-profile", "social"]);
+const APP_SETTINGS_SECTION_IDS = new Set(["account", "appearance", "spotify", "app-support"]);
 
 export function getSettingsDestinationForSection(sectionId = "", requestedDestination = "") {
   if (requestedDestination === "profile" || requestedDestination === "app" || requestedDestination === "landing") {
     return requestedDestination;
   }
 
-  if (PROFILE_SETTINGS_SECTIONS.has(sectionId)) {
+  if (PROFILE_SETTINGS_SECTION_IDS.has(sectionId)) {
     return "profile";
   }
 
-  if (APP_SETTINGS_SECTIONS.has(sectionId)) {
+  if (APP_SETTINGS_SECTION_IDS.has(sectionId)) {
     return "app";
   }
 

@@ -1,6 +1,7 @@
 import { createDefaultAccountState } from "../services/account-service.js";
 import { createSpotifySessionState } from "../integrations/spotify-service.js";
 import { createDefaultNearbyState } from "../services/nearby-detection-service.js";
+import { getDefaultRoundSetup } from "../services/course-service.js";
 import { cloneData } from "../utils/formatters.js";
 
 export function createDefaultState() {
@@ -95,11 +96,7 @@ export function createDefaultState() {
         lastSuccessAt: 0,
         retryCount: 0,
       },
-      roundSetup: {
-        courseQuery: "",
-        selectedCourseId: "",
-        selectedTeeBoxId: "",
-      },
+      roundSetup: getDefaultRoundSetup(),
       nearby: createDefaultNearbyState(),
       spotify: createSpotifySessionState(),
     },

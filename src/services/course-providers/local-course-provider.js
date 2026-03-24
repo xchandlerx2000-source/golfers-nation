@@ -1,13 +1,13 @@
 import {
   findCourseById as findSeededCourseById,
   getCourseQuickPicks as getSeededCourseQuickPicks,
-  getDefaultTeeBox,
   getRoundSetupCourses as getSeededRoundSetupCourses,
   listSeededCourses,
   searchCourseLibrary,
 } from "../course-library.js";
 import {
   createCourseRoundTemplateRecord,
+  findCourseTeeBoxRecord,
   getDefaultCourseTeeBoxRecord,
   normalizeCourseRecord,
 } from "../../domain/course-models.js";
@@ -116,14 +116,7 @@ export const localCourseProvider = {
       return null;
     }
 
-    const rawCourse = findSeededCourseById(courseId);
-    const selectedTee = rawCourse
-      ? normalizeLocalCourse({
-        ...rawCourse,
-        teeBoxes: [teeId ? (rawCourse.teeBoxes.find((teeBox) => teeBox.id === teeId) || getDefaultTeeBox(rawCourse)) : getDefaultTeeBox(rawCourse)],
-      }).teeBoxes[0]
-      : getDefaultCourseTeeBoxRecord(course);
-    const teeBox = course.teeBoxes.find((entry) => entry.id === (selectedTee?.id || teeId)) || getDefaultCourseTeeBoxRecord(course);
+    const teeBox = findCourseTeeBoxRecord(course, teeId) || getDefaultCourseTeeBoxRecord(course);
     return createCourseRoundTemplateRecord({
       course,
       teeBox,

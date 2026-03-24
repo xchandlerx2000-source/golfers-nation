@@ -39,7 +39,7 @@ import {
   toggleFollowProfile,
 } from "./services/player-service.js";
 import { createProductPlatform } from "./services/product-platform.js";
-import { createManualCourseSelection, createRoundCourseSelection } from "./services/course-library.js";
+import { buildManualRoundTemplate, buildRoundTemplate } from "./services/course-service.js";
 import { describeLiveRoomFailure, hostLiveRoundSession, joinLiveRoundSession, publishLiveRoundUpdate } from "./services/realtime-session-service.js";
 import {
   ensureHostedGroupForRound,
@@ -49,6 +49,8 @@ import {
   parsePlayers,
   resetRoundSetup,
   setSelectedCourse,
+  setSelectedHoleCount,
+  setSelectedTeeBox,
 } from "./services/round-flow-service.js";
 import { createDefaultState } from "./state/default-state.js";
 import {
@@ -99,6 +101,11 @@ function mapTabToView(tab) {
     default:
       return null;
   }
+}
+
+function getRoundHoleLimit(state) {
+  const round = state.rounds?.find((entry) => entry.id === state.session?.activeRoundId) || null;
+  return Math.max(1, Number(round?.holes?.length || round?.selectedHoleCount || 18));
 }
 
 export function bootstrapApp({
@@ -1503,7 +1510,8 @@ export function bootstrapApp({
       store.setState((draft) => {
         const current = draft.session.selectedHole;
         const direction = Number(actionElement.dataset.direction);
-        draft.session.selectedHole = Math.max(1, Math.min(18, current + direction));
+        const maxHole = getRoundHoleLimit(draft);
+        draft.session.selectedHole = Math.max(1, Math.min(maxHole, current + direction));
         return draft;
       }, { reason: "step-hole" });
       return;
@@ -1750,6 +1758,11 @@ export function bootstrapApp({
         return;
       }
       requestNearbyLocationAssist(roundId);
+      return;
+    }
+
+    if (action === "detect-nearby-courses") {
+      requestNearbyLocationAssist(null);
       return;
     }
 
@@ -2243,12 +2256,18 @@ export function bootstrapApp({
     const courseTeeInput = event.target.closest("[data-course-tee-select]");
     if (courseTeeInput) {
       store.setState((draft) => {
-        draft.session.roundSetup = {
-          ...getRoundSetupState(draft),
-          selectedTeeBoxId: String(courseTeeInput.value || ""),
-        };
+        setSelectedTeeBox(draft, String(courseTeeInput.value || ""));
         return draft;
       }, { reason: "select-course-tee" });
+      return;
+    }
+
+    const courseHoleCountInput = event.target.closest("[data-course-hole-count-select]");
+    if (courseHoleCountInput) {
+      store.setState((draft) => {
+        setSelectedHoleCount(draft, Number(courseHoleCountInput.value || 18));
+        return draft;
+      }, { reason: "select-course-hole-count" });
       return;
     }
 
@@ -2633,41 +2652,44 @@ export function bootstrapApp({
         );
         const selectedCourseId = String(roundSetup.selectedCourseId || data.get("selectedCourseId") || "");
         const selectedTeeBoxId = String(roundSetup.selectedTeeBoxId || data.get("selectedTeeBoxId") || "");
-        const selectedCourse = createRoundCourseSelection(
+        const selectedHoleCount = Number(data.get("selectedHoleCount") || roundSetup.selectedHoleCount || 18);
+        const selectedCourse = buildRoundTemplate(
           selectedCourseId,
-          selectedTeeBoxId
+          selectedTeeBoxId,
+          { holeCount: selectedHoleCount }
         );
-        const manualCourse = createManualCourseSelection(
+        const manualCourse = buildManualRoundTemplate(
           String(data.get("courseName") || "").trim(),
-          String(data.get("teeBox") || "").trim()
+          String(data.get("teeBox") || "").trim(),
+          { holeCount: selectedHoleCount }
         );
         const courseSelection = selectedCourse || manualCourse;
         const round = createRound({
           currentUser: draft.currentUser,
           courseId: courseSelection.courseId,
           courseName: courseSelection.courseName,
+          courseAddress: courseSelection.address,
           courseCity: courseSelection.city,
           courseState: courseSelection.state,
+          courseCountry: courseSelection.country,
           courseRegion: courseSelection.region,
           courseLatitude: courseSelection.latitude,
           courseLongitude: courseSelection.longitude,
           courseSource: courseSelection.source,
           courseSeeded: courseSelection.seeded,
           courseMetadata: {
-            aliases: courseSelection.aliases || [],
-            keywords: courseSelection.keywords || [],
-            featured: Boolean(courseSelection.featured),
-            featuredNote: courseSelection.featuredNote || "",
-            architect: courseSelection.architect || "",
-            opened: courseSelection.opened ?? null,
-            courseType: courseSelection.courseType || "",
-            teeCount: courseSelection.teeCount || 0,
+            ...(courseSelection.metadata || {}),
+            clubName: courseSelection.clubName || courseSelection.courseName,
+            selectedHoleCount: courseSelection.selectedHoleCount || selectedHoleCount,
+            holesCount: courseSelection.holesCount || courseSelection.holes?.length || selectedHoleCount,
+            teeBoxName: courseSelection.teeBoxName || "",
           },
           teeBox: courseSelection.teeBoxName,
           teeBoxId: courseSelection.teeBoxId,
           courseRating: courseSelection.rating,
           courseSlope: courseSelection.slope,
           holesTemplate: courseSelection.holes,
+          selectedHoleCount: courseSelection.selectedHoleCount || selectedHoleCount,
           weather: String(data.get("weather") || "").trim(),
           mode: String(data.get("mode") || "stroke"),
           players: playerProfiles,

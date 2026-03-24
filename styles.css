@@ -2774,6 +2774,38 @@ textarea {
   margin-bottom: 18px;
 }
 
+.course-detection-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--line-soft));
+  background:
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.08), transparent 72%),
+    var(--surface-soft);
+}
+
+.course-detection-copy {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.course-detection-copy h5 {
+  margin: 0;
+  font-size: 0.96rem;
+}
+
+.course-nearby-list {
+  display: grid;
+  gap: 8px;
+}
+
+.course-nearby-card {
+  padding: 12px 14px;
+}
+
 .course-search-shell {
   display: grid;
   gap: 10px;
@@ -2895,6 +2927,10 @@ textarea {
 .course-selected-actions-buttons {
   display: grid;
   align-items: end;
+}
+
+.course-selected-actions .button {
+  min-height: 44px;
 }
 
 .selected-course-summary-strip {

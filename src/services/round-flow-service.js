@@ -1,5 +1,9 @@
-import { FEATURED_COURSE_ID } from "../config.js";
-import { findCourseById, getDefaultTeeBox } from "./course-library.js";
+import {
+  getCourseById,
+  getDefaultCourseTeeBox,
+  getDefaultRoundSetup as getDefaultCourseRoundSetup,
+  getRoundSetupState as getCanonicalRoundSetupState,
+} from "./course-service.js";
 import { hostRoundGroup } from "./mock-api.js";
 
 const HOSTED_ROUND_NOTE = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
@@ -52,21 +56,11 @@ export function parsePlayers(value, currentUserName) {
 }
 
 export function getDefaultRoundSetup() {
-  const featuredCourse = findCourseById(FEATURED_COURSE_ID);
-  const featuredTeeBox = featuredCourse ? getDefaultTeeBox(featuredCourse) : null;
-
-  return {
-    courseQuery: "",
-    selectedCourseId: featuredCourse?.id || "",
-    selectedTeeBoxId: featuredTeeBox?.id || "",
-  };
+  return getDefaultCourseRoundSetup();
 }
 
 export function getRoundSetupState(state) {
-  return {
-    ...getDefaultRoundSetup(),
-    ...(state.session?.roundSetup || {}),
-  };
+  return getCanonicalRoundSetupState(state.session?.roundSetup || {});
 }
 
 export function resetRoundSetup(draft) {
@@ -74,7 +68,7 @@ export function resetRoundSetup(draft) {
 }
 
 export function setSelectedCourse(draft, courseId, teeBoxId = "") {
-  const course = findCourseById(courseId);
+  const course = getCourseById(courseId);
   if (!course) {
     draft.session.roundSetup = {
       ...getRoundSetupState(draft),
@@ -84,11 +78,34 @@ export function setSelectedCourse(draft, courseId, teeBoxId = "") {
     return;
   }
 
-  const defaultTee = getDefaultTeeBox(course);
+  const defaultTee = getDefaultCourseTeeBox(course);
   draft.session.roundSetup = {
     ...getRoundSetupState(draft),
     selectedCourseId: course.id,
     selectedTeeBoxId: teeBoxId || defaultTee?.id || "",
+    selectedHoleCount: Math.min(
+      Number(getRoundSetupState(draft).selectedHoleCount || course.holesCount || 18),
+      Number(course.holesCount || defaultTee?.holes?.length || 18)
+    ),
+  };
+}
+
+export function setSelectedTeeBox(draft, teeBoxId = "") {
+  draft.session.roundSetup = {
+    ...getRoundSetupState(draft),
+    selectedTeeBoxId: teeBoxId || "",
+  };
+}
+
+export function setSelectedHoleCount(draft, holeCount = 18) {
+  const roundSetup = getRoundSetupState(draft);
+  const course = roundSetup.selectedCourseId ? getCourseById(roundSetup.selectedCourseId) : null;
+  const maxHoleCount = Number(course?.holesCount || 18);
+  const safeCount = Math.max(1, Math.min(maxHoleCount, Number(holeCount || 18)));
+
+  draft.session.roundSetup = {
+    ...roundSetup,
+    selectedHoleCount: safeCount,
   };
 }
 

@@ -2,8 +2,8 @@ import { createActivity, createGearItem, createPlayerProfile, createRound, creat
 import { getPendingRoundEvents } from "../domain/round-sync.js";
 import { createIntegrationSettings, createSpotifySessionState } from "../integrations/spotify-service.js";
 import { applyHoleUpdate, getParticipantTotals } from "../domain/scoring.js";
-import { FEATURED_COURSE_ID, TESTER_DEFAULT_SUBSCRIPTION_TIER } from "../config.js";
-import { findCourseById, getDefaultTeeBox } from "./course-library.js";
+import { TESTER_DEFAULT_SUBSCRIPTION_TIER } from "../config.js";
+import { getDefaultRoundSetup as getDefaultCourseRoundSetup } from "./course-service.js";
 import { average, cloneData } from "../utils/formatters.js";
 
 const DEFAULT_PASSWORD = "fairway123";
@@ -102,14 +102,7 @@ function formatRecentFormLabel(result) {
 }
 
 function createDefaultRoundSetup() {
-  const featuredCourse = findCourseById(FEATURED_COURSE_ID);
-  const defaultTeeBox = featuredCourse ? getDefaultTeeBox(featuredCourse) : null;
-
-  return {
-    courseQuery: "",
-    selectedCourseId: featuredCourse?.id || "",
-    selectedTeeBoxId: defaultTeeBox?.id || "",
-  };
+  return getDefaultCourseRoundSetup();
 }
 
 function buildAccountSummary(account, workspace) {
@@ -538,6 +531,7 @@ function getUserSession(state) {
       courseQuery: state.session.roundSetup?.courseQuery || "",
       selectedCourseId: state.session.roundSetup?.selectedCourseId || "",
       selectedTeeBoxId: state.session.roundSetup?.selectedTeeBoxId || "",
+      selectedHoleCount: Number(state.session.roundSetup?.selectedHoleCount || 18),
     },
   };
 }
