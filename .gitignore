@@ -1,5 +1,21 @@
 node_modules/
 coverage/
+<<<<<<< HEAD
+.vite/
+.cache/
+.wrangler/
+.idea/
+=======
+<<<<<<< HEAD
+>>>>>>> 2620b82 (add state-safe tab navigation)
+.vscode/
+.DS_Store
+Desktop.ini
+Thumbs.db
+<<<<<<< HEAD
+=======
+
+=======
 .vite/
 .cache/
 .wrangler/
@@ -8,6 +24,7 @@ coverage/
 .DS_Store
 Desktop.ini
 Thumbs.db
+>>>>>>> 2620b82 (add state-safe tab navigation)
 *.log
 npm-debug.log*
 yarn-*.log*
@@ -22,3 +39,7 @@ pnpm-debug.log*
 Codex updates files.txt
 System.Drawing.Drawing2D.GraphicsPath
 ChatGPT Image*.png
+<<<<<<< HEAD
+=======
+>>>>>>> 9f91899 (describe the update)
+>>>>>>> 2620b82 (add state-safe tab navigation)

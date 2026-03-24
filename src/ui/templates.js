@@ -697,6 +697,7 @@ function getRoundSavePresentation(round) {
 function renderNav(state) {
   const navActiveView = getNavActiveView(state);
   return PRIMARY_NAV_TABS.map((view) => {
+<<<<<<< HEAD
     const isActive = navActiveView === view.id;
     const activeClass = isActive ? "is-active" : "";
     const currentAttr = isActive ? 'aria-current="page"' : "";
@@ -710,6 +711,29 @@ function renderNav(state) {
         type="button"
         role="tab"
         aria-selected="${selectedAttr}"
+=======
+      const isActive = navActiveView === view.id;
+      const activeClass = isActive ? "is-active active" : "";
+      const tabId = view.id === "home"
+        ? "play"
+        : view.id === "round"
+          ? "score"
+          : view.id === "community"
+            ? "community"
+            : "profile";
+      const currentAttr = isActive ? 'aria-current="page"' : "";
+      const selectedAttr = isActive ? "true" : "false";
+      return `
+        <button
+          id="tab-${view.id}"
+          class="nav-item nav-btn ${activeClass}"
+          data-action="nav-view"
+          data-view="${view.id}"
+          data-tab="${tabId}"
+          type="button"
+          role="tab"
+          aria-selected="${selectedAttr}"
+>>>>>>> 2620b82 (add state-safe tab navigation)
         aria-controls="app-screen-panel"
         aria-label="${escapeHtml(view.label)}"
         ${currentAttr}
@@ -791,11 +815,21 @@ function renderAppShellHeader(state, activeRound, subscription) {
 
 function renderLiveSessionStrip(activeRound, activeGroup) {
   const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "---";
+<<<<<<< HEAD
+=======
+  const players = activeGroup?.members?.length
+    ? activeGroup.members.map((member) => member.displayName).filter(Boolean)
+    : activeRound?.players?.map((player) => player.name).filter(Boolean) || [];
+>>>>>>> 2620b82 (add state-safe tab navigation)
   const hiddenClass = activeRound ? "" : " hidden";
   return `
     <div class="live-strip${hiddenClass}" id="liveStrip">
       <span>LIVE / Code: <b id="liveCode">${escapeHtml(inviteCode)}</b></span>
+<<<<<<< HEAD
       <span id="livePlayers">Players: ${activeRound?.players?.length || 1}</span>
+=======
+      <span id="livePlayers">Players: ${escapeHtml(players.join(", ") || "You")}</span>
+>>>>>>> 2620b82 (add state-safe tab navigation)
     </div>
   `;
 }
@@ -1366,6 +1400,7 @@ function renderPrimaryActions(state, activeRound) {
   const hasActiveRound = Boolean(activeRound && activeRound.status === "active");
   const guided = shouldShowFirstRoundGuide(state) && !hasActiveRound;
   return `
+<<<<<<< HEAD
     <div class="play-actions-grid">
       <button class="button primary hero-button play-action-button ${guided ? "guided-action" : ""}" type="button" data-action="nav-view" data-view="round">Start round</button>
       <button class="button secondary hero-button play-action-button" type="button" data-action="nav-view" data-view="community">Join game</button>
@@ -1382,6 +1417,119 @@ function renderPrimaryActions(state, activeRound) {
         `
         : ""}
     </div>
+=======
+      <div class="play-screen-actions">
+        <button class="button primary primary-btn ${guided ? "guided-action" : ""}" type="button" data-action="nav-view" data-view="round">Start Round</button>
+        <button class="button secondary secondary-btn" type="button" data-action="nav-view" data-view="community">Join Game</button>
+        ${hasActiveRound ? `<p class="play-screen-note">Your active round is ready below if you want to jump back in.</p>` : ""}
+      </div>
+    `;
+}
+
+function renderPlayActiveGameCard(state, activeRound) {
+  const activeGroup = getActiveGroup(state, activeRound);
+  const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "";
+  const playerNames = activeRound?.players?.slice(0, 4).map((player) => player.name).join(", ") || "";
+
+  if (!activeRound) {
+    return `
+      <article class="card play-screen-card play-compact-card">
+        <h3>Active Game</h3>
+        <p>No active round yet.</p>
+        <p>Golden Nugget stays ready as the fastest first round.</p>
+      </article>
+    `;
+  }
+
+  return `
+      <article class="card play-screen-card play-compact-card">
+        <div class="play-screen-card-head">
+          <h3>Active Game</h3>
+          <span class="status-pill">${escapeHtml(activeRound.sync.label)}</span>
+        </div>
+        <p>Code: <strong>${escapeHtml(inviteCode || "---")}</strong></p>
+        <p>Players: ${escapeHtml(playerNames || "You")}</p>
+        <p>Hole ${activeRound.currentHole} • ${escapeHtml(activeRound.courseName)}</p>
+        <div class="row-actions compact-actions">
+          <button class="button primary" type="button" data-action="resume-round" data-round-id="${activeRound.id}">Continue Round</button>
+          ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Copy Link</button>` : `<button class="button secondary" type="button" data-action="host-active-round">Host Game</button>`}
+        </div>
+      </article>
+    `;
+}
+
+function renderPlayNearbyPlayersCard(state) {
+  const nearbyPlayers = getNearbyDiscoveryState(state).players.slice(0, 3);
+
+  return `
+      <article class="card play-screen-card play-compact-card">
+        <div class="play-screen-card-head">
+          <h3>Nearby Players</h3>
+          <button class="button subtle" type="button" data-action="nav-view" data-view="community">See all</button>
+        </div>
+        ${nearbyPlayers.length
+          ? `
+            <div class="stack-list compact-stack play-list play-screen-list">
+              ${nearbyPlayers.map((player) => `
+                <article class="list-row play-list-row play-screen-row">
+                  <div class="play-screen-row-copy">
+                    <strong>${escapeHtml(player.displayName)}</strong>
+                    <p>${escapeHtml(player.statusLabel)}</p>
+                  </div>
+                  <div class="list-metrics play-screen-row-actions">
+                    ${player.inviteCode ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${player.inviteCode}">Join</button>` : `<button class="button subtle" type="button" data-action="toggle-follow-profile" data-profile-id="${escapeHtml(player.profileId)}">${player.isFollowed ? "Following" : "Follow"}</button>`}
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          `
+          : `
+            <div class="empty-state compact-empty-state play-screen-empty">
+              <strong>No nearby golfers yet.</strong>
+              <p>Hosted rounds and active golfers will appear here automatically.</p>
+            </div>
+          `}
+      </article>
+    `;
+}
+
+function renderPlayFriendsCard(state) {
+  const friendRows = getNearbyDiscoveryState(state).friends;
+
+  return `
+    <article class="card play-compact-card">
+      <div class="section-heading section-heading--compact">
+        <div>
+          <p class="eyebrow">Friends activity</p>
+          <h3>Your golf circle</h3>
+        </div>
+        <button class="button subtle" type="button" data-action="nav-view" data-view="community">Invite</button>
+      </div>
+      ${friendRows.length
+        ? `
+          <div class="stack-list compact-stack play-list">
+            ${friendRows.map((friend) => `
+              <article class="list-row play-list-row">
+                <div>
+                  <strong>${escapeHtml(friend.displayName)}</strong>
+                  <p>${escapeHtml(friend.statusLabel)}</p>
+                </div>
+                <div class="list-metrics">
+                  ${friend.canJoin ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${friend.inviteCode}">Join</button>` : ""}
+                  <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(friend.profileId)}">Open</button>
+                </div>
+              </article>
+            `).join("")}
+          </div>
+        `
+        : `
+          <div class="empty-state compact-empty-state">
+            <strong>No friends added yet.</strong>
+            <p>Invite golfers from Community and their cards will show up here for faster repeat rounds.</p>
+          </div>
+        `}
+    </article>
+>>>>>>> 2620b82 (add state-safe tab navigation)
   `;
 }
 
@@ -2469,15 +2617,28 @@ function renderHomeView(state) {
   const nearby = getNearbyDiscoveryState(state);
 
   return `
+<<<<<<< HEAD
     <section class="view-grid home-grid play-hub-grid">
       <article class="card play-actions-card card-span-2">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Play</p>
             <h3>${escapeHtml(`Ready to tee it up, ${firstName}?`)}</h3>
+=======
+      <section class="play-screen">
+        <article class="card play-screen-hero">
+          <div class="play-screen-card-head">
+            <h2>${escapeHtml(`Ready to tee it up, ${firstName}?`)}</h2>
+            <span class="status-pill">${premium ? "Premium access" : "Free membership"}</span>
+>>>>>>> 2620b82 (add state-safe tab navigation)
           </div>
-          <span class="status-pill">${premium ? "Premium access" : "Free membership"}</span>
+          ${renderPrimaryActions(state, activeRound)}
+        </article>
+        <div class="play-screen-grid">
+        ${renderPlayActiveGameCard(state, activeRound)}
+        ${renderPlayNearbyPlayersCard(state)}
         </div>
+<<<<<<< HEAD
         <p class="body-copy">Start a round, join a game, or continue the live card already on this phone. The main actions stay visible first so you do not have to hunt for them.</p>
         ${renderPrimaryActions(state, activeRound)}
         <div class="play-stat-grid play-stat-grid--wide play-stat-grid--compact">
@@ -2505,6 +2666,10 @@ function renderHomeView(state) {
       ${renderNearbyStrategyPanel(nearby.strategy, { compact: true })}
     </section>
   `;
+=======
+      </section>
+    `;
+>>>>>>> 2620b82 (add state-safe tab navigation)
 }
 
 function renderModeNotes(state, mode) {
@@ -2962,6 +3127,7 @@ function renderHoleEditor(state, round) {
   function renderEditableParticipant(participant, options = {}) {
     const context = buildParticipantContext(participant);
     const { secondary = false } = options;
+    const displayedScore = context.entry?.strokes ?? hole.par;
     const cardClasses = [
       "participant-card",
       secondary ? "participant-card--secondary-entry" : "",
@@ -3008,71 +3174,119 @@ function renderHoleEditor(state, round) {
           `
           : ""}
         <div class="score-primary-block">
-          <div class="quick-score-row">
-            <button
-              class="score-chip"
-              type="button"
-              data-action="quick-score"
-              data-hole="${hole.number}"
-              data-participant-id="${participant.id}"
-              data-strokes="${Math.max(1, hole.par - 2)}"
-            >
-              <span>Eagle</span>
-              <strong>${Math.max(1, hole.par - 2)}</strong>
-            </button>
-            <button
-              class="score-chip"
-              type="button"
-              data-action="quick-score"
-              data-hole="${hole.number}"
-              data-participant-id="${participant.id}"
-              data-strokes="${Math.max(1, hole.par - 1)}"
-            >
-              <span>Birdie</span>
-              <strong>${Math.max(1, hole.par - 1)}</strong>
-            </button>
-            <button
-              class="score-chip is-primary"
-              type="button"
-              data-action="quick-score"
-              data-hole="${hole.number}"
-              data-participant-id="${participant.id}"
-              data-strokes="${hole.par}"
-            >
-              <span>Par</span>
-              <strong>${hole.par}</strong>
-            </button>
-            <button
-              class="score-chip"
-              type="button"
-              data-action="quick-score"
-              data-hole="${hole.number}"
-              data-participant-id="${participant.id}"
-              data-strokes="${hole.par + 1}"
-            >
-              <span>Bogey</span>
-              <strong>${hole.par + 1}</strong>
-            </button>
-          </div>
-          <div class="score-manual-row">
-            <button class="button primary score-next-button" type="button" data-action="jump-next-open" data-hole="${nextOpenHole}">
-              Next hole ${nextOpenHole}
-            </button>
-            <label class="score-inline-field">
-              <span>Other score</span>
-              <input
-                type="number"
-                min="1"
-                max="12"
-                value="${context.entry?.strokes ?? ""}"
-                inputmode="numeric"
-                enterkeyhint="next"
-                data-score-field="strokes"
-                data-hole="${hole.number}"
-                data-participant-id="${participant.id}"
-              />
-            </label>
-          </div>
+          ${secondary
+            ? `
+              <div class="quick-score-row">
+                <button
+                  class="score-chip"
+                  type="button"
+                  data-action="quick-score"
+                  data-hole="${hole.number}"
+                  data-participant-id="${participant.id}"
+                  data-strokes="${Math.max(1, hole.par - 2)}"
+                >
+                  <span>Eagle</span>
+                  <strong>${Math.max(1, hole.par - 2)}</strong>
+                </button>
+                <button
+                  class="score-chip"
+                  type="button"
+                  data-action="quick-score"
+                  data-hole="${hole.number}"
+                  data-participant-id="${participant.id}"
+                  data-strokes="${Math.max(1, hole.par - 1)}"
+                >
+                  <span>Birdie</span>
+                  <strong>${Math.max(1, hole.par - 1)}</strong>
+                </button>
+                <button
+                  class="score-chip is-primary"
+                  type="button"
+                  data-action="quick-score"
+                  data-hole="${hole.number}"
+                  data-participant-id="${participant.id}"
+                  data-strokes="${hole.par}"
+                >
+                  <span>Par</span>
+                  <strong>${hole.par}</strong>
+                </button>
+                <button
+                  class="score-chip"
+                  type="button"
+                  data-action="quick-score"
+                  data-hole="${hole.number}"
+                  data-participant-id="${participant.id}"
+                  data-strokes="${hole.par + 1}"
+                >
+                  <span>Bogey</span>
+                  <strong>${hole.par + 1}</strong>
+                </button>
+              </div>
+              <div class="score-manual-row">
+                <button class="button primary score-next-button" type="button" data-action="jump-next-open" data-hole="${nextOpenHole}">
+                  Next hole ${nextOpenHole}
+                </button>
+                <label class="score-inline-field">
+                  <span>Other score</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    value="${context.entry?.strokes ?? ""}"
+                    inputmode="numeric"
+                    enterkeyhint="next"
+                    data-score-field="strokes"
+                    data-hole="${hole.number}"
+                    data-participant-id="${participant.id}"
+                  />
+                </label>
+              </div>
+            `
+            : `
+              <div class="score-screen">
+                <h2>Hole ${hole.number}</h2>
+                <div class="score-control">
+                  <button
+                    type="button"
+                    aria-label="Lower score"
+                    data-action="adjust-score"
+                    data-direction="-1"
+                    data-hole="${hole.number}"
+                    data-participant-id="${participant.id}"
+                  >
+                    -
+                  </button>
+                  <span>${displayedScore}</span>
+                  <button
+                    type="button"
+                    aria-label="Raise score"
+                    data-action="adjust-score"
+                    data-direction="1"
+                    data-hole="${hole.number}"
+                    data-participant-id="${participant.id}"
+                  >
+                    +
+                  </button>
+                </div>
+                <button class="button primary next-btn" type="button" data-action="jump-next-open" data-hole="${nextOpenHole}">
+                  Next Hole →
+                </button>
+                <label class="score-inline-field">
+                  <span>Manual score</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    value="${context.entry?.strokes ?? ""}"
+                    inputmode="numeric"
+                    enterkeyhint="next"
+                    data-score-field="strokes"
+                    data-hole="${hole.number}"
+                    data-participant-id="${participant.id}"
+                  />
+                </label>
+              </div>
+            `}
         </div>
         <details class="advanced-hole-stats">
           <summary>
@@ -3185,8 +3399,8 @@ function renderHoleEditor(state, round) {
     <article class="card round-card round-score-shell">
       <div class="round-score-heading">
         <div>
-          <p class="eyebrow">Live scoring</p>
-          <h3>Hole ${hole.number}</h3>
+          <p class="eyebrow">Score</p>
+          <h3>One hole at a time</h3>
           <p class="body-copy compact-copy round-score-subcopy">Par ${hole.par} / ${hole.yards} yds / ${escapeHtml(round.courseName)} / ${escapeHtml(round.teeBox)} tees</p>
         </div>
         <div class="round-score-status">
@@ -3195,10 +3409,13 @@ function renderHoleEditor(state, round) {
         </div>
       </div>
       ${renderHoleNavigator(round, selectedHole)}
+<<<<<<< HEAD
       <div class="round-entry-note">
         <span class="mini-label">Your card first</span>
         <strong>Score, save locally, then move to the next hole.</strong>
       </div>
+=======
+>>>>>>> 2620b82 (add state-safe tab navigation)
       <div class="participant-grid participant-grid--single">
         ${primaryParticipant ? renderEditableParticipant(primaryParticipant) : ""}
       </div>

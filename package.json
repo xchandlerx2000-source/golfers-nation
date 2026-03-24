@@ -16,8 +16,8 @@
     "build:netlify": "node scripts/build-dist-package.mjs",
     "build:cloudflare": "node scripts/build-dist-package.mjs",
     "review:bundle": "node scripts/build-peer-review-bundle.mjs",
-    "test": "npx vitest run tests --pool=threads",
-    "test:watch": "npx vitest tests --pool=threads",
+    "test": "node ./node_modules/vitest/vitest.mjs run tests --pool=threads",
+    "test:watch": "node ./node_modules/vitest/vitest.mjs tests --pool=threads",
     "test:e2e": "node -e \"console.log('Playwright setup skipped because browser automation support was not available in the setup environment.')\""
   },
   "devDependencies": {

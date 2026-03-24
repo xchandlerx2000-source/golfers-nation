@@ -1836,8 +1836,7 @@ function getAvailableStorage() {
     console.warn("[Golfers Nation] Local storage is unavailable.", error);
     return null;
   }
-}
-function loadPersistedState(createDefaultState) {
+}function loadPersistedState(createDefaultState) {
   const fallback = createDefaultState();
   const storage = getAvailableStorage();
   if (!storage) {
@@ -1909,8 +1908,7 @@ function loadPersistedState(createDefaultState) {
   } catch (error) {
     return fallback;
   }
-}
-function persistAppState(state) {
+}function persistAppState(state) {
   const storage = getAvailableStorage();
   if (!storage) {
     return false;
@@ -1923,13 +1921,11 @@ function persistAppState(state) {
     console.warn("[Golfers Nation] State persistence failed.", error);
     return false;
   }
-}
-function persistPlatformState(platform, state) {
+}function persistPlatformState(platform, state) {
   const prepared = platform.data.prepareForPersistence(state);
   platform.data.persist(prepared);
   return prepared;
-}
-function subscribeStorePersistence({
+}function subscribeStorePersistence({
   store,
   platform,
   safeRender,
@@ -1954,8 +1950,7 @@ function subscribeStorePersistence({
     applyAppearanceToDocument(state);
     applyShellModeToDocument(state);
   });
-}
-function renderInitialAppState({
+}function renderInitialAppState({
   store,
   safeRender,
   applyAppearanceToDocument = () => {},
@@ -2008,8 +2003,7 @@ function appendActivity(draft, message, type = "product") {
     })
   );
   draft.social.activity = draft.social.activity.slice(0, 16);
-}
-function setFeedback(draft, tone, title, message) {
+}function setFeedback(draft, tone, title, message) {
   draft.session.feedback = {
     tone,
     title,
@@ -2017,12 +2011,10 @@ function setFeedback(draft, tone, title, message) {
     updatedAt: Date.now(),
   };
   draft.session.pendingLabel = "";
-}
-function clearFeedback(draft) {
+}function clearFeedback(draft) {
   draft.session.feedback = null;
   draft.session.pendingLabel = "";
-}
-function getDefaultCloudSyncState() {
+}function getDefaultCloudSyncState() {
   return {
     status: "idle",
     scope: "",
@@ -2033,31 +2025,25 @@ function getDefaultCloudSyncState() {
     lastSuccessAt: 0,
     retryCount: 0,
   };
-}
-function getDefaultNearbySessionState() {
+}function getDefaultNearbySessionState() {
   return createDefaultNearbyState();
-}
-function mergeNearbySessionState(current = {}, updates = {}) {
+}function mergeNearbySessionState(current = {}, updates = {}) {
   return {
     ...getDefaultNearbySessionState(),
     ...(current || {}),
     ...(updates || {}),
   };
-}
-function setNearbySessionState(draft, updates = {}) {
+}function setNearbySessionState(draft, updates = {}) {
   draft.session.nearby = mergeNearbySessionState(draft.session.nearby, updates);
-}
-function mergeCloudSyncState(current = {}, updates = {}) {
+}function mergeCloudSyncState(current = {}, updates = {}) {
   return {
     ...getDefaultCloudSyncState(),
     ...(current || {}),
     ...(updates || {}),
   };
-}
-function setCloudSyncState(draft, updates = {}) {
+}function setCloudSyncState(draft, updates = {}) {
   draft.session.cloudSync = mergeCloudSyncState(draft.session.cloudSync, updates);
-}
-function resetCloudSyncState(draft) {
+}function resetCloudSyncState(draft) {
   draft.session.cloudSync = mergeCloudSyncState(draft.session.cloudSync, {
     status: "idle",
     scope: "",
@@ -2067,8 +2053,7 @@ function resetCloudSyncState(draft) {
     retryCount: 0,
     lastSuccessAt: Date.now(),
   });
-}
-function getCloudSyncCopy(scope = "workspace", roundId = null) {
+}function getCloudSyncCopy(scope = "workspace", roundId = null) {
   if (scope === "round-finish") {
     return {
       pendingLabel: "Backing up this round to your golfer account...",
@@ -2088,16 +2073,14 @@ function getCloudSyncCopy(scope = "workspace", roundId = null) {
     failureMessage: "Your latest changes are safe on this phone, but cloud backup needs another try.",
     retryLabel: roundId ? "Retry save" : "Retry cloud save",
   };
-}
-function normalizeUsernameInput(value, fallbackName = "golfer") {
+}function normalizeUsernameInput(value, fallbackName = "golfer") {
   const source = String(value || "").trim() || fallbackName;
   const base = source
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "")
     .slice(0, 16);
   return base ? `@${base}` : "@golfer";
-}
-function normalizeAvatarLabel(value, fallbackName = "Golfer") {
+}function normalizeAvatarLabel(value, fallbackName = "Golfer") {
   const source = String(value || "").trim().toUpperCase();
   if (source && source.length <= 2 && !source.includes(" ")) {
     return source.slice(0, 2);
@@ -2110,8 +2093,7 @@ function normalizeAvatarLabel(value, fallbackName = "Golfer") {
     .map((part) => part[0]?.toUpperCase() || "")
     .join("");
   return derived || "GN";
-}
-function syncIdentityAcrossRecords(draft) {
+}function syncIdentityAcrossRecords(draft) {
   draft.rounds.forEach((round) => {
     round.players.forEach((player) => {
       if (player.userId === draft.currentUser.id || player.profileId === draft.currentUser.profileId) {
@@ -2654,8 +2636,7 @@ function normalizeSpotifyTrack(track = null, fallbackIndex = 0) {
     webUrl: String(track.webUrl || defaultTrack.webUrl || SPOTIFY_WEB_URL),
     deepLink: String(track.deepLink || defaultTrack.deepLink || "spotify://"),
   };
-}
-function createSpotifyIntegrationState(overrides = {}) {
+}function createSpotifyIntegrationState(overrides = {}) {
   const queueIndex = Number.isInteger(overrides.queueIndex) ? overrides.queueIndex : 0;
   const connected = overrides.status === "connected";
   const fallbackTrack = connected ? getPreviewTrackAtIndex(queueIndex).track : null;
@@ -2684,38 +2665,31 @@ function createSpotifyIntegrationState(overrides = {}) {
     showOnRoundScreen: overrides.showOnRoundScreen !== false,
     nowPlaying,
   };
-}
-function createSpotifySessionState(overrides = {}) {
+}function createSpotifySessionState(overrides = {}) {
   return {
     barCollapsed: overrides.barCollapsed === true,
     lastAction: String(overrides.lastAction || ""),
     lastUpdatedAt: overrides.lastUpdatedAt || 0,
   };
-}
-function createIntegrationSettings(overrides = {}) {
+}function createIntegrationSettings(overrides = {}) {
   const next = cloneData(overrides || {});
   return {
     spotify: createSpotifyIntegrationState(next.spotify || {}),
   };
-}
-function getSpotifyIntegration(stateOrUser = {}) {
+}function getSpotifyIntegration(stateOrUser = {}) {
   const source = stateOrUser?.currentUser ? stateOrUser.currentUser : stateOrUser;
   return createSpotifyIntegrationState(source?.integrations?.spotify || {});
-}
-function getSpotifySession(state = {}) {
+}function getSpotifySession(state = {}) {
   return createSpotifySessionState(state?.session?.spotify || {});
-}
-function isSpotifyConnected(state = {}) {
+}function isSpotifyConnected(state = {}) {
   return getSpotifyIntegration(state).status === "connected";
-}
-function getSpotifyOpenTarget(spotifyState = null) {
+}function getSpotifyOpenTarget(spotifyState = null) {
   const spotify = createSpotifyIntegrationState(spotifyState || {});
   return {
     deepLink: spotify.nowPlaying?.deepLink || "spotify://",
     webUrl: spotify.nowPlaying?.webUrl || SPOTIFY_WEB_URL,
   };
-}
-function connectSpotifyCompanion(current = {}, options = {}) {
+}function connectSpotifyCompanion(current = {}, options = {}) {
   const queueIndex = Number.isInteger(current?.queueIndex) ? current.queueIndex : 0;
   const previewTrack = getPreviewTrackAtIndex(queueIndex).track;
   return createSpotifyIntegrationState({
@@ -2731,8 +2705,7 @@ function connectSpotifyCompanion(current = {}, options = {}) {
     playbackState: current?.playbackState === "paused" ? "paused" : "playing",
     nowPlaying: current?.nowPlaying || previewTrack,
   });
-}
-function disconnectSpotifyCompanion(current = {}) {
+}function disconnectSpotifyCompanion(current = {}) {
   return createSpotifyIntegrationState({
     ...current,
     status: "disconnected",
@@ -2741,8 +2714,7 @@ function disconnectSpotifyCompanion(current = {}) {
     nowPlaying: null,
     lastError: "",
   });
-}
-function toggleSpotifyPlayback(current = {}) {
+}function toggleSpotifyPlayback(current = {}) {
   const spotify = createSpotifyIntegrationState(current);
   if (spotify.status !== "connected" || !spotify.controlsEnabled) {
     return spotify;
@@ -2752,8 +2724,7 @@ function toggleSpotifyPlayback(current = {}) {
     ...spotify,
     playbackState: spotify.playbackState === "playing" ? "paused" : "playing",
   });
-}
-function stepSpotifyQueue(current = {}, direction = 1) {
+}function stepSpotifyQueue(current = {}, direction = 1) {
   const spotify = createSpotifyIntegrationState(current);
   if (spotify.status !== "connected" || !spotify.controlsEnabled) {
     return spotify;
@@ -2767,8 +2738,7 @@ function stepSpotifyQueue(current = {}, direction = 1) {
     nowPlaying: previewTrack.track,
     playbackState: "playing",
   });
-}
-function getSpotifyConnectionSummary(spotifyState = null) {
+}function getSpotifyConnectionSummary(spotifyState = null) {
   const spotify = createSpotifyIntegrationState(spotifyState || {});
   if (spotify.status !== "connected") {
     return {
@@ -5915,8 +5885,7 @@ const SEEDED_DISCOVERABLE_ROOMS = [
     distance: "9.4 mi",
     discoverySource: "seeded",
   },
-];
-function createDefaultNearbyState() {
+];function createDefaultNearbyState() {
   return {
     discoveryMode: "app-presence",
     enabled: true,
@@ -6004,14 +5973,12 @@ function dedupeNearbyGames(rows) {
     }
   });
   return [...seen.values()];
-}
-function getSeededNearbyRooms() {
+}function getSeededNearbyRooms() {
   return SEEDED_DISCOVERABLE_ROOMS.map((room) => ({
     ...room,
     players: room.players.map((player) => ({ ...player })),
   }));
-}
-function listNearbyGames(state) {
+}function listNearbyGames(state) {
   const nearbyState = getNearbyState(state);
   const followedIds = new Set(getFollowedProfileIds(state));
   const friendIds = new Set(getFriendProfileIds(state));
@@ -6086,8 +6053,7 @@ function listNearbyGames(state) {
     || (right.discoveryPriority || 0) - (left.discoveryPriority || 0)
     || left.title.localeCompare(right.title)
   );
-}
-function listNearbyPlayers(state) {
+}function listNearbyPlayers(state) {
   const activeRoundMap = buildActiveRoundMap(state);
   const activityMap = buildRecentActivityMap(state);
   const nearbyState = getNearbyState(state);
@@ -6154,8 +6120,7 @@ function listNearbyPlayers(state) {
       || (right.updatedAt || 0) - (left.updatedAt || 0)
       || right.displayName.localeCompare(left.displayName)
     );
-}
-function listFriendActivity(state) {
+}function listFriendActivity(state) {
   const friendIds = getFriendProfileIds(state);
   const activeRoundMap = buildActiveRoundMap(state);
 
@@ -6192,8 +6157,7 @@ function listFriendActivity(state) {
       || left.displayName.localeCompare(right.displayName)
     )
     .slice(0, 4);
-}
-function getNearbyStrategySummary(state) {
+}function getNearbyStrategySummary(state) {
   const nearbyState = getNearbyState(state);
   const locationReady = nearbyState.locationPermission === "granted" && Boolean(nearbyState.coordinates);
   const bluetoothReady = nearbyState.bluetoothStatus === "ready";
@@ -6229,8 +6193,7 @@ function getNearbyStrategySummary(state) {
     bluetoothReady,
     lastScanAt: nearbyState.lastScanAt || 0,
   };
-}
-function getNearbyDiscoveryState(state) {
+}function getNearbyDiscoveryState(state) {
   const games = listNearbyGames(state);
   const players = listNearbyPlayers(state);
   const friends = listFriendActivity(state);
@@ -6253,8 +6216,7 @@ function generateInviteCode(existingCodes) {
   }
 
   return code;
-}
-function hostRoundGroup({ state, round }) {
+}function hostRoundGroup({ state, round }) {
   const existingCodes = new Set(state.groups.map((group) => group.inviteCode));
   const inviteCode = generateInviteCode(existingCodes);
   const group = createGroup({
@@ -6266,8 +6228,7 @@ function hostRoundGroup({ state, round }) {
   });
 
   return { inviteCode, group };
-}
-function joinByInviteCode({ code, state }) {
+}function joinByInviteCode({ code, state }) {
   const normalized = String(code || "").trim().toUpperCase();
   if (!normalized) {
     return null;
@@ -6333,8 +6294,7 @@ function joinByInviteCode({ code, state }) {
     round: remoteRound,
     notice: `Joined ${seeded.title} via invite code.`,
   };
-}
-function getGearRecommendations(weather) {
+}function getGearRecommendations(weather) {
   const lower = String(weather || "").toLowerCase();
   const recommendations = [
     "Rangefinder",
@@ -9083,8 +9043,7 @@ function renderSpotifyControlButton({ action, label, ariaLabel, disabled = false
       ${escapeHtml(label)}
     </button>
   `;
-}
-function renderSpotifySettingsPanel(state) {
+}function renderSpotifySettingsPanel(state) {
   const spotify = getSpotifyIntegration(state);
   const summary = getSpotifyConnectionSummary(spotify);
   const connected = spotify.status === "connected";
@@ -9131,8 +9090,7 @@ function renderSpotifySettingsPanel(state) {
       </div>
     </article>
   `;
-}
-function renderSpotifyNowPlayingBar(state) {
+}function renderSpotifyNowPlayingBar(state) {
   if (!isSpotifyConnected(state)) {
     return "";
   }
@@ -9671,11 +9629,9 @@ function findParticipantProfileId(round, participantId) {
 
 function isPremiumSubscription(subscription) {
   return (typeof subscription === "string" ? subscription : subscription?.tier) === "premium";
-}
-function isModeLocked(modeId, subscription) {
+}function isModeLocked(modeId, subscription) {
   return PREMIUM_MODE_IDS.includes(modeId) && !isPremiumSubscription(subscription);
-}
-function getFeatureGate(featureId, subscription) {
+}function getFeatureGate(featureId, subscription) {
   const premium = isPremiumSubscription(subscription);
   const locked = PREMIUM_FEATURES.has(featureId) && !premium;
 
@@ -9715,8 +9671,7 @@ function getHoleCompletionStats(round, holeNumber) {
     scored,
     total: hole.entries.length,
   };
-}
-function getNextOpenHole(round, selectedHole = 1) {
+}function getNextOpenHole(round, selectedHole = 1) {
   if (!round?.holes?.length) {
     return selectedHole;
   }
@@ -9725,8 +9680,7 @@ function getNextOpenHole(round, selectedHole = 1) {
   const nextHole = afterSelected.find((hole) => hole.entries.some((entry) => entry.strokes === null || entry.strokes === 0));
 
   return nextHole ? nextHole.number : selectedHole;
-}
-function getSyncPresentation(round, group) {
+}function getSyncPresentation(round, group) {
   const pendingCount = getPendingRoundEvents(round).length;
   const saveState = round?.sync?.saveState || "saved-local";
   const transport = round?.sync?.transport || "local";
@@ -9865,6 +9819,7 @@ function getRoundSavePresentation(round) {
 function renderNav(state) {
   const navActiveView = getNavActiveView(state);
   return PRIMARY_NAV_TABS.map((view) => {
+<<<<<<< HEAD
     const isActive = navActiveView === view.id;
     const activeClass = isActive ? "is-active" : "";
     const currentAttr = isActive ? 'aria-current="page"' : "";
@@ -9878,6 +9833,29 @@ function renderNav(state) {
         type="button"
         role="tab"
         aria-selected="${selectedAttr}"
+=======
+      const isActive = navActiveView === view.id;
+      const activeClass = isActive ? "is-active active" : "";
+      const tabId = view.id === "home"
+        ? "play"
+        : view.id === "round"
+          ? "score"
+          : view.id === "community"
+            ? "community"
+            : "profile";
+      const currentAttr = isActive ? 'aria-current="page"' : "";
+      const selectedAttr = isActive ? "true" : "false";
+      return `
+        <button
+          id="tab-${view.id}"
+          class="nav-item nav-btn ${activeClass}"
+          data-action="nav-view"
+          data-view="${view.id}"
+          data-tab="${tabId}"
+          type="button"
+          role="tab"
+          aria-selected="${selectedAttr}"
+>>>>>>> 2620b82 (add state-safe tab navigation)
         aria-controls="app-screen-panel"
         aria-label="${escapeHtml(view.label)}"
         ${currentAttr}
@@ -9959,11 +9937,21 @@ function renderAppShellHeader(state, activeRound, subscription) {
 
 function renderLiveSessionStrip(activeRound, activeGroup) {
   const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "---";
+<<<<<<< HEAD
+=======
+  const players = activeGroup?.members?.length
+    ? activeGroup.members.map((member) => member.displayName).filter(Boolean)
+    : activeRound?.players?.map((player) => player.name).filter(Boolean) || [];
+>>>>>>> 2620b82 (add state-safe tab navigation)
   const hiddenClass = activeRound ? "" : " hidden";
   return `
     <div class="live-strip${hiddenClass}" id="liveStrip">
       <span>LIVE / Code: <b id="liveCode">${escapeHtml(inviteCode)}</b></span>
+<<<<<<< HEAD
       <span id="livePlayers">Players: ${activeRound?.players?.length || 1}</span>
+=======
+      <span id="livePlayers">Players: ${escapeHtml(players.join(", ") || "You")}</span>
+>>>>>>> 2620b82 (add state-safe tab navigation)
     </div>
   `;
 }
@@ -10534,6 +10522,7 @@ function renderPrimaryActions(state, activeRound) {
   const hasActiveRound = Boolean(activeRound && activeRound.status === "active");
   const guided = shouldShowFirstRoundGuide(state) && !hasActiveRound;
   return `
+<<<<<<< HEAD
     <div class="play-actions-grid">
       <button class="button primary hero-button play-action-button ${guided ? "guided-action" : ""}" type="button" data-action="nav-view" data-view="round">Start round</button>
       <button class="button secondary hero-button play-action-button" type="button" data-action="nav-view" data-view="community">Join game</button>
@@ -10550,6 +10539,119 @@ function renderPrimaryActions(state, activeRound) {
         `
         : ""}
     </div>
+=======
+      <div class="play-screen-actions">
+        <button class="button primary primary-btn ${guided ? "guided-action" : ""}" type="button" data-action="nav-view" data-view="round">Start Round</button>
+        <button class="button secondary secondary-btn" type="button" data-action="nav-view" data-view="community">Join Game</button>
+        ${hasActiveRound ? `<p class="play-screen-note">Your active round is ready below if you want to jump back in.</p>` : ""}
+      </div>
+    `;
+}
+
+function renderPlayActiveGameCard(state, activeRound) {
+  const activeGroup = getActiveGroup(state, activeRound);
+  const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "";
+  const playerNames = activeRound?.players?.slice(0, 4).map((player) => player.name).join(", ") || "";
+
+  if (!activeRound) {
+    return `
+      <article class="card play-screen-card play-compact-card">
+        <h3>Active Game</h3>
+        <p>No active round yet.</p>
+        <p>Golden Nugget stays ready as the fastest first round.</p>
+      </article>
+    `;
+  }
+
+  return `
+      <article class="card play-screen-card play-compact-card">
+        <div class="play-screen-card-head">
+          <h3>Active Game</h3>
+          <span class="status-pill">${escapeHtml(activeRound.sync.label)}</span>
+        </div>
+        <p>Code: <strong>${escapeHtml(inviteCode || "---")}</strong></p>
+        <p>Players: ${escapeHtml(playerNames || "You")}</p>
+        <p>Hole ${activeRound.currentHole} • ${escapeHtml(activeRound.courseName)}</p>
+        <div class="row-actions compact-actions">
+          <button class="button primary" type="button" data-action="resume-round" data-round-id="${activeRound.id}">Continue Round</button>
+          ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Copy Link</button>` : `<button class="button secondary" type="button" data-action="host-active-round">Host Game</button>`}
+        </div>
+      </article>
+    `;
+}
+
+function renderPlayNearbyPlayersCard(state) {
+  const nearbyPlayers = getNearbyDiscoveryState(state).players.slice(0, 3);
+
+  return `
+      <article class="card play-screen-card play-compact-card">
+        <div class="play-screen-card-head">
+          <h3>Nearby Players</h3>
+          <button class="button subtle" type="button" data-action="nav-view" data-view="community">See all</button>
+        </div>
+        ${nearbyPlayers.length
+          ? `
+            <div class="stack-list compact-stack play-list play-screen-list">
+              ${nearbyPlayers.map((player) => `
+                <article class="list-row play-list-row play-screen-row">
+                  <div class="play-screen-row-copy">
+                    <strong>${escapeHtml(player.displayName)}</strong>
+                    <p>${escapeHtml(player.statusLabel)}</p>
+                  </div>
+                  <div class="list-metrics play-screen-row-actions">
+                    ${player.inviteCode ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${player.inviteCode}">Join</button>` : `<button class="button subtle" type="button" data-action="toggle-follow-profile" data-profile-id="${escapeHtml(player.profileId)}">${player.isFollowed ? "Following" : "Follow"}</button>`}
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          `
+          : `
+            <div class="empty-state compact-empty-state play-screen-empty">
+              <strong>No nearby golfers yet.</strong>
+              <p>Hosted rounds and active golfers will appear here automatically.</p>
+            </div>
+          `}
+      </article>
+    `;
+}
+
+function renderPlayFriendsCard(state) {
+  const friendRows = getNearbyDiscoveryState(state).friends;
+
+  return `
+    <article class="card play-compact-card">
+      <div class="section-heading section-heading--compact">
+        <div>
+          <p class="eyebrow">Friends activity</p>
+          <h3>Your golf circle</h3>
+        </div>
+        <button class="button subtle" type="button" data-action="nav-view" data-view="community">Invite</button>
+      </div>
+      ${friendRows.length
+        ? `
+          <div class="stack-list compact-stack play-list">
+            ${friendRows.map((friend) => `
+              <article class="list-row play-list-row">
+                <div>
+                  <strong>${escapeHtml(friend.displayName)}</strong>
+                  <p>${escapeHtml(friend.statusLabel)}</p>
+                </div>
+                <div class="list-metrics">
+                  ${friend.canJoin ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${friend.inviteCode}">Join</button>` : ""}
+                  <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(friend.profileId)}">Open</button>
+                </div>
+              </article>
+            `).join("")}
+          </div>
+        `
+        : `
+          <div class="empty-state compact-empty-state">
+            <strong>No friends added yet.</strong>
+            <p>Invite golfers from Community and their cards will show up here for faster repeat rounds.</p>
+          </div>
+        `}
+    </article>
+>>>>>>> 2620b82 (add state-safe tab navigation)
   `;
 }
 
@@ -11637,15 +11739,28 @@ function renderHomeView(state) {
   const nearby = getNearbyDiscoveryState(state);
 
   return `
+<<<<<<< HEAD
     <section class="view-grid home-grid play-hub-grid">
       <article class="card play-actions-card card-span-2">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Play</p>
             <h3>${escapeHtml(`Ready to tee it up, ${firstName}?`)}</h3>
+=======
+      <section class="play-screen">
+        <article class="card play-screen-hero">
+          <div class="play-screen-card-head">
+            <h2>${escapeHtml(`Ready to tee it up, ${firstName}?`)}</h2>
+            <span class="status-pill">${premium ? "Premium access" : "Free membership"}</span>
+>>>>>>> 2620b82 (add state-safe tab navigation)
           </div>
-          <span class="status-pill">${premium ? "Premium access" : "Free membership"}</span>
+          ${renderPrimaryActions(state, activeRound)}
+        </article>
+        <div class="play-screen-grid">
+        ${renderPlayActiveGameCard(state, activeRound)}
+        ${renderPlayNearbyPlayersCard(state)}
         </div>
+<<<<<<< HEAD
         <p class="body-copy">Start a round, join a game, or continue the live card already on this phone. The main actions stay visible first so you do not have to hunt for them.</p>
         ${renderPrimaryActions(state, activeRound)}
         <div class="play-stat-grid play-stat-grid--wide play-stat-grid--compact">
@@ -11673,6 +11788,10 @@ function renderHomeView(state) {
       ${renderNearbyStrategyPanel(nearby.strategy, { compact: true })}
     </section>
   `;
+=======
+      </section>
+    `;
+>>>>>>> 2620b82 (add state-safe tab navigation)
 }
 
 function renderModeNotes(state, mode) {
@@ -12130,6 +12249,7 @@ function renderHoleEditor(state, round) {
   function renderEditableParticipant(participant, options = {}) {
     const context = buildParticipantContext(participant);
     const { secondary = false } = options;
+    const displayedScore = context.entry?.strokes ?? hole.par;
     const cardClasses = [
       "participant-card",
       secondary ? "participant-card--secondary-entry" : "",
@@ -12176,71 +12296,119 @@ function renderHoleEditor(state, round) {
           `
           : ""}
         <div class="score-primary-block">
-          <div class="quick-score-row">
-            <button
-              class="score-chip"
-              type="button"
-              data-action="quick-score"
-              data-hole="${hole.number}"
-              data-participant-id="${participant.id}"
-              data-strokes="${Math.max(1, hole.par - 2)}"
-            >
-              <span>Eagle</span>
-              <strong>${Math.max(1, hole.par - 2)}</strong>
-            </button>
-            <button
-              class="score-chip"
-              type="button"
-              data-action="quick-score"
-              data-hole="${hole.number}"
-              data-participant-id="${participant.id}"
-              data-strokes="${Math.max(1, hole.par - 1)}"
-            >
-              <span>Birdie</span>
-              <strong>${Math.max(1, hole.par - 1)}</strong>
-            </button>
-            <button
-              class="score-chip is-primary"
-              type="button"
-              data-action="quick-score"
-              data-hole="${hole.number}"
-              data-participant-id="${participant.id}"
-              data-strokes="${hole.par}"
-            >
-              <span>Par</span>
-              <strong>${hole.par}</strong>
-            </button>
-            <button
-              class="score-chip"
-              type="button"
-              data-action="quick-score"
-              data-hole="${hole.number}"
-              data-participant-id="${participant.id}"
-              data-strokes="${hole.par + 1}"
-            >
-              <span>Bogey</span>
-              <strong>${hole.par + 1}</strong>
-            </button>
-          </div>
-          <div class="score-manual-row">
-            <button class="button primary score-next-button" type="button" data-action="jump-next-open" data-hole="${nextOpenHole}">
-              Next hole ${nextOpenHole}
-            </button>
-            <label class="score-inline-field">
-              <span>Other score</span>
-              <input
-                type="number"
-                min="1"
-                max="12"
-                value="${context.entry?.strokes ?? ""}"
-                inputmode="numeric"
-                enterkeyhint="next"
-                data-score-field="strokes"
-                data-hole="${hole.number}"
-                data-participant-id="${participant.id}"
-              />
-            </label>
-          </div>
+          ${secondary
+            ? `
+              <div class="quick-score-row">
+                <button
+                  class="score-chip"
+                  type="button"
+                  data-action="quick-score"
+                  data-hole="${hole.number}"
+                  data-participant-id="${participant.id}"
+                  data-strokes="${Math.max(1, hole.par - 2)}"
+                >
+                  <span>Eagle</span>
+                  <strong>${Math.max(1, hole.par - 2)}</strong>
+                </button>
+                <button
+                  class="score-chip"
+                  type="button"
+                  data-action="quick-score"
+                  data-hole="${hole.number}"
+                  data-participant-id="${participant.id}"
+                  data-strokes="${Math.max(1, hole.par - 1)}"
+                >
+                  <span>Birdie</span>
+                  <strong>${Math.max(1, hole.par - 1)}</strong>
+                </button>
+                <button
+                  class="score-chip is-primary"
+                  type="button"
+                  data-action="quick-score"
+                  data-hole="${hole.number}"
+                  data-participant-id="${participant.id}"
+                  data-strokes="${hole.par}"
+                >
+                  <span>Par</span>
+                  <strong>${hole.par}</strong>
+                </button>
+                <button
+                  class="score-chip"
+                  type="button"
+                  data-action="quick-score"
+                  data-hole="${hole.number}"
+                  data-participant-id="${participant.id}"
+                  data-strokes="${hole.par + 1}"
+                >
+                  <span>Bogey</span>
+                  <strong>${hole.par + 1}</strong>
+                </button>
+              </div>
+              <div class="score-manual-row">
+                <button class="button primary score-next-button" type="button" data-action="jump-next-open" data-hole="${nextOpenHole}">
+                  Next hole ${nextOpenHole}
+                </button>
+                <label class="score-inline-field">
+                  <span>Other score</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    value="${context.entry?.strokes ?? ""}"
+                    inputmode="numeric"
+                    enterkeyhint="next"
+                    data-score-field="strokes"
+                    data-hole="${hole.number}"
+                    data-participant-id="${participant.id}"
+                  />
+                </label>
+              </div>
+            `
+            : `
+              <div class="score-screen">
+                <h2>Hole ${hole.number}</h2>
+                <div class="score-control">
+                  <button
+                    type="button"
+                    aria-label="Lower score"
+                    data-action="adjust-score"
+                    data-direction="-1"
+                    data-hole="${hole.number}"
+                    data-participant-id="${participant.id}"
+                  >
+                    -
+                  </button>
+                  <span>${displayedScore}</span>
+                  <button
+                    type="button"
+                    aria-label="Raise score"
+                    data-action="adjust-score"
+                    data-direction="1"
+                    data-hole="${hole.number}"
+                    data-participant-id="${participant.id}"
+                  >
+                    +
+                  </button>
+                </div>
+                <button class="button primary next-btn" type="button" data-action="jump-next-open" data-hole="${nextOpenHole}">
+                  Next Hole →
+                </button>
+                <label class="score-inline-field">
+                  <span>Manual score</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    value="${context.entry?.strokes ?? ""}"
+                    inputmode="numeric"
+                    enterkeyhint="next"
+                    data-score-field="strokes"
+                    data-hole="${hole.number}"
+                    data-participant-id="${participant.id}"
+                  />
+                </label>
+              </div>
+            `}
         </div>
         <details class="advanced-hole-stats">
           <summary>
@@ -12353,8 +12521,8 @@ function renderHoleEditor(state, round) {
     <article class="card round-card round-score-shell">
       <div class="round-score-heading">
         <div>
-          <p class="eyebrow">Live scoring</p>
-          <h3>Hole ${hole.number}</h3>
+          <p class="eyebrow">Score</p>
+          <h3>One hole at a time</h3>
           <p class="body-copy compact-copy round-score-subcopy">Par ${hole.par} / ${hole.yards} yds / ${escapeHtml(round.courseName)} / ${escapeHtml(round.teeBox)} tees</p>
         </div>
         <div class="round-score-status">
@@ -12363,10 +12531,13 @@ function renderHoleEditor(state, round) {
         </div>
       </div>
       ${renderHoleNavigator(round, selectedHole)}
+<<<<<<< HEAD
       <div class="round-entry-note">
         <span class="mini-label">Your card first</span>
         <strong>Score, save locally, then move to the next hole.</strong>
       </div>
+=======
+>>>>>>> 2620b82 (add state-safe tab navigation)
       <div class="participant-grid participant-grid--single">
         ${primaryParticipant ? renderEditableParticipant(primaryParticipant) : ""}
       </div>
@@ -13441,8 +13612,7 @@ function renderCurrentView(state) {
     default:
       return renderHomeView(state);
   }
-}
-function renderAppTemplate(state) {
+}function renderAppTemplate(state) {
   if (state.auth?.status !== "authenticated") {
     if (state.session.activeView === "help") {
       return renderHelpView(state, { standalone: true });
@@ -13517,17 +13687,74 @@ function renderAppTemplate(state) {
 }
 
 // ---- src/ui/render.js ----
-function createRenderer(root) {
+function getActiveRound(state) {
+  return state.rounds.find((round) => round.id === state.session.activeRoundId) || null;
+}
+
+function getActiveGroup(state, round) {
+  if (!round) {
+    return null;
+  }
+
+  return state.groups.find((group) =>
+    group.roundId === round.id
+    || group.id === round.groupId
+    || (round.inviteCode && group.inviteCode === round.inviteCode)
+  ) || null;
+}
+
+function getLiveSessionFromState(state) {
+  const activeRound = getActiveRound(state);
+  if (!activeRound) {
+    return null;
+  }
+
+  const activeGroup = getActiveGroup(state, activeRound);
+  const players = activeGroup?.members?.length
+    ? activeGroup.members.map((member) => member.displayName).filter(Boolean)
+    : activeRound.players.map((player) => player.name).filter(Boolean);
+  const code = activeGroup?.inviteCode || activeRound.inviteCode || "---";
+
+  return {
+    code,
+    players,
+  };
+}
+
+function updateLiveSession(root, session) {
+  const strip = root.querySelector("#liveStrip");
+  if (!strip) {
+    return;
+  }
+
+  if (!session) {
+    strip.classList.add("hidden");
+    return;
+  }
+
+  strip.classList.remove("hidden");
+
+  const codeElement = root.querySelector("#liveCode");
+  const playersElement = root.querySelector("#livePlayers");
+
+  if (codeElement) {
+    codeElement.textContent = session.code;
+  }
+
+  if (playersElement) {
+    playersElement.textContent = `Players: ${session.players.join(", ")}`;
+  }
+}function createRenderer(root) {
   return function render(state) {
     root.innerHTML = renderAppTemplate(state);
+    updateLiveSession(root, getLiveSessionFromState(state));
   };
 }
 
 // ---- src/ui/view-controller.js ----
 function getViewIndex(viewId) {
   return VIEW_ORDER.findIndex((view) => view.id === viewId);
-}
-function setActiveView(draft, nextView, transitionKind = "tab") {
+}function setActiveView(draft, nextView, transitionKind = "tab") {
   const previousView = draft.session.activeView || "home";
   const previousIndex = getViewIndex(previousView);
   const nextIndex = getViewIndex(nextView);
@@ -13551,32 +13778,27 @@ function setActiveView(draft, nextView, transitionKind = "tab") {
   }
 
   draft.session.transitionDirection = "steady";
-}
-function openHelpView(draft, sectionId = "getting-started") {
+}function openHelpView(draft, sectionId = "getting-started") {
   const currentView = draft.session.activeView || "home";
   draft.session.helpReturnView = draft.auth?.status === "authenticated"
     ? (currentView === "help" ? draft.session.helpReturnView || "home" : currentView)
     : "auth";
   draft.session.helpSection = sectionId || draft.session.helpSection || "getting-started";
   setActiveView(draft, "help", "focus");
-}
-function closeHelpView(draft) {
+}function closeHelpView(draft) {
   const returnView = draft.session.helpReturnView || "home";
   setActiveView(draft, returnView === "auth" ? "home" : returnView, "return");
-}
-function openSettingsView(draft, sectionId = "account") {
+}function openSettingsView(draft, sectionId = "account") {
   const currentView = draft.session.activeView || "home";
   draft.session.settingsReturnView = currentView === "settings"
     ? (draft.session.settingsReturnView || "home")
     : currentView;
   draft.session.settingsSection = sectionId || draft.session.settingsSection || "account";
   setActiveView(draft, "settings", "focus");
-}
-function closeSettingsView(draft) {
+}function closeSettingsView(draft) {
   const returnView = draft.session.settingsReturnView || "home";
   setActiveView(draft, returnView, "return");
-}
-function applyJoinedRoundState(draft, joined, successTitle, successMessage) {
+}function applyJoinedRoundState(draft, joined, successTitle, successMessage) {
   upsertJoinedRoundIntoState(draft, joined);
   applyJoinedRoundConnectionState(joined.round, joined.source);
   focusRoundView(draft, joined.round.id, draft.currentUser.profileId, setActiveView);
@@ -13960,7 +14182,20 @@ function createProductPlatform({
 }
 
 // ---- src/main.js ----
-function bootstrapApp({
+function mapTabToView(tab) {
+  switch (tab) {
+    case "play":
+      return "home";
+    case "score":
+      return "round";
+    case "community":
+      return "community";
+    case "profile":
+      return "settings";
+    default:
+      return null;
+  }
+}function bootstrapApp({
   root = typeof document !== "undefined" ? document.querySelector("#app") : null,
   platformFactory = createProductPlatform,
   createDefaultStateFn = createDefaultState,
@@ -14171,6 +14406,23 @@ function bootstrapApp({
       return false;
     }
   };
+
+  const renderTab = (tab) => {
+    const nextView = mapTabToView(tab);
+    if (!nextView) {
+      return false;
+    }
+
+    store.setState((draft) => {
+      setActiveView(draft, nextView, "tab");
+      return draft;
+    }, { reason: "render-tab" });
+    return true;
+  };
+
+  if (typeof window !== "undefined") {
+    window.renderTab = renderTab;
+  }
 
   try {
     const createdSession = platform.realtime.createSession({ store });
@@ -15020,26 +15272,37 @@ function bootstrapApp({
   }
 
   root.addEventListener("click", async (event) => {
-    const actionElement = event.target.closest("[data-action]");
-    if (!actionElement) {
-      return;
-    }
+      const navButton = event.target.closest(".nav-btn[data-tab]");
+      if (navButton) {
+        renderTab(navButton.dataset.tab);
+        return;
+      }
+
+      const actionElement = event.target.closest("[data-action]");
+      if (!actionElement) {
+        return;
+      }
 
     const action = actionElement.dataset.action;
 
-    if (action === "nav-view") {
-      store.setState((draft) => {
-        const nextView = actionElement.dataset.view;
-        if (nextView === "help") {
-          openHelpView(draft, actionElement.dataset.section);
-          return draft;
+      if (action === "nav-view") {
+        const tab = actionElement.dataset.tab;
+        if (tab && renderTab(tab)) {
+          return;
         }
 
-        setActiveView(draft, nextView, "tab");
-        return draft;
-      }, { reason: "nav-view" });
-      return;
-    }
+        store.setState((draft) => {
+          const nextView = actionElement.dataset.view;
+          if (nextView === "help") {
+            openHelpView(draft, actionElement.dataset.section);
+            return draft;
+          }
+
+          setActiveView(draft, nextView, "tab");
+          return draft;
+        }, { reason: "nav-view" });
+        return;
+      }
 
     if (action === "open-help-section") {
       store.setState((draft) => {
@@ -15333,6 +15596,50 @@ function bootstrapApp({
         appendActivity(draft, `${round.courseName} quick-scored hole ${holeNumber}.`, "round");
         return draft;
       }, { reason: "quick-score" });
+      pulseScoreFeedback(pulseParticipantId, pulseHoleNumber);
+      requestRealtimeRoundUpdate(store.getState().session.activeRoundId);
+      void runPendingRoundSync({ successFeedback: false });
+      return;
+    }
+
+    if (action === "adjust-score") {
+      let pulseParticipantId = null;
+      let pulseHoleNumber = null;
+      store.setState((draft) => {
+        const round = findRound(draft, draft.session.activeRoundId);
+        if (!round) {
+          return draft;
+        }
+
+        const holeNumber = Number(actionElement.dataset.hole);
+        const participantId = actionElement.dataset.participantId;
+        const direction = Number(actionElement.dataset.direction);
+        const hole = round.holes.find((item) => item.number === holeNumber);
+        const entry = hole?.entries.find((item) => item.participantId === participantId);
+        if (!hole || !entry || !Number.isFinite(direction) || direction === 0) {
+          return draft;
+        }
+
+        const baseScore = Number.isFinite(entry.strokes) && entry.strokes > 0 ? entry.strokes : hole.par;
+        const strokes = Math.max(1, Math.min(12, baseScore + direction));
+
+        pulseParticipantId = participantId;
+        pulseHoleNumber = holeNumber;
+
+        const patch = { strokes };
+        if (!Number.isFinite(entry.putts) || entry.putts === null) {
+          patch.putts = Math.max(1, Math.min(3, strokes - (hole.par - 2)));
+        }
+
+        captureRoundAction(draft, round, {
+          holeNumber,
+          participantId,
+          actionType: "score-set",
+          patch,
+        });
+        appendActivity(draft, `${round.courseName} adjusted hole ${holeNumber} score.`, "round");
+        return draft;
+      }, { reason: "adjust-score" });
       pulseScoreFeedback(pulseParticipantId, pulseHoleNumber);
       requestRealtimeRoundUpdate(store.getState().session.activeRoundId);
       void runPendingRoundSync({ successFeedback: false });
@@ -16587,8 +16894,7 @@ function bootstrapApp({
       cleanupRuntime();
     },
   };
-}
-function startApp(options = {}) {
+}function startApp(options = {}) {
   if (typeof document === "undefined") {
     return { status: "no-document" };
   }

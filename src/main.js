@@ -85,6 +85,21 @@ import {
   setActiveView,
 } from "./ui/view-controller.js";
 
+function mapTabToView(tab) {
+  switch (tab) {
+    case "play":
+      return "home";
+    case "score":
+      return "round";
+    case "community":
+      return "community";
+    case "profile":
+      return "settings";
+    default:
+      return null;
+  }
+}
+
 export function bootstrapApp({
   root = typeof document !== "undefined" ? document.querySelector("#app") : null,
   platformFactory = createProductPlatform,
@@ -296,6 +311,23 @@ export function bootstrapApp({
       return false;
     }
   };
+
+  const renderTab = (tab) => {
+    const nextView = mapTabToView(tab);
+    if (!nextView) {
+      return false;
+    }
+
+    store.setState((draft) => {
+      setActiveView(draft, nextView, "tab");
+      return draft;
+    }, { reason: "render-tab" });
+    return true;
+  };
+
+  if (typeof window !== "undefined") {
+    window.renderTab = renderTab;
+  }
 
   try {
     const createdSession = platform.realtime.createSession({ store });
@@ -1145,26 +1177,37 @@ export function bootstrapApp({
   }
 
   root.addEventListener("click", async (event) => {
-    const actionElement = event.target.closest("[data-action]");
-    if (!actionElement) {
-      return;
-    }
+      const navButton = event.target.closest(".nav-btn[data-tab]");
+      if (navButton) {
+        renderTab(navButton.dataset.tab);
+        return;
+      }
+
+      const actionElement = event.target.closest("[data-action]");
+      if (!actionElement) {
+        return;
+      }
 
     const action = actionElement.dataset.action;
 
-    if (action === "nav-view") {
-      store.setState((draft) => {
-        const nextView = actionElement.dataset.view;
-        if (nextView === "help") {
-          openHelpView(draft, actionElement.dataset.section);
-          return draft;
+      if (action === "nav-view") {
+        const tab = actionElement.dataset.tab;
+        if (tab && renderTab(tab)) {
+          return;
         }
 
-        setActiveView(draft, nextView, "tab");
-        return draft;
-      }, { reason: "nav-view" });
-      return;
-    }
+        store.setState((draft) => {
+          const nextView = actionElement.dataset.view;
+          if (nextView === "help") {
+            openHelpView(draft, actionElement.dataset.section);
+            return draft;
+          }
+
+          setActiveView(draft, nextView, "tab");
+          return draft;
+        }, { reason: "nav-view" });
+        return;
+      }
 
     if (action === "open-help-section") {
       store.setState((draft) => {
@@ -1458,6 +1501,50 @@ export function bootstrapApp({
         appendActivity(draft, `${round.courseName} quick-scored hole ${holeNumber}.`, "round");
         return draft;
       }, { reason: "quick-score" });
+      pulseScoreFeedback(pulseParticipantId, pulseHoleNumber);
+      requestRealtimeRoundUpdate(store.getState().session.activeRoundId);
+      void runPendingRoundSync({ successFeedback: false });
+      return;
+    }
+
+    if (action === "adjust-score") {
+      let pulseParticipantId = null;
+      let pulseHoleNumber = null;
+      store.setState((draft) => {
+        const round = findRound(draft, draft.session.activeRoundId);
+        if (!round) {
+          return draft;
+        }
+
+        const holeNumber = Number(actionElement.dataset.hole);
+        const participantId = actionElement.dataset.participantId;
+        const direction = Number(actionElement.dataset.direction);
+        const hole = round.holes.find((item) => item.number === holeNumber);
+        const entry = hole?.entries.find((item) => item.participantId === participantId);
+        if (!hole || !entry || !Number.isFinite(direction) || direction === 0) {
+          return draft;
+        }
+
+        const baseScore = Number.isFinite(entry.strokes) && entry.strokes > 0 ? entry.strokes : hole.par;
+        const strokes = Math.max(1, Math.min(12, baseScore + direction));
+
+        pulseParticipantId = participantId;
+        pulseHoleNumber = holeNumber;
+
+        const patch = { strokes };
+        if (!Number.isFinite(entry.putts) || entry.putts === null) {
+          patch.putts = Math.max(1, Math.min(3, strokes - (hole.par - 2)));
+        }
+
+        captureRoundAction(draft, round, {
+          holeNumber,
+          participantId,
+          actionType: "score-set",
+          patch,
+        });
+        appendActivity(draft, `${round.courseName} adjusted hole ${holeNumber} score.`, "round");
+        return draft;
+      }, { reason: "adjust-score" });
       pulseScoreFeedback(pulseParticipantId, pulseHoleNumber);
       requestRealtimeRoundUpdate(store.getState().session.activeRoundId);
       void runPendingRoundSync({ successFeedback: false });

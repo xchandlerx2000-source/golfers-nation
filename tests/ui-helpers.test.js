@@ -59,6 +59,38 @@ describe("ui helpers", () => {
     vi.useRealTimers();
   });
 
+  it("renders the live session strip with player names for an active hosted round", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "home";
+
+    const round = createRound({
+      currentUser: state.currentUser,
+      courseName: "National Pines",
+      teeBox: "Blue",
+      weather: "Clear 72F",
+      mode: "stroke",
+      players: [state.currentUser.name, "Maya Chen"],
+      syncTransport: "invite",
+    });
+    const group = createGroup({
+      round,
+      currentUser: state.currentUser,
+      inviteCode: "ABC123",
+    });
+
+    state.rounds.unshift(round);
+    state.groups.unshift(group);
+    state.session.activeRoundId = round.id;
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain('id="liveStrip"');
+    expect(markup).toContain("ABC123");
+    expect(markup).toContain("Players: Avery Brooks, Maya Chen");
+  });
+
   it("shows local-first trust messaging when live round backup needs a retry", () => {
     const round = createRound({
       currentUser,
@@ -127,10 +159,17 @@ describe("ui helpers", () => {
     const markup = renderAppTemplate(state);
 
     expect(markup).toContain("Ready to tee it up, New?");
+<<<<<<< HEAD
     expect(markup).toContain("Start round");
     expect(markup).toContain("Join game");
     expect(markup).toContain("Active game");
     expect(markup).toContain("Nearby games");
+=======
+      expect(markup).toContain("Start Round");
+      expect(markup).toContain("Join Game");
+      expect(markup).toContain("Active Game");
+      expect(markup).toContain("Nearby Players");
+>>>>>>> 2620b82 (add state-safe tab navigation)
   });
 
   it("renders the seeded course picker inside round setup", () => {
@@ -310,6 +349,31 @@ describe("ui helpers", () => {
     expect(roundMarkup).toContain('data-action="toggle-spotify-bar"');
   });
 
+  it("renders the clean score stepper flow for the active golfer", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "round";
+    state.rounds.unshift(
+      createRound({
+        currentUser: state.currentUser,
+        courseName: "The Country Club at Golden Nugget",
+        teeBox: "Gold",
+        weather: "Humid 79F",
+        mode: "stroke",
+        players: [state.currentUser.name, "Maya Chen"],
+      })
+    );
+    state.session.activeRoundId = state.rounds[0].id;
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain('class="score-screen"');
+    expect(markup).toContain("Hole 1");
+    expect(markup).toContain('data-action="adjust-score"');
+    expect(markup).toContain("Next Hole →");
+  });
+
   it("renders the in-app tester feedback form in app support settings", () => {
     const state = createDefaultState();
     state.auth.status = "authenticated";
@@ -484,6 +548,7 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
+<<<<<<< HEAD
     expect(markup).toContain('id="tab-home"');
     expect(markup).toContain('id="tab-round"');
     expect(markup).toContain('id="tab-community"');
@@ -491,5 +556,16 @@ describe("ui helpers", () => {
     expect(markup).toContain("Play");
     expect(markup).toContain("Score");
     expect(markup).toContain("Profile");
+=======
+      expect(markup).toContain('id="tab-home"');
+      expect(markup).toContain('id="tab-round"');
+      expect(markup).toContain('id="tab-community"');
+      expect(markup).toContain('id="tab-settings"');
+      expect(markup).toContain('data-tab="play"');
+      expect(markup).toContain('data-tab="score"');
+      expect(markup).toContain("Play");
+      expect(markup).toContain("Score");
+      expect(markup).toContain("Profile");
+>>>>>>> 2620b82 (add state-safe tab navigation)
   });
 });
