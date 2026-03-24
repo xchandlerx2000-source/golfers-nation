@@ -6,7 +6,7 @@ import {
   findNearbyCourses,
   getCourseById,
   getCourseProviderCatalog,
-  getDefaultRoundSetup,
+  getCourseDefaultRoundSetup,
   getRoundSetupDiscoveryState,
   searchCourses,
 } from "../src/services/course-service.js";
@@ -59,7 +59,7 @@ describe("course service", () => {
 
   it("creates nearby discovery state that degrades gracefully when location is denied", () => {
     const discovery = getRoundSetupDiscoveryState(
-      getDefaultRoundSetup(),
+      getCourseDefaultRoundSetup(),
       {
         locationPermission: "denied",
         locationStatus: "fallback",

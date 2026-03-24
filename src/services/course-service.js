@@ -153,7 +153,7 @@ export function buildManualRoundTemplate(courseName = "", teeBoxName = "", { hol
   });
 }
 
-export function getDefaultRoundSetup() {
+export function getCourseDefaultRoundSetup() {
   const featuredCourse = getCourseById(FEATURED_COURSE_ID);
   const featuredTeeBox = getDefaultCourseTeeBox(featuredCourse);
 
@@ -165,20 +165,11 @@ export function getDefaultRoundSetup() {
   };
 }
 
-// Compatibility helpers for the generated browser bundle, which strips import aliases.
-export function getDefaultCourseRoundSetup() {
-  return getDefaultRoundSetup();
-}
-
-export function getRoundSetupState(roundSetup = {}) {
+export function getCourseRoundSetupState(roundSetup = {}) {
   return {
-    ...getDefaultRoundSetup(),
+    ...getCourseDefaultRoundSetup(),
     ...(roundSetup || {}),
   };
-}
-
-export function getCanonicalRoundSetupState(roundSetup = {}) {
-  return getRoundSetupState(roundSetup);
 }
 
 function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
@@ -227,7 +218,7 @@ function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
 }
 
 export function getRoundSetupDiscoveryState(roundSetup = {}, nearbyState = {}, options = {}) {
-  const setup = getRoundSetupState(roundSetup);
+  const setup = getCourseRoundSetupState(roundSetup);
   const selectedCourse = setup.selectedCourseId ? getCourseById(setup.selectedCourseId, options) : null;
   const selectedTeeBox = selectedCourse
     ? findCourseTeeBox(selectedCourse, setup.selectedTeeBoxId || getDefaultCourseTeeBox(selectedCourse)?.id || "")

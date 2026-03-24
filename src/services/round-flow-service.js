@@ -1,8 +1,8 @@
 import {
   getCourseById,
   getDefaultCourseTeeBox,
-  getDefaultRoundSetup as getDefaultCourseRoundSetup,
-  getRoundSetupState as getCanonicalRoundSetupState,
+  getCourseDefaultRoundSetup,
+  getCourseRoundSetupState,
 } from "./course-service.js";
 import { hostRoundGroup } from "./mock-api.js";
 
@@ -56,11 +56,11 @@ export function parsePlayers(value, currentUserName) {
 }
 
 export function getDefaultRoundSetup() {
-  return getDefaultCourseRoundSetup();
+  return getCourseDefaultRoundSetup();
 }
 
 export function getRoundSetupState(state) {
-  return getCanonicalRoundSetupState(state.session?.roundSetup || {});
+  return getCourseRoundSetupState(state.session?.roundSetup || {});
 }
 
 export function resetRoundSetup(draft) {

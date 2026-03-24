@@ -4059,7 +4059,7 @@ function buildManualRoundTemplate(courseName = "", teeBoxName = "", { holeCount 
     holeCount,
   });
 }
-function getDefaultRoundSetup() {
+function getCourseDefaultRoundSetup() {
   const featuredCourse = getCourseById(FEATURED_COURSE_ID);
   const featuredTeeBox = getDefaultCourseTeeBox(featuredCourse);
 
@@ -4070,19 +4070,11 @@ function getDefaultRoundSetup() {
     selectedHoleCount: 18,
   };
 }
-
-// Compatibility helpers for the generated browser bundle, which strips import aliases.
-function getDefaultCourseRoundSetup() {
-  return getDefaultRoundSetup();
-}
-function getRoundSetupState(roundSetup = {}) {
+function getCourseRoundSetupState(roundSetup = {}) {
   return {
-    ...getDefaultRoundSetup(),
+    ...getCourseDefaultRoundSetup(),
     ...(roundSetup || {}),
   };
-}
-function getCanonicalRoundSetupState(roundSetup = {}) {
-  return getRoundSetupState(roundSetup);
 }
 
 function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
@@ -4130,7 +4122,7 @@ function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
   };
 }
 function getRoundSetupDiscoveryState(roundSetup = {}, nearbyState = {}, options = {}) {
-  const setup = getRoundSetupState(roundSetup);
+  const setup = getCourseRoundSetupState(roundSetup);
   const selectedCourse = setup.selectedCourseId ? getCourseById(setup.selectedCourseId, options) : null;
   const selectedTeeBox = selectedCourse
     ? findCourseTeeBox(selectedCourse, setup.selectedTeeBoxId || getDefaultCourseTeeBox(selectedCourse)?.id || "")
@@ -4254,7 +4246,7 @@ function formatRecentFormLabel(result) {
 }
 
 function createDefaultRoundSetup() {
-  return getDefaultCourseRoundSetup();
+  return getCourseDefaultRoundSetup();
 }
 
 function buildAccountSummary(account, workspace) {
@@ -7298,10 +7290,10 @@ function parsePlayers(value, currentUserName) {
   };
 }
 function getDefaultRoundSetup() {
-  return getDefaultCourseRoundSetup();
+  return getCourseDefaultRoundSetup();
 }
 function getRoundSetupState(state) {
-  return getCanonicalRoundSetupState(state.session?.roundSetup || {});
+  return getCourseRoundSetupState(state.session?.roundSetup || {});
 }
 function resetRoundSetup(draft) {
   draft.session.roundSetup = getDefaultRoundSetup();
@@ -9711,7 +9703,7 @@ function createDefaultState() {
         lastSuccessAt: 0,
         retryCount: 0,
       },
-      roundSetup: getDefaultRoundSetup(),
+      roundSetup: getCourseDefaultRoundSetup(),
       nearby: createDefaultNearbyState(),
       spotify: createSpotifySessionState(),
     },

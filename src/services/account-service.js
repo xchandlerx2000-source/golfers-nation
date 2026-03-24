@@ -3,7 +3,7 @@ import { getPendingRoundEvents } from "../domain/round-sync.js";
 import { createIntegrationSettings, createSpotifySessionState } from "../integrations/spotify-service.js";
 import { applyHoleUpdate, getParticipantTotals } from "../domain/scoring.js";
 import { TESTER_DEFAULT_SUBSCRIPTION_TIER } from "../config.js";
-import { getDefaultRoundSetup as getDefaultCourseRoundSetup } from "./course-service.js";
+import { getCourseDefaultRoundSetup } from "./course-service.js";
 import { average, cloneData } from "../utils/formatters.js";
 
 const DEFAULT_PASSWORD = "fairway123";
@@ -102,7 +102,7 @@ function formatRecentFormLabel(result) {
 }
 
 function createDefaultRoundSetup() {
-  return getDefaultCourseRoundSetup();
+  return getCourseDefaultRoundSetup();
 }
 
 function buildAccountSummary(account, workspace) {
