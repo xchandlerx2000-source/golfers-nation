@@ -165,11 +165,20 @@ export function getDefaultRoundSetup() {
   };
 }
 
+// Compatibility helpers for the generated browser bundle, which strips import aliases.
+export function getDefaultCourseRoundSetup() {
+  return getDefaultRoundSetup();
+}
+
 export function getRoundSetupState(roundSetup = {}) {
   return {
     ...getDefaultRoundSetup(),
     ...(roundSetup || {}),
   };
+}
+
+export function getCanonicalRoundSetupState(roundSetup = {}) {
+  return getRoundSetupState(roundSetup);
 }
 
 function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {

@@ -3606,8 +3606,14 @@ function searchCourseLibrary(query = "") {
 function getCourseQuickPicks(limit = 4) {
   return searchCourseLibrary("").slice(0, limit);
 }
+function getSeededCourseQuickPicks(limit = 4) {
+  return getCourseQuickPicks(limit);
+}
 function getRoundSetupCourses(query = "", limit = 10) {
   return searchCourseLibrary(query).slice(0, limit);
+}
+function getSeededRoundSetupCourses(query = "", limit = 10) {
+  return getRoundSetupCourses(query, limit);
 }
 function createManualCourseSelection(courseName = "", teeBox = "") {
   return {
@@ -3674,6 +3680,9 @@ function createRoundCourseSelection(courseId, teeBoxId = "") {
     slope: teeBox.slope ?? null,
     rating: teeBox.rating ?? null,
   };
+}
+function findSeededCourseById(courseId) {
+  return findCourseById(courseId);
 }
 
 // ---- src/services/course-providers/local-course-provider.js ----
@@ -4061,11 +4070,19 @@ function getDefaultRoundSetup() {
     selectedHoleCount: 18,
   };
 }
+
+// Compatibility helpers for the generated browser bundle, which strips import aliases.
+function getDefaultCourseRoundSetup() {
+  return getDefaultRoundSetup();
+}
 function getRoundSetupState(roundSetup = {}) {
   return {
     ...getDefaultRoundSetup(),
     ...(roundSetup || {}),
   };
+}
+function getCanonicalRoundSetupState(roundSetup = {}) {
+  return getRoundSetupState(roundSetup);
 }
 
 function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
