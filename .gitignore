@@ -1,0 +1,24 @@
+node_modules/
+coverage/
+.vite/
+.cache/
+.wrangler/
+.idea/
+.vscode/
+.DS_Store
+Desktop.ini
+Thumbs.db
+*.log
+npm-debug.log*
+yarn-*.log*
+pnpm-debug.log*
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+*.swp
+*.swo
+Codex updates files.txt
+System.Drawing.Drawing2D.GraphicsPath
+ChatGPT Image*.png

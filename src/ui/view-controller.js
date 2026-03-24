@@ -52,16 +52,16 @@ export function closeHelpView(draft) {
 }
 
 export function openSettingsView(draft, sectionId = "account") {
-  const currentView = draft.session.activeView || "stats";
+  const currentView = draft.session.activeView || "home";
   draft.session.settingsReturnView = currentView === "settings"
-    ? (draft.session.settingsReturnView || "stats")
+    ? (draft.session.settingsReturnView || "home")
     : currentView;
   draft.session.settingsSection = sectionId || draft.session.settingsSection || "account";
   setActiveView(draft, "settings", "focus");
 }
 
 export function closeSettingsView(draft) {
-  const returnView = draft.session.settingsReturnView || "stats";
+  const returnView = draft.session.settingsReturnView || "home";
   setActiveView(draft, returnView, "return");
 }
 

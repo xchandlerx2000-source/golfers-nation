@@ -1,5 +1,6 @@
 import { createDefaultAccountState } from "../services/account-service.js";
 import { createSpotifySessionState } from "../integrations/spotify-service.js";
+import { createDefaultNearbyState } from "../services/nearby-detection-service.js";
 import { cloneData } from "../utils/formatters.js";
 
 export function createDefaultState() {
@@ -97,6 +98,7 @@ export function createDefaultState() {
         selectedCourseId: "",
         selectedTeeBoxId: "",
       },
+      nearby: createDefaultNearbyState(),
       spotify: createSpotifySessionState(),
     },
   };

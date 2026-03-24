@@ -13,14 +13,14 @@ Golfers Nation now supports a real tester flow with:
 
 ## Environment variables
 
-Set these in [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/runtime-config.js) before building the tester deploy:
+Set these in [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/src/shell/runtime-config.js) before building the tester deploy:
 
 - `supabaseUrl` defaults to `https://jsvxckzbymbdilyujjko.supabase.co`
 - `supabaseAnonKey`
 - `supabaseResetRedirectUrl`
 - `siteUrl`
 
-The build copies [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/runtime-config.js) into the deploy package unchanged.
+The build copies [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/src/shell/runtime-config.js) into the generated root output and then into the deploy package unchanged.
 
 ## Recommended Supabase auth settings
 

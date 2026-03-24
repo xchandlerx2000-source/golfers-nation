@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { createGroup, createRound } from "../src/domain/factories.js";
-import { listNearbyGames, listNearbyPlayers } from "../src/services/mock-api.js";
+import { createDefaultNearbyState, getNearbyDiscoveryState, listNearbyGames, listNearbyPlayers } from "../src/services/nearby-detection-service.js";
 import { createDefaultState } from "../src/state/default-state.js";
 
-describe("mock api discovery scaffolding", () => {
+describe("nearby discovery scaffolding", () => {
   it("surfaces nearby rounds and players from active local live groups", () => {
     const state = createDefaultState();
     const round = createRound({
@@ -75,5 +75,22 @@ describe("mock api discovery scaffolding", () => {
     expect(nearbyPlayers[0].profileId).toBe("profile-maya");
     expect(nearbyPlayers[0].relationshipLabel).toBe("Friend");
     expect(nearbyPlayers.some((player) => player.profileId === "profile-theo" && player.isFollowed)).toBe(true);
+  });
+
+  it("falls back to app-safe discovery when location is unavailable", () => {
+    const state = createDefaultState();
+    state.session.nearby = {
+      ...createDefaultNearbyState(),
+      locationPermission: "denied",
+      locationStatus: "fallback",
+      bluetoothStatus: "idle",
+    };
+
+    const discovery = getNearbyDiscoveryState(state);
+
+    expect(discovery.strategy.badge).toBe("App-safe discovery");
+    expect(discovery.strategy.detail).toContain("Location is off");
+    expect(discovery.games.length).toBeGreaterThan(0);
+    expect(discovery.players.length).toBeGreaterThan(0);
   });
 });

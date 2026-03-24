@@ -1,4 +1,5 @@
 import { createActivity } from "../domain/factories.js";
+import { createDefaultNearbyState } from "../services/nearby-detection-service.js";
 
 export function appendActivity(draft, message, type = "product") {
   draft.social.activity.unshift(
@@ -36,6 +37,22 @@ export function getDefaultCloudSyncState() {
     lastSuccessAt: 0,
     retryCount: 0,
   };
+}
+
+export function getDefaultNearbySessionState() {
+  return createDefaultNearbyState();
+}
+
+export function mergeNearbySessionState(current = {}, updates = {}) {
+  return {
+    ...getDefaultNearbySessionState(),
+    ...(current || {}),
+    ...(updates || {}),
+  };
+}
+
+export function setNearbySessionState(draft, updates = {}) {
+  draft.session.nearby = mergeNearbySessionState(draft.session.nearby, updates);
 }
 
 export function mergeCloudSyncState(current = {}, updates = {}) {

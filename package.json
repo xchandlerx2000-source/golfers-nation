@@ -7,9 +7,14 @@
     "node": ">=18"
   },
   "scripts": {
-    "build:web": "node scripts/build-browser-bundle.mjs",
-    "build:netlify": "node scripts/build-netlify-package.mjs",
-    "build:cloudflare": "node scripts/build-netlify-package.mjs",
+    "build:shell": "node scripts/build-shell-assets.mjs",
+    "build:app": "node scripts/build-browser-bundle.mjs",
+    "build:root": "node scripts/build-root-artifacts.mjs",
+    "build:web": "node scripts/build-root-artifacts.mjs",
+    "build": "node scripts/build-dist-package.mjs",
+    "build:dist": "node scripts/build-dist-package.mjs",
+    "build:netlify": "node scripts/build-dist-package.mjs",
+    "build:cloudflare": "node scripts/build-dist-package.mjs",
     "review:bundle": "node scripts/build-peer-review-bundle.mjs",
     "test": "npx vitest run tests --pool=threads",
     "test:watch": "npx vitest tests --pool=threads",

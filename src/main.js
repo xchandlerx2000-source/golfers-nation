@@ -21,6 +21,7 @@ import {
 import { applyStartupWarning, renderStartupShell, showBootRecoveryScreen } from "./bootstrap/startup-recovery.js";
 import { APP_VERSION, STORAGE_KEY } from "./config.js";
 import { joinByInviteCode } from "./services/mock-api.js";
+import { createDefaultNearbyState } from "./services/nearby-detection-service.js";
 import {
   connectSpotifyCompanion,
   createSpotifySessionState,
@@ -64,9 +65,11 @@ import {
   appendActivity,
   clearFeedback,
   getCloudSyncCopy,
+  getDefaultNearbySessionState,
   resetCloudSyncState,
   setCloudSyncState,
   setFeedback,
+  setNearbySessionState,
   syncIdentityAcrossRecords,
   normalizeAvatarLabel,
   normalizeUsernameInput,
@@ -377,6 +380,104 @@ export function bootstrapApp({
 
   const requestRealtimeRoundUpdate = (roundId) => {
     publishLiveRoundUpdate(realtimeSession, roundId);
+  };
+
+  const requestNearbyLocationAssist = (roundId) => {
+    const nextNearbyState = {
+      ...getDefaultNearbySessionState(),
+      ...(store.getState().session?.nearby || createDefaultNearbyState()),
+    };
+    const navigation = typeof navigator === "undefined" ? null : navigator;
+
+    store.setState((draft) => {
+      setNearbySessionState(draft, {
+        ...nextNearbyState,
+        enabled: true,
+        lastScanAt: Date.now(),
+        lastError: "",
+        locationStatus: navigation?.geolocation ? "requesting" : "unavailable",
+      });
+      return draft;
+    }, { reason: "nearby-location-request" });
+
+    if (!navigation?.geolocation) {
+      store.setState((draft) => {
+        setNearbySessionState(draft, {
+          locationPermission: "unavailable",
+          locationStatus: "unavailable",
+          discoveryMode: "app-presence",
+          lastError: "Geolocation unavailable on this device.",
+        });
+        setFeedback(
+          draft,
+          "info",
+          "Using app-safe nearby discovery",
+          "Location assist is not available here, so Golfers Nation will keep using live rounds, friend activity, and recent app presence."
+        );
+        return draft;
+      }, { reason: "enable-nearby-unavailable" });
+      return;
+    }
+
+    navigation.geolocation.getCurrentPosition(
+      (position) => {
+        store.setState((draft) => {
+          setNearbySessionState(draft, {
+            locationPermission: "granted",
+            locationStatus: "ready",
+            discoveryMode: "location-assisted",
+            coordinates: {
+              latitude: Number(position.coords?.latitude || 0),
+              longitude: Number(position.coords?.longitude || 0),
+            },
+            lastScanAt: Date.now(),
+            lastError: "",
+          });
+          setFeedback(
+            draft,
+            "success",
+            "Nearby assist enabled",
+            "Golfers Nation will combine location assist with live rounds, recent activity, and friend availability."
+          );
+          return draft;
+        }, { reason: "enable-nearby-ready" });
+
+        if (roundId) {
+          realtimeSession.enableNearbySync(roundId);
+        }
+      },
+      (error) => {
+        const permission = error?.code === 1 ? "denied" : "prompt";
+        store.setState((draft) => {
+          setNearbySessionState(draft, {
+            locationPermission: permission,
+            locationStatus: "fallback",
+            discoveryMode: "app-presence",
+            coordinates: null,
+            lastScanAt: Date.now(),
+            lastError: error?.message || "Location permission was not available.",
+          });
+          setFeedback(
+            draft,
+            permission === "denied" ? "info" : "warning",
+            permission === "denied" ? "Location skipped" : "Nearby assist not ready",
+            permission === "denied"
+              ? "No problem. Golfers Nation will keep showing discoverable live rounds and players without precise location."
+              : "Golfers Nation will keep using active rooms and friend activity until location assist is ready."
+          );
+          return draft;
+        }, { reason: "enable-nearby-fallback" });
+
+        if (roundId) {
+          realtimeSession.enableNearbySync(roundId);
+        }
+      },
+      {
+        enableHighAccuracy: false,
+        maximumAge: 120000,
+        timeout: 8000,
+      }
+    );
   };
 
   const finalizeHostedRoundSession = async (roundId) => {
@@ -1499,12 +1600,17 @@ export function bootstrapApp({
       const roundId = session.activeRoundId;
       if (!roundId) {
         store.setState((draft) => {
-          setFeedback(draft, "info", "No round to sync", "Start or join a round before turning on nearby sync.");
+          setNearbySessionState(draft, {
+            enabled: true,
+            discoveryMode: "app-presence",
+            lastScanAt: Date.now(),
+          });
+          setFeedback(draft, "info", "Nearby discovery is ready", "You can already see discoverable players and rounds here. Start or join a round to add location-assisted sync on top.");
           return draft;
         }, { reason: "enable-nearby-missing-round" });
         return;
       }
-      realtimeSession.enableNearbySync(roundId);
+      requestNearbyLocationAssist(roundId);
       return;
     }
 
@@ -1513,11 +1619,31 @@ export function bootstrapApp({
       const roundId = session.activeRoundId;
       if (!roundId) {
         store.setState((draft) => {
-          setFeedback(draft, "info", "No round to sync", "Start or join a round before testing Bluetooth sync.");
+          setNearbySessionState(draft, {
+            bluetoothStatus: "standby",
+            enabled: true,
+            lastScanAt: Date.now(),
+          });
+          setFeedback(draft, "info", "Bluetooth scaffold ready", "Bluetooth discovery is still a future layer. The app-safe nearby flow is already available without it.");
           return draft;
         }, { reason: "enable-bluetooth-missing-round" });
         return;
       }
+      store.setState((draft) => {
+        setNearbySessionState(draft, {
+          bluetoothStatus: "ready",
+          enabled: true,
+          lastScanAt: Date.now(),
+          lastError: "",
+        });
+        setFeedback(
+          draft,
+          "info",
+          "Nearby sync standby enabled",
+          "Bluetooth-style discovery is still scaffolded, but this round is now marked for the nearby sync layer while live rooms remain the reliable path."
+        );
+        return draft;
+      }, { reason: "enable-bluetooth-ready" });
       await realtimeSession.enableBluetoothSync(roundId);
       return;
     }
@@ -1709,7 +1835,8 @@ export function bootstrapApp({
     if (action === "open-current-profile") {
       store.setState((draft) => {
         draft.session.selectedProfileId = draft.currentUser.profileId;
-        setActiveView(draft, "stats", "tab");
+        setActiveView(draft, "settings", "tab");
+        draft.session.settingsSection = "account";
         return draft;
       }, { reason: "open-current-profile" });
       return;

@@ -9,6 +9,23 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
 
 describe("static app shell", () => {
+  it("keeps generated root shell files in sync with src/shell", () => {
+    const shellFiles = [
+      "index.html",
+      "styles.css",
+      "manifest.json",
+      "service-worker.js",
+      "runtime-config.js",
+    ];
+
+    for (const fileName of shellFiles) {
+      const sourceContents = readFileSync(path.join(projectRoot, "src", "shell", fileName), "utf8");
+      const generatedContents = readFileSync(path.join(projectRoot, fileName), "utf8");
+
+      expect(generatedContents).toBe(sourceContents);
+    }
+  });
+
   it("uses root-relative boot assets for hosted deployments", () => {
     const indexHtml = readFileSync(path.join(projectRoot, "index.html"), "utf8");
 
@@ -28,5 +45,12 @@ describe("static app shell", () => {
     expect(serviceWorker).toContain('const CACHE_NAME = "golfers-nation-shell-v7"');
     expect(serviceWorker).toContain('"/app.js"');
     expect(serviceWorker).toContain('"/runtime-config.js"');
+  });
+
+  it("marks app.js as a generated artifact", () => {
+    const appBundle = readFileSync(path.join(projectRoot, "app.js"), "utf8");
+
+    expect(appBundle).toContain("// AUTO-GENERATED FILE. DO NOT EDIT app.js DIRECTLY.");
+    expect(appBundle).toContain("// Source of truth: src/**/*.js and the build scripts in scripts/.");
   });
 });

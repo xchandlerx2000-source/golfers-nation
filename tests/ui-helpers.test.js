@@ -113,7 +113,7 @@ describe("ui helpers", () => {
     expect(markup).toContain("Playing a Round");
   });
 
-  it("shows the first-round guide for a new authenticated golfer", () => {
+  it("shows the compact play-first home flow for a new authenticated golfer", () => {
     const state = createDefaultState();
     const created = createEmailAccount(state, {
       displayName: "New Golfer",
@@ -126,7 +126,11 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Step 1 of 3: start your first round");
+    expect(markup).toContain("Ready to tee it up, New?");
+    expect(markup).toContain("Start round");
+    expect(markup).toContain("Join game");
+    expect(markup).toContain("Active game");
+    expect(markup).toContain("Nearby games");
   });
 
   it("renders the seeded course picker inside round setup", () => {
@@ -221,7 +225,34 @@ describe("ui helpers", () => {
     expect(markup).toContain('data-theme="ocean"');
     expect(markup).toContain('data-color-mode="light"');
     expect(markup).toContain("Log out account");
-    expect(markup).toMatch(/id="tab-stats"[\s\S]*?aria-selected="true"/);
+    expect(markup).toMatch(/id="tab-settings"[\s\S]*?aria-selected="true"/);
+  });
+
+  it("renders the community hub with nearby players and nearby games cards", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "community";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Join fast and keep golfers visible");
+    expect(markup).toContain("Nearby players");
+    expect(markup).toContain("Nearby games");
+    expect(markup).toContain("Nearby detection");
+  });
+
+  it("opens the profile tab as the main account/settings home", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "settings";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Profile and settings");
+    expect(markup).toContain("Friends");
+    expect(markup).toContain("Following");
   });
 
   it("renders Spotify connection scaffolding in settings and a compact now playing bar when connected", () => {
@@ -308,8 +339,8 @@ describe("ui helpers", () => {
     const markup = renderAppTemplate(state);
 
     expect(markup).toContain('data-action="host-active-round" disabled');
-    expect(markup).toContain("Nearby sync");
-    expect(markup).toContain("Bluetooth sync");
+    expect(markup).toContain("Location assist");
+    expect(markup).toContain("Nearby sync mode");
   });
 
   it("disables finishing a round before any hole has been scored", () => {
@@ -442,6 +473,23 @@ describe("ui helpers", () => {
 
     expect(markup).toContain("Saved locally");
     expect(markup).toContain("stored safely on this phone first and waiting for cloud backup");
-    expect(markup).toContain("Saved on this phone");
+    expect(markup).toContain("Open room tools");
+  });
+
+  it("renders the mobile-first four-tab primary navigation", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "home";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain('id="tab-home"');
+    expect(markup).toContain('id="tab-round"');
+    expect(markup).toContain('id="tab-community"');
+    expect(markup).toContain('id="tab-settings"');
+    expect(markup).toContain("Play");
+    expect(markup).toContain("Score");
+    expect(markup).toContain("Profile");
   });
 });

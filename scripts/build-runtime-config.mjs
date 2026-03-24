@@ -1,10 +1,11 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
+const shellSourceRoot = path.join(projectRoot, "src", "shell");
 
 function readEnv(...keys) {
   for (const key of keys) {
@@ -35,4 +36,6 @@ const output = `window.__GN_RUNTIME_CONFIG__ = Object.assign(
 );
 `;
 
+await mkdir(shellSourceRoot, { recursive: true });
+await writeFile(path.join(shellSourceRoot, "runtime-config.js"), output, "utf8");
 await writeFile(path.join(projectRoot, "runtime-config.js"), output, "utf8");

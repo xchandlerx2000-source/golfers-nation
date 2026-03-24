@@ -12,19 +12,43 @@ Golfers Nation is a phase-1 offline-first product foundation for a nationwide go
 
 ## Architecture at a glance
 
-- `index.html`: app shell entry
-- `styles.css`: mobile-first premium UI system
-- `app.js`: thin bootstrap that starts the modular app
+- `src/shell`: the only editable browser shell source for `index.html`, `styles.css`, `manifest.json`, `service-worker.js`, and `runtime-config.js`
 - `src/domain`: round factories and scoring logic
 - `src/services`: storage, mock API, and sync transport layer
 - `src/state`: seed data and lightweight store
 - `src/ui`: render pipeline and templates
+- `app.js`: generated browser bundle output, never hand-edited
+- `dist/`: generated deploy package for Cloudflare/Netlify, never hand-edited
+
+## Source-of-truth workflow
+
+Golfers Nation now follows one editable source tree:
+
+- Edit app logic in `src/`
+- Edit browser shell files in `src/shell/`
+- Edit build/deploy tooling in `scripts/`
+
+Do not edit these generated outputs directly:
+
+- `app.js`
+- `index.html`
+- `styles.css`
+- `manifest.json`
+- `service-worker.js`
+- `runtime-config.js`
+- anything inside `dist/`
+
+Those files are build artifacts generated from `src/` and `src/shell/`.
 
 ## Run it
 
-Open `index.html` in a modern browser.
+1. Install dependencies:
+   `npm install`
+2. Build the local browser artifacts:
+   `npm run build:web`
+3. Open the generated root `index.html` in a modern browser, or serve the root folder from a local web server.
 
-Because the app is dependency-free, there is no install step. Data persists in local storage. Browser Bluetooth is treated as an optional prototype transport, not the primary multiplayer architecture.
+The editable source still lives in `src/` and `src/shell/`. The root browser files are rebuilt outputs for local use. Data persists in local storage. Browser Bluetooth is treated as an optional prototype transport, not the primary multiplayer architecture.
 
 ## Auth and tester accounts
 
@@ -47,8 +71,8 @@ Golfers Nation now includes a manifest, placeholder app icons, and a service wor
 
 For desktop or local browser testing:
 
-1. Rebuild the browser bundle after source changes:
-   `node scripts/build-browser-bundle.mjs`
+1. Rebuild the local browser artifacts after source changes:
+   `npm run build:web`
 2. Serve the folder from a local web server:
    `npx serve .`
 3. Open the served URL in a browser.
@@ -57,9 +81,18 @@ For desktop or local browser testing:
 
 The project now includes:
 
-- `npm run build:cloudflare` to generate a clean deployable `dist/` folder
+- `npm run build` / `npm run build:cloudflare` to generate a clean deployable `dist/` folder
 - `_redirects` for SPA routing fallback
 - the same static PWA shell used by the Netlify build
+
+### Build workflow
+
+- `npm run build:shell`: rebuilds the root browser shell from `src/shell/`
+- `npm run build:app`: rebuilds `app.js` from `src/**/*.js`
+- `npm run build:web`: rebuilds the full local browser root output
+- `npm run build` or `npm run build:cloudflare`: rebuilds root output, then rebuilds `dist/`
+
+Cloudflare Pages should publish `dist/` only. Root files exist for local browser/PWA testing and should still be treated as generated output.
 
 ### Fastest manual deploy with Cloudflare Pages
 
@@ -83,7 +116,7 @@ The project now includes:
 
 ### Supabase tester setup
 
-For a real tester build, edit [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/runtime-config.js) before running `npm run build:cloudflare`:
+For a real tester build, edit [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/src/shell/runtime-config.js) before running `npm run build:cloudflare`:
 
 - `supabaseUrl`
 - `supabaseAnonKey`
@@ -92,17 +125,17 @@ For a real tester build, edit [runtime-config.js](C:/Users/Bower/OneDrive/Deskto
 
 Cloudflare direct-upload deploy:
 
-1. Update [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/runtime-config.js)
+1. Update [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/src/shell/runtime-config.js)
 2. Run `npm run build:cloudflare`
 3. Upload the generated `dist/` folder
 
 Repo-connected deploy:
 
-1. Update [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/runtime-config.js) in the repo
+1. Update [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/src/shell/runtime-config.js) in the repo
 2. Commit and push
 3. Trigger a new Pages deploy
 
-[runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/runtime-config.js) is loaded by the app shell at runtime and copied into [dist](C:/Users/Bower/OneDrive/Desktop/golf%20nation/dist) unchanged during the deploy build.
+[runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/src/shell/runtime-config.js) is the source of truth, and the build copies it into the generated root output and then into [dist](C:/Users/Bower/OneDrive/Desktop/golf%20nation/dist).
 
 ### Important testing note
 
@@ -223,13 +256,16 @@ To run the tests once Node.js is available:
    `npm install`
 2. Run the unit test suite:
    `npm test`
-3. Run Vitest in watch mode:
+3. Rebuild the local browser output:
+   `npm run build:web`
+4. Rebuild the deploy package:
+   `npm run build`
+5. Run Vitest in watch mode:
    `npm run test:watch`
-4. Run the end-to-end placeholder script:
+6. Run the end-to-end placeholder script:
    `npm run test:e2e`
 
 Notes:
 
 - The current setup uses `jsdom` only in the browser-adjacent service tests.
 - Playwright was not added because browser automation support was not available in the setup environment.
-- Node is not installed in the current workspace environment, so the commands above could not be executed here during setup.

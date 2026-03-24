@@ -23,6 +23,7 @@ const files = [
   "src/services/runtime-config.js",
   "src/services/supabase-rest.js",
   "src/services/player-service.js",
+  "src/services/nearby-detection-service.js",
   "src/services/mock-api.js",
   "src/services/sync-service.js",
   "src/services/round-flow-service.js",
@@ -53,7 +54,9 @@ async function buildBundle() {
     "(function () {",
     '"use strict";',
     "",
-    "// Generated browser-safe bundle for direct file opening.",
+    "// AUTO-GENERATED FILE. DO NOT EDIT app.js DIRECTLY.",
+    "// Source of truth: src/**/*.js and the build scripts in scripts/.",
+    "// Run `npm run build:web` or `npm run build` after source changes.",
     "",
   ];
 

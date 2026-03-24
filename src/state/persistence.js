@@ -44,6 +44,10 @@ export function loadPersistedState(createDefaultState) {
           ...(fallback.session?.cloudSync || {}),
           ...(parsed.session?.cloudSync || {}),
         },
+        nearby: {
+          ...(fallback.session?.nearby || {}),
+          ...(parsed.session?.nearby || {}),
+        },
         spotify: {
           ...(fallback.session?.spotify || {}),
           ...(parsed.session?.spotify || {}),
