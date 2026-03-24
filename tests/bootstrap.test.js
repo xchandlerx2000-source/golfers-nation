@@ -285,6 +285,7 @@ describe("bootstrap app", () => {
     });
 
     document.querySelector('[data-action="open-settings"]').click();
+    document.querySelector('[data-action="set-settings-destination"][data-destination="app"]').click();
     document.querySelector('[data-action="sign-out"]').click();
 
     expect(result.store.getState().auth.status).toBe("signed_out");
@@ -357,6 +358,7 @@ describe("bootstrap app", () => {
     expect(result.store.getState().rounds).toHaveLength(1);
 
     document.querySelector('[data-action="open-settings"]').click();
+    document.querySelector('[data-action="set-settings-destination"][data-destination="app"]').click();
     document.querySelector('[data-action="sign-out"]').click();
 
     const loginForm = document.querySelector('[data-form="auth-login"]');
@@ -535,6 +537,8 @@ describe("bootstrap app", () => {
     });
 
     document.querySelector('[data-action="open-settings"]').click();
+    document.querySelector('[data-action="set-settings-destination"][data-destination="app"]').click();
+    document.querySelector('[data-action="set-settings-section"][data-section="appearance"]').click();
 
     const appearanceForm = document.querySelector('[data-form="save-appearance-settings"]');
     const lightInput = appearanceForm.querySelector('input[name="colorMode"][value="light"]');
@@ -574,7 +578,7 @@ describe("bootstrap app", () => {
     result.destroy();
   });
 
-  it("connects the Spotify companion scaffold from settings and shows the now playing bar", () => {
+  it("connects the Spotify companion scaffold from app settings without showing top-level controls", () => {
     const state = createDefaultState();
     loadAccountIntoState(state, "user-demo-free");
     persistState(prepareStateForPersistence(state));
@@ -585,18 +589,18 @@ describe("bootstrap app", () => {
     });
 
     document.querySelector('[data-action="open-settings"]').click();
+    document.querySelector('[data-action="set-settings-destination"][data-destination="app"]').click();
+    document.querySelector('[data-action="set-settings-section"][data-section="spotify"]').click();
     document.querySelector('[data-action="connect-spotify"]').click();
 
     expect(result.store.getState().currentUser.integrations.spotify.status).toBe("connected");
     expect(result.store.getState().currentUser.integrations.spotify.nowPlaying.title).toBe("Golden Hour Drive");
     expect(document.body.textContent).toContain("Spotify companion connected");
-    expect(document.querySelector('[data-action="spotify-play-pause"]')).not.toBeNull();
+    expect(document.querySelector('[data-action="spotify-open"]')).not.toBeNull();
 
     document.querySelector('[data-action="nav-view"][data-view="round"]').click();
-    document.querySelector('[data-action="toggle-spotify-bar"]').click();
-
-    expect(result.store.getState().session.spotify.barCollapsed).toBe(true);
-    expect(document.querySelector(".spotify-minibar")).not.toBeNull();
+    expect(document.querySelector('[data-action="toggle-spotify-bar"]')).toBeNull();
+    expect(document.querySelector(".spotify-minibar")).toBeNull();
 
     result.destroy();
   });
@@ -619,6 +623,7 @@ describe("bootstrap app", () => {
     result.platform.data.submitTesterFeedbackAsync = submitTesterFeedbackAsync;
 
     document.querySelector('[data-action="open-settings"]').click();
+    document.querySelector('[data-action="set-settings-destination"][data-destination="app"]').click();
     document.querySelector('[data-action="set-settings-section"][data-section="app-support"]').click();
 
     const feedbackForm = document.querySelector('[data-form="submit-tester-feedback"]');

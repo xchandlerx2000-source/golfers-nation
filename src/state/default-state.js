@@ -72,6 +72,8 @@ export function createDefaultState() {
       installHintDismissed: false,
       helpSection: "getting-started",
       helpReturnView: "home",
+      appMenuOpen: false,
+      settingsDestination: "landing",
       settingsSection: "account",
       settingsReturnView: "stats",
       activeRoundId: activeWorkspace.userSession.activeRoundId,

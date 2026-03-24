@@ -3734,7 +3734,9 @@ function signOutAccount(draft) {
   draft.session.activeView = "home";
   draft.session.previousView = "home";
   draft.session.transitionDirection = "steady";
+  draft.session.appMenuOpen = false;
   draft.session.helpReturnView = "auth";
+  draft.session.settingsDestination = "landing";
   draft.session.settingsReturnView = "auth";
   draft.session.settingsSection = "account";
   draft.session.activeRoundId = null;
@@ -8990,6 +8992,8 @@ function createDefaultState() {
       installHintDismissed: false,
       helpSection: "getting-started",
       helpReturnView: "home",
+      appMenuOpen: false,
+      settingsDestination: "landing",
       settingsSection: "account",
       settingsReturnView: "stats",
       activeRoundId: activeWorkspace.userSession.activeRoundId,
@@ -9278,12 +9282,17 @@ function getRoundSummaryForState(state, round) {
   });
 }
 
-const SETTINGS_SECTIONS = [
-  { id: "account", label: "Account" },
+const PROFILE_SETTINGS_SECTIONS = [
+  { id: "profile-identity", label: "Identity" },
   { id: "golf-profile", label: "Golf Profile" },
-  { id: "appearance", label: "Appearance" },
   { id: "social", label: "Social" },
-  { id: "app-support", label: "App & Support" },
+];
+
+const APP_SETTINGS_SECTIONS = [
+  { id: "account", label: "Account" },
+  { id: "appearance", label: "Appearance" },
+  { id: "spotify", label: "Spotify" },
+  { id: "app-support", label: "Support" },
 ];
 
 const NAV_ICONS = {
@@ -9852,9 +9861,37 @@ function renderNav(state) {
   }).join("");
 }
 
+function renderAppMenu(state) {
+  if (!state.session?.appMenuOpen) {
+    return "";
+  }
+
+  return `
+    <div class="app-menu-panel" data-app-menu="true" role="menu" aria-label="App menu">
+      <button class="app-menu-item" type="button" data-action="open-help-section" data-section="getting-started" role="menuitem">
+        <strong>Help / FAQ</strong>
+        <span>Quick answers for sign-in, rounds, and shared play.</span>
+      </button>
+      <button class="app-menu-item" type="button" data-action="open-settings" data-destination="app" data-section="account" role="menuitem">
+        <strong>App Settings</strong>
+        <span>Appearance, account access, Spotify, and support.</span>
+      </button>
+      <button class="app-menu-item" type="button" data-action="open-settings" data-destination="app" data-section="app-support" role="menuitem">
+        <strong>Feedback / Support</strong>
+        <span>Send tester feedback or open support details.</span>
+      </button>
+      <button class="app-menu-item" type="button" data-action="open-settings" data-destination="app" data-section="app-support" role="menuitem">
+        <strong>About</strong>
+        <span>Version, app details, and release notes scaffold.</span>
+      </button>
+    </div>
+  `;
+}
+
 function renderAppShellHeader(state, activeRound, subscription) {
   const viewId = state.session.activeView || "home";
   const firstName = state.currentUser.name?.split(" ")[0] || "Golfer";
+  const settingsDestination = getSettingsDestination(state);
   let viewLabel = "Play";
   let headerClass = "app-header-card--utility";
 
@@ -9871,22 +9908,25 @@ function renderAppShellHeader(state, activeRound, subscription) {
   } else if (viewId === "premium") {
     viewLabel = "Profile";
   } else if (viewId === "settings") {
-    viewLabel = "Profile";
+    viewLabel = settingsDestination === "app" ? "App Settings" : "Profile";
   } else if (viewId === "help") {
     viewLabel = "Help";
   }
 
   return `
     <header class="app-header-card top-bar ${headerClass}" data-view="${escapeHtml(viewId)}">
-      <button
-        class="top-left top-bar-action"
-        type="button"
-        data-action="open-help-section"
-        data-section="getting-started"
-        aria-label="Open quick menu"
-      >
-        <span aria-hidden="true">&#9776;</span>
-      </button>
+      <div class="app-menu-shell" data-app-menu="true">
+        <button
+          class="top-left top-bar-action ${state.session?.appMenuOpen ? "is-open" : ""}"
+          type="button"
+          data-action="toggle-app-menu"
+          aria-label="Open app menu"
+          aria-expanded="${state.session?.appMenuOpen ? "true" : "false"}"
+        >
+          <span aria-hidden="true">&#9776;</span>
+        </button>
+        ${renderAppMenu(state)}
+      </div>
       <div class="app-header-context">
         <button
           class="brand-mark brand-mark--compact"
@@ -9906,12 +9946,12 @@ function renderAppShellHeader(state, activeRound, subscription) {
         class="account-trigger top-right"
         type="button"
         data-action="open-settings"
-        data-section="account"
-        aria-label="Profile and settings"
+        data-destination="landing"
+        aria-label="Open my profile"
       >
         ${renderAvatarChip(state.currentUser.avatarLabel || firstName, "is-header")}
         <span class="account-trigger-copy">
-          <span class="mini-label">Profile & settings</span>
+          <span class="mini-label">My Profile</span>
           <strong>${escapeHtml(firstName)}</strong>
         </span>
       </button>
@@ -9924,11 +9964,16 @@ function renderLiveSessionStrip(activeRound, activeGroup) {
   const players = activeGroup?.members?.length
     ? activeGroup.members.map((member) => member.displayName).filter(Boolean)
     : activeRound?.players?.map((player) => player.name).filter(Boolean) || [];
+  const liveStatus = activeRound?.sync?.label || "Live room";
   const hiddenClass = activeRound ? "" : " hidden";
   return `
     <div class="live-strip${hiddenClass}" id="liveStrip">
-      <span>LIVE / Code: <b id="liveCode">${escapeHtml(inviteCode)}</b></span>
-      <span id="livePlayers">Players: ${escapeHtml(players.join(", ") || "You")}</span>
+      <div class="live-strip-main">
+        <span class="live-strip-badge">LIVE</span>
+        <span class="live-strip-code">Code <b id="liveCode">${escapeHtml(inviteCode)}</b></span>
+        <span class="live-strip-status">${escapeHtml(liveStatus)}</span>
+      </div>
+      <span id="livePlayers" class="live-strip-players">Players: ${escapeHtml(players.join(", ") || "You")}</span>
     </div>
   `;
 }
@@ -10423,25 +10468,24 @@ function renderPlayNearbyGamesCard(state) {
   const nearbyGames = getNearbyDiscoveryState(state).games.slice(0, 3);
 
   return `
-    <article class="card play-compact-card">
+    <article class="card play-screen-card play-compact-card">
       <div class="section-heading section-heading--compact">
         <div>
-          <p class="eyebrow">Nearby games</p>
+          <p class="eyebrow">Nearby Games</p>
           <h3>Join active groups fast</h3>
         </div>
         <button class="button subtle" type="button" data-action="nav-view" data-view="community">See all</button>
       </div>
       ${nearbyGames.length
         ? `
-          <div class="stack-list compact-stack play-list">
+          <div class="play-nearby-row" aria-label="Nearby games">
             ${nearbyGames.map((game) => `
-              <article class="list-row play-list-row">
-                <div>
+              <article class="play-nearby-card play-nearby-card--game">
+                <div class="play-nearby-card-copy">
                   <strong>${escapeHtml(game.title)}</strong>
-                  <p>${escapeHtml(game.statusLabel)} / ${escapeHtml(game.distance)}</p>
+                  <p>${escapeHtml(game.statusLabel)} / ${escapeHtml(game.distance)} / ${escapeHtml(game.inviteCode)}</p>
                 </div>
-                <div class="list-metrics">
-                  <span>${escapeHtml(game.inviteCode)}</span>
+                <div class="play-nearby-card-actions">
                   <button class="button secondary" type="button" data-action="quick-join-code" data-code="${game.inviteCode}">${escapeHtml(game.joinActionLabel || "Join")}</button>
                 </div>
               </article>
@@ -10497,12 +10541,10 @@ function renderNearbyPlayerRows(nearbyPlayers) {
 
 function renderPrimaryActions(state, activeRound) {
   const hasActiveRound = Boolean(activeRound && activeRound.status === "active");
-  const guided = shouldShowFirstRoundGuide(state) && !hasActiveRound;
   return `
       <div class="play-screen-actions">
-        <button class="button primary primary-btn ${guided ? "guided-action" : ""}" type="button" data-action="nav-view" data-view="round">Start Round</button>
+        <button class="button primary primary-btn ${shouldShowFirstRoundGuide(state) && !hasActiveRound ? "guided-action" : ""}" type="button" data-action="nav-view" data-view="round">Start Round</button>
         <button class="button secondary secondary-btn" type="button" data-action="nav-view" data-view="community">Join Game</button>
-        ${hasActiveRound ? `<p class="play-screen-note">Your active round is ready below if you want to jump back in.</p>` : ""}
       </div>
     `;
 }
@@ -10510,30 +10552,50 @@ function renderPrimaryActions(state, activeRound) {
 function renderPlayActiveGameCard(state, activeRound) {
   const activeGroup = getActiveGroup(state, activeRound);
   const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "";
-  const playerNames = activeRound?.players?.slice(0, 4).map((player) => player.name).join(", ") || "";
+  const players = activeGroup?.members?.length
+    ? activeGroup.members.map((member) => member.displayName).filter(Boolean)
+    : activeRound?.players?.map((player) => player.name).filter(Boolean) || [];
+  const visiblePlayers = players.slice(0, 4);
+  const extraPlayers = players.length - visiblePlayers.length;
 
   if (!activeRound) {
     return `
-      <article class="card play-screen-card play-compact-card">
-        <h3>Active Game</h3>
-        <p>No active round yet.</p>
-        <p>Golden Nugget stays ready as the fastest first round.</p>
+      <article class="card play-screen-card play-compact-card play-active-card play-active-card--empty">
+        <div class="play-screen-card-head">
+          <div>
+            <p class="eyebrow">Active Game</p>
+            <h3>No live round yet</h3>
+          </div>
+          <span class="status-pill">Ready</span>
+        </div>
+        <p class="play-active-copy">Start a round or join one by code. Golden Nugget stays ready as the fastest first round.</p>
       </article>
     `;
   }
 
   return `
-      <article class="card play-screen-card play-compact-card">
+      <article class="card play-screen-card play-compact-card play-active-card">
         <div class="play-screen-card-head">
-          <h3>Active Game</h3>
-          <span class="status-pill">${escapeHtml(activeRound.sync.label)}</span>
+          <div>
+            <p class="eyebrow">Active Game</p>
+            <h3>${escapeHtml(activeRound.courseName)}</h3>
+          </div>
+          <span class="status-pill ${activeRound.connectionState === "live" ? "is-live" : ""}">${escapeHtml(activeRound.sync.label)}</span>
         </div>
-        <p>Code: <strong>${escapeHtml(inviteCode || "---")}</strong></p>
-        <p>Players: ${escapeHtml(playerNames || "You")}</p>
-        <p>Hole ${activeRound.currentHole} • ${escapeHtml(activeRound.courseName)}</p>
+        <div class="play-active-strip-meta">
+          <span><strong>Code</strong> ${escapeHtml(inviteCode || "---")}</span>
+          <span><strong>Hole</strong> ${activeRound.currentHole}</span>
+          <span><strong>Status</strong> ${escapeHtml(activeRound.connectionState === "live" ? "Live room" : "Saved locally")}</span>
+        </div>
+        <div class="play-active-players" aria-label="Players in active game">
+          ${visiblePlayers.length
+            ? visiblePlayers.map((name) => `<span class="play-player-pill">${escapeHtml(name)}</span>`).join("")
+            : `<span class="play-player-pill">You</span>`}
+          ${extraPlayers > 0 ? `<span class="play-player-pill play-player-pill--extra">+${extraPlayers}</span>` : ""}
+        </div>
         <div class="row-actions compact-actions">
           <button class="button primary" type="button" data-action="resume-round" data-round-id="${activeRound.id}">Continue Round</button>
-          ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Copy Link</button>` : `<button class="button secondary" type="button" data-action="host-active-round">Host Game</button>`}
+          ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Copy invite</button>` : `<button class="button secondary" type="button" data-action="host-active-round">Go live</button>`}
         </div>
       </article>
     `;
@@ -10544,20 +10606,23 @@ function renderPlayNearbyPlayersCard(state) {
 
   return `
       <article class="card play-screen-card play-compact-card">
-        <div class="play-screen-card-head">
-          <h3>Nearby Players</h3>
+        <div class="section-heading section-heading--compact">
+          <div>
+            <p class="eyebrow">Nearby Players</p>
+            <h3>Golfers active now</h3>
+          </div>
           <button class="button subtle" type="button" data-action="nav-view" data-view="community">See all</button>
         </div>
         ${nearbyPlayers.length
           ? `
-            <div class="stack-list compact-stack play-list play-screen-list">
+            <div class="play-nearby-row" aria-label="Nearby players">
               ${nearbyPlayers.map((player) => `
-                <article class="list-row play-list-row play-screen-row">
-                  <div class="play-screen-row-copy">
+                <article class="play-nearby-card play-nearby-card--player">
+                  <div class="play-nearby-card-copy">
                     <strong>${escapeHtml(player.displayName)}</strong>
-                    <p>${escapeHtml(player.statusLabel)}</p>
+                    <p>${escapeHtml(player.statusLabel)} / ${escapeHtml(player.relationshipLabel)}</p>
                   </div>
-                  <div class="list-metrics play-screen-row-actions">
+                  <div class="play-nearby-card-actions">
                     ${player.inviteCode ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${player.inviteCode}">Join</button>` : `<button class="button subtle" type="button" data-action="toggle-follow-profile" data-profile-id="${escapeHtml(player.profileId)}">${player.isFollowed ? "Following" : "Follow"}</button>`}
                   </div>
                 </article>
@@ -10578,38 +10643,43 @@ function renderPlayFriendsCard(state) {
   const friendRows = getNearbyDiscoveryState(state).friends;
 
   return `
-    <article class="card play-screen-card play-compact-card">
-      <div class="section-heading section-heading--compact">
+    <details class="card play-screen-card play-compact-card play-collapsible-card">
+      <summary class="play-collapsible-summary">
         <div>
           <p class="eyebrow">Friends Activity</p>
-          <h3>Your golf circle</h3>
+          <strong>${friendRows.length ? `${friendRows.length} golfer${friendRows.length === 1 ? "" : "s"} active` : "Build your golf circle"}</strong>
         </div>
-        <button class="button subtle" type="button" data-action="nav-view" data-view="community">Invite</button>
+        <span>${friendRows.length ? "Open" : "Invite"}</span>
+      </summary>
+      <div class="play-collapsible-body">
+        ${friendRows.length
+          ? `
+            <div class="stack-list compact-stack play-list">
+              ${friendRows.map((friend) => `
+                <article class="list-row play-list-row">
+                  <div>
+                    <strong>${escapeHtml(friend.displayName)}</strong>
+                    <p>${escapeHtml(friend.statusLabel)}</p>
+                  </div>
+                  <div class="list-metrics">
+                    ${friend.canJoin ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${friend.inviteCode}">Join</button>` : ""}
+                    <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(friend.profileId)}">Open</button>
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          `
+          : `
+            <div class="empty-state compact-empty-state">
+              <strong>No friends added yet.</strong>
+              <p>Invite golfers from Community and their cards will show up here for faster repeat rounds.</p>
+            </div>
+          `}
+        <div class="row-actions">
+          <button class="button subtle" type="button" data-action="nav-view" data-view="community">Open Community</button>
+        </div>
       </div>
-      ${friendRows.length
-        ? `
-          <div class="stack-list compact-stack play-list">
-            ${friendRows.map((friend) => `
-              <article class="list-row play-list-row">
-                <div>
-                  <strong>${escapeHtml(friend.displayName)}</strong>
-                  <p>${escapeHtml(friend.statusLabel)}</p>
-                </div>
-                <div class="list-metrics">
-                  ${friend.canJoin ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${friend.inviteCode}">Join</button>` : ""}
-                  <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(friend.profileId)}">Open</button>
-                </div>
-              </article>
-            `).join("")}
-          </div>
-        `
-        : `
-          <div class="empty-state compact-empty-state">
-            <strong>No friends added yet.</strong>
-            <p>Invite golfers from Community and their cards will show up here for faster repeat rounds.</p>
-          </div>
-        `}
-    </article>
+    </details>
   `;
 }
 
@@ -10800,13 +10870,54 @@ function getRoundSetup(state) {
   };
 }
 
-function getOrderedSettingsSections(selectedId) {
-  if (!selectedId || !SETTINGS_SECTIONS.some((section) => section.id === selectedId)) {
-    return SETTINGS_SECTIONS;
+function getSettingsDestination(state) {
+  return state.session?.settingsDestination || "landing";
+}
+
+function getSettingsSectionsForDestination(destination = "landing") {
+  if (destination === "profile") {
+    return PROFILE_SETTINGS_SECTIONS;
   }
 
-  const selected = SETTINGS_SECTIONS.find((section) => section.id === selectedId);
-  return [selected, ...SETTINGS_SECTIONS.filter((section) => section.id !== selectedId)];
+  if (destination === "app") {
+    return APP_SETTINGS_SECTIONS;
+  }
+
+  return [];
+}
+
+function getOrderedSettingsSections(destination, selectedId) {
+  const sections = getSettingsSectionsForDestination(destination);
+  if (!selectedId || !sections.some((section) => section.id === selectedId)) {
+    return sections;
+  }
+
+  const selected = sections.find((section) => section.id === selectedId);
+  return [selected, ...sections.filter((section) => section.id !== selectedId)];
+}
+
+function getSettingsDestinationCopy(destination = "landing") {
+  if (destination === "profile") {
+    return {
+      title: "My Profile",
+      eyebrow: "Golfer identity",
+      description: "Your display name, golf identity, public stats, and social profile live here.",
+    };
+  }
+
+  if (destination === "app") {
+    return {
+      title: "App Settings",
+      eyebrow: "How you use the app",
+      description: "Appearance, account access, support, and optional integrations stay here.",
+    };
+  }
+
+  return {
+    title: "Profile",
+    eyebrow: "Choose a destination",
+    description: "Open your public golfer profile or manage how the app works on this phone.",
+  };
 }
 
 function renderAuthScreen(state) {
@@ -10955,16 +11066,22 @@ function renderAuthScreen(state) {
   `;
 }
 
-function renderSettingsSectionNav(state) {
+function renderSettingsSectionNav(state, destination) {
   const selected = state.session.settingsSection || "account";
+  const sections = getSettingsSectionsForDestination(destination);
+  if (!sections.length) {
+    return "";
+  }
+
   return `
-    <div class="settings-section-nav" role="tablist" aria-label="Settings sections">
-      ${SETTINGS_SECTIONS.map((section) => `
+    <div class="settings-section-nav" role="tablist" aria-label="${escapeHtml(destination === "profile" ? "My Profile sections" : "App Settings sections")}">
+      ${sections.map((section) => `
         <button
           class="settings-section-pill ${selected === section.id ? "is-active" : ""}"
           type="button"
           data-action="set-settings-section"
           data-section="${section.id}"
+          data-destination="${destination}"
           role="tab"
           aria-selected="${selected === section.id ? "true" : "false"}"
         >
@@ -10975,63 +11092,142 @@ function renderSettingsSectionNav(state) {
   `;
 }
 
-function renderSettingsTopCard(state) {
+function renderSettingsLandingView(state) {
   const subscription = getSubscription(state);
   const provider = state.currentUser.providerType || state.currentUser.provider || "email";
+  const relationshipCounts = getCurrentUserRelationshipCounts(state);
+  const preview = buildCompetitivePreview(state, state.currentUser.profileId, state.currentUser.profileId);
+
+  return `
+    <section class="view-grid settings-grid settings-grid--landing">
+      <article class="card settings-top-card card-span-3">
+        <div class="profile-identity-row">
+          ${renderAvatarChip(state.currentUser.avatarLabel || state.currentUser.avatar, "is-large")}
+          <div>
+            <p class="eyebrow">Profile</p>
+            <h3>${escapeHtml(state.currentUser.displayName || state.currentUser.name)}</h3>
+            <p>${escapeHtml(state.currentUser.username || "@golfer")} / ${escapeHtml(subscription.tier === "premium" ? "Premium access" : "Free plan")} / ${escapeHtml(provider)} sign-in</p>
+          </div>
+        </div>
+        <div class="summary-grid compact">
+          <article>
+            <span>Rounds</span>
+            <strong>${preview?.roundsPlayed || state.currentUser.roundsPlayed || 0}</strong>
+          </article>
+          <article>
+            <span>Average</span>
+            <strong>${formatAverageScore(preview?.averageScore ?? state.currentUser.averageScore)}</strong>
+          </article>
+          <article>
+            <span>Best round</span>
+            <strong>${preview?.bestRound || state.currentUser.bestRound || "--"}</strong>
+          </article>
+          <article>
+            <span>Friends</span>
+            <strong>${relationshipCounts.friends}</strong>
+          </article>
+          <article>
+            <span>Following</span>
+            <strong>${relationshipCounts.following}</strong>
+          </article>
+          <article>
+            <span>Member since</span>
+            <strong>${formatDate(state.currentUser.createdAt)}</strong>
+          </article>
+        </div>
+        <p class="body-copy compact-copy">Choose the part of Profile you need right now: your golfer identity or the way the app works on this phone.</p>
+      </article>
+      <div class="settings-destination-grid card-span-3">
+        <button class="card settings-destination-card" type="button" data-action="set-settings-destination" data-destination="profile" data-section="profile-identity">
+          <span class="mini-label">My Profile</span>
+          <strong>Golfer identity and public card</strong>
+          <p>Display name, avatar, bio, golf profile, stats, privacy, and social sharing.</p>
+        </button>
+        <button class="card settings-destination-card" type="button" data-action="set-settings-destination" data-destination="app" data-section="account">
+          <span class="mini-label">App Settings</span>
+          <strong>How you use Golfers Nation</strong>
+          <p>Appearance, account access, Spotify, support, and app-level controls.</p>
+        </button>
+      </div>
+    </section>
+  `;
+}
+
+function renderSettingsDestinationHeader(state, destination) {
+  const copy = getSettingsDestinationCopy(destination);
   const returnView = state.session.settingsReturnView || "home";
   const returnLabel = VIEW_ORDER.find((view) => view.id === returnView)?.label || "Play";
-  const relationshipCounts = getCurrentUserRelationshipCounts(state);
-  const shortSummary = state.currentUser.bio
-    ? state.currentUser.bio
-    : `${state.currentUser.homeCourse ? `${state.currentUser.homeCourse} home course` : "Golf identity ready"} / ${subscription.tier === "premium" ? "Premium access active" : "Free plan active"} / ${provider} sign-in`;
 
   return `
     <article class="card settings-top-card card-span-3">
       <div class="profile-identity-row">
         ${renderAvatarChip(state.currentUser.avatarLabel || state.currentUser.avatar, "is-large")}
         <div>
-          <p class="eyebrow">Profile and settings</p>
-          <h3>${escapeHtml(state.currentUser.displayName || state.currentUser.name)}</h3>
-          <p>${escapeHtml(state.currentUser.username || "@golfer")} / ${escapeHtml(state.currentUser.email || "Email ready")} / ${escapeHtml(subscription.tier === "premium" ? "Premium access" : "Free plan")}</p>
+          <p class="eyebrow">${escapeHtml(copy.eyebrow)}</p>
+          <h3>${escapeHtml(copy.title)}</h3>
+          <p>${escapeHtml(copy.description)}</p>
         </div>
       </div>
-      <div class="summary-grid compact">
-        <article>
-          <span>Provider</span>
-          <strong>${escapeHtml(provider)}</strong>
-        </article>
-        <article>
-          <span>Member since</span>
-          <strong>${formatDate(state.currentUser.createdAt)}</strong>
-        </article>
-        <article>
-          <span>Rounds played</span>
-          <strong>${state.currentUser.roundsPlayed || 0}</strong>
-        </article>
-        <article>
-          <span>Average</span>
-          <strong>${formatAverageScore(state.currentUser.averageScore)}</strong>
-        </article>
-        <article>
-          <span>Best round</span>
-          <strong>${state.currentUser.bestRound || "--"}</strong>
-        </article>
-        <article>
-          <span>Friends</span>
-          <strong>${relationshipCounts.friends}</strong>
-        </article>
-        <article>
-          <span>Following</span>
-          <strong>${relationshipCounts.following}</strong>
-        </article>
-      </div>
-      <p class="body-copy compact-copy">This settings area keeps account details, golf identity, theme preferences, social scaffolding, and support access together in one clean place.</p>
-      <p class="body-copy compact-copy">${escapeHtml(shortSummary)}</p>
-      <div class="row-actions">
+      <div class="row-actions settings-top-actions">
+        <button class="button subtle" type="button" data-action="set-settings-destination" data-destination="landing">Back to Profile</button>
         <button class="button secondary" type="button" data-action="close-settings">Back to ${escapeHtml(returnLabel)}</button>
-        <button class="button primary" type="button" data-action="sign-out">Log out account</button>
-        ${renderHelpLink("Settings help", "accounts-profiles", true)}
       </div>
+    </article>
+  `;
+}
+
+function renderProfileIdentitySettingsCard(state) {
+  return `
+    <article class="card settings-card" data-settings-card="profile-identity">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">My Profile</p>
+          <h3>Identity and public card</h3>
+        </div>
+      </div>
+      <form class="stack-form" data-form="save-profile-identity">
+        <div class="split-inputs">
+          <label>
+            Display Name
+            <input name="displayName" type="text" value="${escapeHtml(state.currentUser.displayName || state.currentUser.name)}" />
+          </label>
+          <label>
+            Username
+            <input name="username" type="text" value="${escapeHtml(state.currentUser.username || "")}" />
+          </label>
+        </div>
+        <div class="split-inputs">
+          <label>
+            Avatar
+            <input name="avatarLabel" type="text" maxlength="2" value="${escapeHtml(state.currentUser.avatarLabel || "GN")}" />
+          </label>
+          <label>
+            Public summary
+            <input value="${escapeHtml(state.currentUser.bio || state.currentUser.homeCourse || "Ready for your first public round")}" readonly />
+          </label>
+        </div>
+        <div class="summary-grid compact">
+          <article>
+            <span>Public name</span>
+            <strong>${escapeHtml(state.currentUser.displayName || state.currentUser.name)}</strong>
+          </article>
+          <article>
+            <span>Username</span>
+            <strong>${escapeHtml(state.currentUser.username || "@golfer")}</strong>
+          </article>
+          <article>
+            <span>Rounds played</span>
+            <strong>${state.currentUser.roundsPlayed || 0}</strong>
+          </article>
+          <article>
+            <span>Average</span>
+            <strong>${formatAverageScore(state.currentUser.averageScore)}</strong>
+          </article>
+        </div>
+        <div class="row-actions">
+          <button class="button primary" type="submit">Save profile identity</button>
+        </div>
+      </form>
     </article>
   `;
 }
@@ -11078,31 +11274,11 @@ function renderAccountSettingsCard(state) {
       <div class="section-heading">
         <div>
           <p class="eyebrow">Account</p>
-          <h3>Identity and access</h3>
+          <h3>Account access and security</h3>
         </div>
         <span class="status-pill">${escapeHtml(subscription.tier === "premium" ? "Premium" : "Free")}</span>
       </div>
-      <form class="stack-form" data-form="save-account-settings">
-        <div class="split-inputs">
-          <label>
-            Display Name
-            <input name="displayName" type="text" value="${escapeHtml(state.currentUser.displayName || state.currentUser.name)}" />
-          </label>
-          <label>
-            Username
-            <input name="username" type="text" value="${escapeHtml(state.currentUser.username || "")}" />
-          </label>
-        </div>
-        <div class="split-inputs">
-          <label>
-            Email
-            <input name="email" type="email" value="${escapeHtml(state.currentUser.email || "")}" />
-          </label>
-          <label>
-            Avatar
-            <input name="avatarLabel" type="text" maxlength="2" value="${escapeHtml(state.currentUser.avatarLabel || "GN")}" />
-          </label>
-        </div>
+      <div class="stack-form">
         <div class="summary-grid compact">
           <article>
             <span>Provider</span>
@@ -11118,11 +11294,24 @@ function renderAccountSettingsCard(state) {
           </article>
         </div>
         <div class="row-actions">
-          <button class="button primary" type="submit">Save account</button>
+          <button class="button primary" type="button" data-action="sign-out">Log out account</button>
         </div>
-      </form>
-      ${renderSpotifySettingsPanel(state)}
+      </div>
       ${passwordScaffold}
+    </article>
+  `;
+}
+
+function renderSpotifySettingsCard(state) {
+  return `
+    <article class="card settings-card" data-settings-card="spotify">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Spotify</p>
+          <h3>Optional music companion</h3>
+        </div>
+      </div>
+      ${renderSpotifySettingsPanel(state)}
     </article>
   `;
 }
@@ -11344,6 +11533,13 @@ function renderAppSupportSettingsCard(state) {
         </div>
       </div>
       <div class="stack-list settings-support-list">
+        <button class="list-row large settings-link-row" type="button" data-action="show-policy-placeholder" data-doc="about">
+          <div>
+            <strong>About Golfers Nation</strong>
+            <p>Version details, release notes, and the product overview scaffold for launch review.</p>
+          </div>
+          <span>Open</span>
+        </button>
         <button class="list-row large settings-link-row" type="button" data-action="refresh-app">
           <div>
             <strong>Refresh App</strong>
@@ -11451,28 +11647,39 @@ function renderAppSupportSettingsCard(state) {
 }
 
 function renderSettingsView(state) {
-  const orderedSections = getOrderedSettingsSections(state.session.settingsSection || "account");
+  const destination = getSettingsDestination(state);
+  if (destination === "landing") {
+    return renderSettingsLandingView(state);
+  }
+
+  const orderedSections = getOrderedSettingsSections(destination, state.session.settingsSection || "account");
+  const selectedSectionId = orderedSections[0]?.id || (destination === "profile" ? "profile-identity" : "account");
   const cards = {
+    "profile-identity": renderProfileIdentitySettingsCard(state),
     account: renderAccountSettingsCard(state),
     "golf-profile": renderGolfProfileSettingsCard(state),
     appearance: renderAppearanceSettingsCard(state),
     social: renderSocialSettingsCard(state),
+    spotify: renderSpotifySettingsCard(state),
     "app-support": renderAppSupportSettingsCard(state),
   };
+  const heading = destination === "profile"
+    ? { eyebrow: "My Profile", title: "Golfer identity and sharing" }
+    : { eyebrow: "App Settings", title: "Controls for this app" };
 
   return `
     <section class="view-grid settings-grid">
-      ${renderSettingsTopCard(state)}
+      ${renderSettingsDestinationHeader(state, destination)}
       <article class="card settings-nav-card card-span-3">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Settings sections</p>
-            <h3>Everything important, grouped simply</h3>
+            <p class="eyebrow">${escapeHtml(heading.eyebrow)}</p>
+            <h3>${escapeHtml(heading.title)}</h3>
           </div>
         </div>
-        ${renderSettingsSectionNav(state)}
+        ${renderSettingsSectionNav(state, destination)}
       </article>
-      ${orderedSections.map((section) => cards[section.id]).join("")}
+      ${cards[selectedSectionId] || ""}
     </section>
   `;
 }
@@ -11551,21 +11758,12 @@ function renderHelpView(state, { standalone = false } = {}) {
 
 function renderHomeView(state) {
   const activeRound = getActiveRound(state);
-  const subscription = getSubscription(state);
-  const premium = isPremiumSubscription(subscription);
-  const firstName = state.currentUser.name.split(" ")[0];
 
   return `
     <section class="play-screen">
-      <article class="card play-screen-hero">
-        <div class="play-screen-card-head">
-          <h2>${escapeHtml(`Ready to tee it up, ${firstName}?`)}</h2>
-          <span class="status-pill">${premium ? "Premium access" : "Free membership"}</span>
-        </div>
-        ${renderPrimaryActions(state, activeRound)}
-      </article>
+      ${renderPlayActiveGameCard(state, activeRound)}
+      ${renderPrimaryActions(state, activeRound)}
       <div class="play-screen-grid">
-        ${renderPlayActiveGameCard(state, activeRound)}
         ${renderPlayNearbyPlayersCard(state)}
         ${renderPlayNearbyGamesCard(state)}
       </div>
@@ -13436,7 +13634,6 @@ function renderCurrentView(state) {
         ${renderLiveSessionStrip(activeRound, getActiveGroup(state, activeRound))}
         <section class="app-stage">
           ${renderGlobalFeedback(state)}
-          ${renderSpotifyNowPlayingBar(state)}
           ${renderScreenHeader(state, activeRound)}
           ${summaryRound && state.session.activeView === "stats" ? renderSummarySpotlight(state, summaryRound) : ""}
           <section
@@ -13527,13 +13724,44 @@ function updateLiveSession(root, session) {
 // ---- src/ui/view-controller.js ----
 function getViewIndex(viewId) {
   return VIEW_ORDER.findIndex((view) => view.id === viewId);
-}function setActiveView(draft, nextView, transitionKind = "tab") {
+}
+
+const PROFILE_SETTINGS_SECTIONS = new Set(["profile-identity", "golf-profile", "social"]);
+const APP_SETTINGS_SECTIONS = new Set(["account", "appearance", "spotify", "app-support"]);
+function getSettingsDestinationForSection(sectionId = "", requestedDestination = "") {
+  if (requestedDestination === "profile" || requestedDestination === "app" || requestedDestination === "landing") {
+    return requestedDestination;
+  }
+
+  if (PROFILE_SETTINGS_SECTIONS.has(sectionId)) {
+    return "profile";
+  }
+
+  if (APP_SETTINGS_SECTIONS.has(sectionId)) {
+    return "app";
+  }
+
+  return "landing";
+}
+function getDefaultSettingsSectionForDestination(destination = "landing") {
+  if (destination === "profile") {
+    return "profile-identity";
+  }
+
+  if (destination === "app") {
+    return "account";
+  }
+
+  return "account";
+}
+function setActiveView(draft, nextView, transitionKind = "tab") {
   const previousView = draft.session.activeView || "home";
   const previousIndex = getViewIndex(previousView);
   const nextIndex = getViewIndex(nextView);
 
   draft.session.previousView = previousView;
   draft.session.activeView = nextView;
+  draft.session.appMenuOpen = false;
 
   if (transitionKind === "focus-round") {
     draft.session.transitionDirection = "focus";
@@ -13557,18 +13785,26 @@ function getViewIndex(viewId) {
     ? (currentView === "help" ? draft.session.helpReturnView || "home" : currentView)
     : "auth";
   draft.session.helpSection = sectionId || draft.session.helpSection || "getting-started";
+  draft.session.appMenuOpen = false;
   setActiveView(draft, "help", "focus");
-}function closeHelpView(draft) {
+}
+function closeHelpView(draft) {
   const returnView = draft.session.helpReturnView || "home";
   setActiveView(draft, returnView === "auth" ? "home" : returnView, "return");
-}function openSettingsView(draft, sectionId = "account") {
+}function openSettingsView(draft, sectionId = "account", destination = null) {
   const currentView = draft.session.activeView || "home";
   draft.session.settingsReturnView = currentView === "settings"
     ? (draft.session.settingsReturnView || "home")
     : currentView;
-  draft.session.settingsSection = sectionId || draft.session.settingsSection || "account";
+  const resolvedDestination = getSettingsDestinationForSection(sectionId, destination);
+  draft.session.settingsDestination = resolvedDestination;
+  draft.session.settingsSection = resolvedDestination === "landing"
+    ? (draft.session.settingsSection || getDefaultSettingsSectionForDestination("app"))
+    : (sectionId || draft.session.settingsSection || getDefaultSettingsSectionForDestination(resolvedDestination));
+  draft.session.appMenuOpen = false;
   setActiveView(draft, "settings", "focus");
-}function closeSettingsView(draft) {
+}
+function closeSettingsView(draft) {
   const returnView = draft.session.settingsReturnView || "home";
   setActiveView(draft, returnView, "return");
 }function applyJoinedRoundState(draft, joined, successTitle, successMessage) {
@@ -14187,6 +14423,10 @@ function mapTabToView(tab) {
     }
 
     store.setState((draft) => {
+      if (nextView === "settings") {
+        draft.session.settingsDestination = "landing";
+        draft.session.settingsSection = getDefaultSettingsSectionForDestination("app");
+      }
       setActiveView(draft, nextView, "tab");
       return draft;
     }, { reason: "render-tab" });
@@ -15045,6 +15285,8 @@ function mapTabToView(tab) {
   }
 
   root.addEventListener("click", async (event) => {
+      const clickedInsideMenu = Boolean(event.target.closest("[data-app-menu]"));
+      const clickedMenuToggle = Boolean(event.target.closest('[data-action="toggle-app-menu"]'));
       const navButton = event.target.closest(".nav-btn[data-tab]");
       if (navButton) {
         renderTab(navButton.dataset.tab);
@@ -15053,10 +15295,32 @@ function mapTabToView(tab) {
 
       const actionElement = event.target.closest("[data-action]");
       if (!actionElement) {
+        if (store.getState().session.appMenuOpen && !clickedInsideMenu && !clickedMenuToggle) {
+          store.setState((draft) => {
+            draft.session.appMenuOpen = false;
+            return draft;
+          }, { reason: "close-app-menu-outside" });
+        }
         return;
       }
 
     const action = actionElement.dataset.action;
+
+      if (action === "toggle-app-menu") {
+        store.setState((draft) => {
+          draft.session.appMenuOpen = !draft.session.appMenuOpen;
+          return draft;
+        }, { reason: "toggle-app-menu" });
+        return;
+      }
+
+      if (action === "close-app-menu") {
+        store.setState((draft) => {
+          draft.session.appMenuOpen = false;
+          return draft;
+        }, { reason: "close-app-menu" });
+        return;
+      }
 
       if (action === "nav-view") {
         const tab = actionElement.dataset.tab;
@@ -15079,6 +15343,7 @@ function mapTabToView(tab) {
 
     if (action === "open-help-section") {
       store.setState((draft) => {
+        draft.session.appMenuOpen = false;
         openHelpView(draft, actionElement.dataset.section);
         return draft;
       }, { reason: "open-help-section" });
@@ -15095,7 +15360,11 @@ function mapTabToView(tab) {
 
     if (action === "open-settings") {
       store.setState((draft) => {
-        openSettingsView(draft, actionElement.dataset.section);
+        openSettingsView(
+          draft,
+          actionElement.dataset.section,
+          actionElement.dataset.destination
+        );
         return draft;
       }, { reason: "open-settings" });
       return;
@@ -15112,8 +15381,26 @@ function mapTabToView(tab) {
     if (action === "set-settings-section") {
       store.setState((draft) => {
         draft.session.settingsSection = actionElement.dataset.section || draft.session.settingsSection || "account";
+        if (actionElement.dataset.destination) {
+          draft.session.settingsDestination = actionElement.dataset.destination;
+        }
+        draft.session.appMenuOpen = false;
         return draft;
       }, { reason: "set-settings-section" });
+      return;
+    }
+
+    if (action === "set-settings-destination") {
+      store.setState((draft) => {
+        const destination = actionElement.dataset.destination || "landing";
+        draft.session.settingsDestination = destination;
+        draft.session.settingsSection = actionElement.dataset.section
+          || getDefaultSettingsSectionForDestination(destination)
+          || draft.session.settingsSection
+          || "account";
+        draft.session.appMenuOpen = false;
+        return draft;
+      }, { reason: "set-settings-destination" });
       return;
     }
 
@@ -15791,7 +16078,8 @@ function mapTabToView(tab) {
       store.setState((draft) => {
         draft.session.selectedProfileId = draft.currentUser.profileId;
         setActiveView(draft, "settings", "tab");
-        draft.session.settingsSection = "account";
+        draft.session.settingsDestination = "profile";
+        draft.session.settingsSection = "profile-identity";
         return draft;
       }, { reason: "open-current-profile" });
       return;
@@ -16000,13 +16288,20 @@ function mapTabToView(tab) {
     }
 
     if (action === "show-policy-placeholder") {
-      const docLabel = actionElement.dataset.doc === "terms" ? "Terms of Service" : "Privacy Policy";
+      const docType = actionElement.dataset.doc;
+      const docLabel = docType === "terms"
+        ? "Terms of Service"
+        : docType === "about"
+          ? "About Golfers Nation"
+          : "Privacy Policy";
       store.setState((draft) => {
         setFeedback(
           draft,
           "info",
           docLabel,
-          `${docLabel} is scaffolded for production submission. Replace this placeholder with the hosted legal document when launch materials are ready.`
+          docType === "about"
+            ? "About Golfers Nation is scaffolded here for launch review. Replace this placeholder with release notes, version history, and production support details when those materials are ready."
+            : `${docLabel} is scaffolded for production submission. Replace this placeholder with the hosted legal document when launch materials are ready.`
         );
         return draft;
       }, { reason: "show-policy-placeholder" });
@@ -16193,6 +16488,31 @@ function mapTabToView(tab) {
         return draft;
       }, { reason: "auth-password-reset-placeholder" });
       form.reset();
+      return;
+    }
+
+    if (formName === "save-profile-identity") {
+      store.setState((draft) => {
+        const nextDisplayName = String(data.get("displayName") || "").trim() || draft.currentUser.displayName || draft.currentUser.name;
+        const previousName = draft.currentUser.name;
+
+        draft.currentUser.name = nextDisplayName;
+        draft.currentUser.displayName = nextDisplayName;
+        draft.currentUser.username = normalizeUsernameInput(data.get("username"), nextDisplayName);
+        draft.currentUser.avatarLabel = normalizeAvatarLabel(data.get("avatarLabel"), nextDisplayName);
+
+        syncIdentityAcrossRecords(draft);
+        syncCurrentUserProfile(draft);
+        refreshProfileSnapshots(draft);
+
+        if (previousName !== draft.currentUser.name) {
+          appendActivity(draft, `Profile identity updated from ${previousName} to ${draft.currentUser.name}.`, "profile");
+        }
+
+        appendActivity(draft, `${draft.currentUser.name}'s golfer identity was refreshed.`, "profile");
+        setFeedback(draft, "success", "Profile updated", "Your public golfer identity is updated for this account.");
+        return draft;
+      }, { reason: "save-profile-identity" });
       return;
     }
 

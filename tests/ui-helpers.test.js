@@ -158,7 +158,7 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Ready to tee it up, New?");
+    expect(markup).toContain("No live round yet");
     expect(markup).toContain("Start Round");
     expect(markup).toContain("Join Game");
     expect(markup).toContain("Active Game");
@@ -228,8 +228,9 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Profile & settings");
+    expect(markup).toContain("My Profile");
     expect(markup).toContain('data-action="open-settings"');
+    expect(markup).toContain('data-destination="landing"');
   });
 
   it("renders the settings screen with appearance controls and keeps the parent tab active", () => {
@@ -237,6 +238,7 @@ describe("ui helpers", () => {
     state.auth.status = "authenticated";
     state.auth.activeUserId = state.currentUser.id;
     state.session.activeView = "settings";
+    state.session.settingsDestination = "app";
     state.session.settingsSection = "appearance";
     state.session.settingsReturnView = "stats";
     state.currentUser.appearance = {
@@ -247,7 +249,7 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Profile and settings");
+    expect(markup).toContain("App Settings");
     expect(markup).toContain("Appearance Mode");
     expect(markup).toContain("Theme Style");
     expect(markup).toContain("Display Comfort");
@@ -256,7 +258,7 @@ describe("ui helpers", () => {
     expect(markup).toContain("Ember");
     expect(markup).toContain('data-theme="ocean"');
     expect(markup).toContain('data-color-mode="light"');
-    expect(markup).toContain("Log out account");
+    expect(markup).not.toContain("Log out account");
     expect(markup).toMatch(/id="tab-settings"[\s\S]*?aria-selected="true"/);
   });
 
@@ -282,17 +284,18 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Profile and settings");
-    expect(markup).toContain("Friends");
-    expect(markup).toContain("Following");
+    expect(markup).toContain("Choose the part of Profile you need right now");
+    expect(markup).toContain("My Profile");
+    expect(markup).toContain("App Settings");
   });
 
-  it("renders Spotify connection scaffolding in settings and a compact now playing bar when connected", () => {
+  it("renders Spotify connection scaffolding only inside app settings and keeps round view clear", () => {
     const state = createDefaultState();
     state.auth.status = "authenticated";
     state.auth.activeUserId = state.currentUser.id;
     state.session.activeView = "settings";
-    state.session.settingsSection = "account";
+    state.session.settingsDestination = "app";
+    state.session.settingsSection = "spotify";
     state.currentUser.integrations = {
       spotify: {
         status: "connected",
@@ -315,14 +318,9 @@ describe("ui helpers", () => {
     expect(settingsMarkup).toContain("Spotify companion");
     expect(settingsMarkup).toContain("Disconnect Spotify");
     expect(settingsMarkup).toContain("Lake Charles Loop");
-    expect(settingsMarkup).toContain('data-action="spotify-play-pause"');
+    expect(settingsMarkup).toContain('data-action="spotify-open"');
 
     state.session.activeView = "round";
-    state.session.spotify = {
-      barCollapsed: true,
-      lastAction: "toggle",
-      lastUpdatedAt: Date.now(),
-    };
     state.rounds.unshift(
       createRound({
         currentUser: state.currentUser,
@@ -337,9 +335,9 @@ describe("ui helpers", () => {
 
     const roundMarkup = renderAppTemplate(state);
 
-    expect(roundMarkup).toContain("spotify-minibar");
-    expect(roundMarkup).toContain("Lake Charles Loop");
-    expect(roundMarkup).toContain('data-action="toggle-spotify-bar"');
+    expect(roundMarkup).not.toContain("spotify-minibar");
+    expect(roundMarkup).not.toContain("spotify-now-playing-bar");
+    expect(roundMarkup).not.toContain('data-action="toggle-spotify-bar"');
   });
 
   it("renders the clean score stepper flow for the active golfer", () => {
@@ -372,6 +370,7 @@ describe("ui helpers", () => {
     state.auth.status = "authenticated";
     state.auth.activeUserId = state.currentUser.id;
     state.session.activeView = "settings";
+    state.session.settingsDestination = "app";
     state.session.settingsSection = "app-support";
     state.session.settingsReturnView = "stats";
 

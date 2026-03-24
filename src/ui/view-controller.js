@@ -11,6 +11,37 @@ function getViewIndex(viewId) {
   return VIEW_ORDER.findIndex((view) => view.id === viewId);
 }
 
+const PROFILE_SETTINGS_SECTIONS = new Set(["profile-identity", "golf-profile", "social"]);
+const APP_SETTINGS_SECTIONS = new Set(["account", "appearance", "spotify", "app-support"]);
+
+export function getSettingsDestinationForSection(sectionId = "", requestedDestination = "") {
+  if (requestedDestination === "profile" || requestedDestination === "app" || requestedDestination === "landing") {
+    return requestedDestination;
+  }
+
+  if (PROFILE_SETTINGS_SECTIONS.has(sectionId)) {
+    return "profile";
+  }
+
+  if (APP_SETTINGS_SECTIONS.has(sectionId)) {
+    return "app";
+  }
+
+  return "landing";
+}
+
+export function getDefaultSettingsSectionForDestination(destination = "landing") {
+  if (destination === "profile") {
+    return "profile-identity";
+  }
+
+  if (destination === "app") {
+    return "account";
+  }
+
+  return "account";
+}
+
 export function setActiveView(draft, nextView, transitionKind = "tab") {
   const previousView = draft.session.activeView || "home";
   const previousIndex = getViewIndex(previousView);
@@ -18,6 +49,7 @@ export function setActiveView(draft, nextView, transitionKind = "tab") {
 
   draft.session.previousView = previousView;
   draft.session.activeView = nextView;
+  draft.session.appMenuOpen = false;
 
   if (transitionKind === "focus-round") {
     draft.session.transitionDirection = "focus";
@@ -43,6 +75,7 @@ export function openHelpView(draft, sectionId = "getting-started") {
     ? (currentView === "help" ? draft.session.helpReturnView || "home" : currentView)
     : "auth";
   draft.session.helpSection = sectionId || draft.session.helpSection || "getting-started";
+  draft.session.appMenuOpen = false;
   setActiveView(draft, "help", "focus");
 }
 
@@ -51,12 +84,17 @@ export function closeHelpView(draft) {
   setActiveView(draft, returnView === "auth" ? "home" : returnView, "return");
 }
 
-export function openSettingsView(draft, sectionId = "account") {
+export function openSettingsView(draft, sectionId = "account", destination = null) {
   const currentView = draft.session.activeView || "home";
   draft.session.settingsReturnView = currentView === "settings"
     ? (draft.session.settingsReturnView || "home")
     : currentView;
-  draft.session.settingsSection = sectionId || draft.session.settingsSection || "account";
+  const resolvedDestination = getSettingsDestinationForSection(sectionId, destination);
+  draft.session.settingsDestination = resolvedDestination;
+  draft.session.settingsSection = resolvedDestination === "landing"
+    ? (draft.session.settingsSection || getDefaultSettingsSectionForDestination("app"))
+    : (sectionId || draft.session.settingsSection || getDefaultSettingsSectionForDestination(resolvedDestination));
+  draft.session.appMenuOpen = false;
   setActiveView(draft, "settings", "focus");
 }
 

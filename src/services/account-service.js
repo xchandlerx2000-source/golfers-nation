@@ -991,7 +991,9 @@ export function signOutAccount(draft) {
   draft.session.activeView = "home";
   draft.session.previousView = "home";
   draft.session.transitionDirection = "steady";
+  draft.session.appMenuOpen = false;
   draft.session.helpReturnView = "auth";
+  draft.session.settingsDestination = "landing";
   draft.session.settingsReturnView = "auth";
   draft.session.settingsSection = "account";
   draft.session.activeRoundId = null;

@@ -80,6 +80,7 @@ import {
   applyJoinedRoundState,
   closeHelpView,
   closeSettingsView,
+  getDefaultSettingsSectionForDestination,
   openHelpView,
   openSettingsView,
   setActiveView,
@@ -319,6 +320,10 @@ export function bootstrapApp({
     }
 
     store.setState((draft) => {
+      if (nextView === "settings") {
+        draft.session.settingsDestination = "landing";
+        draft.session.settingsSection = getDefaultSettingsSectionForDestination("app");
+      }
       setActiveView(draft, nextView, "tab");
       return draft;
     }, { reason: "render-tab" });
@@ -1177,6 +1182,8 @@ export function bootstrapApp({
   }
 
   root.addEventListener("click", async (event) => {
+      const clickedInsideMenu = Boolean(event.target.closest("[data-app-menu]"));
+      const clickedMenuToggle = Boolean(event.target.closest('[data-action="toggle-app-menu"]'));
       const navButton = event.target.closest(".nav-btn[data-tab]");
       if (navButton) {
         renderTab(navButton.dataset.tab);
@@ -1185,10 +1192,32 @@ export function bootstrapApp({
 
       const actionElement = event.target.closest("[data-action]");
       if (!actionElement) {
+        if (store.getState().session.appMenuOpen && !clickedInsideMenu && !clickedMenuToggle) {
+          store.setState((draft) => {
+            draft.session.appMenuOpen = false;
+            return draft;
+          }, { reason: "close-app-menu-outside" });
+        }
         return;
       }
 
     const action = actionElement.dataset.action;
+
+      if (action === "toggle-app-menu") {
+        store.setState((draft) => {
+          draft.session.appMenuOpen = !draft.session.appMenuOpen;
+          return draft;
+        }, { reason: "toggle-app-menu" });
+        return;
+      }
+
+      if (action === "close-app-menu") {
+        store.setState((draft) => {
+          draft.session.appMenuOpen = false;
+          return draft;
+        }, { reason: "close-app-menu" });
+        return;
+      }
 
       if (action === "nav-view") {
         const tab = actionElement.dataset.tab;
@@ -1211,6 +1240,7 @@ export function bootstrapApp({
 
     if (action === "open-help-section") {
       store.setState((draft) => {
+        draft.session.appMenuOpen = false;
         openHelpView(draft, actionElement.dataset.section);
         return draft;
       }, { reason: "open-help-section" });
@@ -1227,7 +1257,11 @@ export function bootstrapApp({
 
     if (action === "open-settings") {
       store.setState((draft) => {
-        openSettingsView(draft, actionElement.dataset.section);
+        openSettingsView(
+          draft,
+          actionElement.dataset.section,
+          actionElement.dataset.destination
+        );
         return draft;
       }, { reason: "open-settings" });
       return;
@@ -1244,8 +1278,26 @@ export function bootstrapApp({
     if (action === "set-settings-section") {
       store.setState((draft) => {
         draft.session.settingsSection = actionElement.dataset.section || draft.session.settingsSection || "account";
+        if (actionElement.dataset.destination) {
+          draft.session.settingsDestination = actionElement.dataset.destination;
+        }
+        draft.session.appMenuOpen = false;
         return draft;
       }, { reason: "set-settings-section" });
+      return;
+    }
+
+    if (action === "set-settings-destination") {
+      store.setState((draft) => {
+        const destination = actionElement.dataset.destination || "landing";
+        draft.session.settingsDestination = destination;
+        draft.session.settingsSection = actionElement.dataset.section
+          || getDefaultSettingsSectionForDestination(destination)
+          || draft.session.settingsSection
+          || "account";
+        draft.session.appMenuOpen = false;
+        return draft;
+      }, { reason: "set-settings-destination" });
       return;
     }
 
@@ -1923,7 +1975,8 @@ export function bootstrapApp({
       store.setState((draft) => {
         draft.session.selectedProfileId = draft.currentUser.profileId;
         setActiveView(draft, "settings", "tab");
-        draft.session.settingsSection = "account";
+        draft.session.settingsDestination = "profile";
+        draft.session.settingsSection = "profile-identity";
         return draft;
       }, { reason: "open-current-profile" });
       return;
@@ -2132,13 +2185,20 @@ export function bootstrapApp({
     }
 
     if (action === "show-policy-placeholder") {
-      const docLabel = actionElement.dataset.doc === "terms" ? "Terms of Service" : "Privacy Policy";
+      const docType = actionElement.dataset.doc;
+      const docLabel = docType === "terms"
+        ? "Terms of Service"
+        : docType === "about"
+          ? "About Golfers Nation"
+          : "Privacy Policy";
       store.setState((draft) => {
         setFeedback(
           draft,
           "info",
           docLabel,
-          `${docLabel} is scaffolded for production submission. Replace this placeholder with the hosted legal document when launch materials are ready.`
+          docType === "about"
+            ? "About Golfers Nation is scaffolded here for launch review. Replace this placeholder with release notes, version history, and production support details when those materials are ready."
+            : `${docLabel} is scaffolded for production submission. Replace this placeholder with the hosted legal document when launch materials are ready.`
         );
         return draft;
       }, { reason: "show-policy-placeholder" });
@@ -2325,6 +2385,31 @@ export function bootstrapApp({
         return draft;
       }, { reason: "auth-password-reset-placeholder" });
       form.reset();
+      return;
+    }
+
+    if (formName === "save-profile-identity") {
+      store.setState((draft) => {
+        const nextDisplayName = String(data.get("displayName") || "").trim() || draft.currentUser.displayName || draft.currentUser.name;
+        const previousName = draft.currentUser.name;
+
+        draft.currentUser.name = nextDisplayName;
+        draft.currentUser.displayName = nextDisplayName;
+        draft.currentUser.username = normalizeUsernameInput(data.get("username"), nextDisplayName);
+        draft.currentUser.avatarLabel = normalizeAvatarLabel(data.get("avatarLabel"), nextDisplayName);
+
+        syncIdentityAcrossRecords(draft);
+        syncCurrentUserProfile(draft);
+        refreshProfileSnapshots(draft);
+
+        if (previousName !== draft.currentUser.name) {
+          appendActivity(draft, `Profile identity updated from ${previousName} to ${draft.currentUser.name}.`, "profile");
+        }
+
+        appendActivity(draft, `${draft.currentUser.name}'s golfer identity was refreshed.`, "profile");
+        setFeedback(draft, "success", "Profile updated", "Your public golfer identity is updated for this account.");
+        return draft;
+      }, { reason: "save-profile-identity" });
       return;
     }
 
