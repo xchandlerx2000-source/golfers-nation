@@ -159,17 +159,10 @@ describe("ui helpers", () => {
     const markup = renderAppTemplate(state);
 
     expect(markup).toContain("Ready to tee it up, New?");
-<<<<<<< HEAD
-    expect(markup).toContain("Start round");
-    expect(markup).toContain("Join game");
-    expect(markup).toContain("Active game");
-    expect(markup).toContain("Nearby games");
-=======
-      expect(markup).toContain("Start Round");
-      expect(markup).toContain("Join Game");
-      expect(markup).toContain("Active Game");
-      expect(markup).toContain("Nearby Players");
->>>>>>> 2620b82 (add state-safe tab navigation)
+    expect(markup).toContain("Start Round");
+    expect(markup).toContain("Join Game");
+    expect(markup).toContain("Active Game");
+    expect(markup).toContain("Nearby Players");
   });
 
   it("renders the seeded course picker inside round setup", () => {
@@ -548,24 +541,14 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-<<<<<<< HEAD
     expect(markup).toContain('id="tab-home"');
     expect(markup).toContain('id="tab-round"');
     expect(markup).toContain('id="tab-community"');
     expect(markup).toContain('id="tab-settings"');
+    expect(markup).toContain('data-tab="play"');
+    expect(markup).toContain('data-tab="score"');
     expect(markup).toContain("Play");
     expect(markup).toContain("Score");
     expect(markup).toContain("Profile");
-=======
-      expect(markup).toContain('id="tab-home"');
-      expect(markup).toContain('id="tab-round"');
-      expect(markup).toContain('id="tab-community"');
-      expect(markup).toContain('id="tab-settings"');
-      expect(markup).toContain('data-tab="play"');
-      expect(markup).toContain('data-tab="score"');
-      expect(markup).toContain("Play");
-      expect(markup).toContain("Score");
-      expect(markup).toContain("Profile");
->>>>>>> 2620b82 (add state-safe tab navigation)
   });
 });

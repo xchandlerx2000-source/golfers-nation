@@ -4991,8 +4991,6 @@ button:disabled {
 .competition-layer-card .feature-row strong {
   margin-right: 0.4rem;
 }
-<<<<<<< HEAD
-=======
 
 /* Mobile-first global shell layout */
 html,
@@ -5374,4 +5372,3 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
->>>>>>> 2620b82 (add state-safe tab navigation)

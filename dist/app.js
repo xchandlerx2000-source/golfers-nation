@@ -9819,9 +9819,15 @@ function getRoundSavePresentation(round) {
 function renderNav(state) {
   const navActiveView = getNavActiveView(state);
   return PRIMARY_NAV_TABS.map((view) => {
-<<<<<<< HEAD
     const isActive = navActiveView === view.id;
-    const activeClass = isActive ? "is-active" : "";
+    const activeClass = isActive ? "is-active active" : "";
+    const tabId = view.id === "home"
+      ? "play"
+      : view.id === "round"
+        ? "score"
+        : view.id === "community"
+          ? "community"
+          : "profile";
     const currentAttr = isActive ? 'aria-current="page"' : "";
     const selectedAttr = isActive ? "true" : "false";
     return `
@@ -9830,32 +9836,10 @@ function renderNav(state) {
         class="nav-item nav-btn ${activeClass}"
         data-action="nav-view"
         data-view="${view.id}"
+        data-tab="${tabId}"
         type="button"
         role="tab"
         aria-selected="${selectedAttr}"
-=======
-      const isActive = navActiveView === view.id;
-      const activeClass = isActive ? "is-active active" : "";
-      const tabId = view.id === "home"
-        ? "play"
-        : view.id === "round"
-          ? "score"
-          : view.id === "community"
-            ? "community"
-            : "profile";
-      const currentAttr = isActive ? 'aria-current="page"' : "";
-      const selectedAttr = isActive ? "true" : "false";
-      return `
-        <button
-          id="tab-${view.id}"
-          class="nav-item nav-btn ${activeClass}"
-          data-action="nav-view"
-          data-view="${view.id}"
-          data-tab="${tabId}"
-          type="button"
-          role="tab"
-          aria-selected="${selectedAttr}"
->>>>>>> 2620b82 (add state-safe tab navigation)
         aria-controls="app-screen-panel"
         aria-label="${escapeHtml(view.label)}"
         ${currentAttr}
@@ -9937,21 +9921,14 @@ function renderAppShellHeader(state, activeRound, subscription) {
 
 function renderLiveSessionStrip(activeRound, activeGroup) {
   const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "---";
-<<<<<<< HEAD
-=======
   const players = activeGroup?.members?.length
     ? activeGroup.members.map((member) => member.displayName).filter(Boolean)
     : activeRound?.players?.map((player) => player.name).filter(Boolean) || [];
->>>>>>> 2620b82 (add state-safe tab navigation)
   const hiddenClass = activeRound ? "" : " hidden";
   return `
     <div class="live-strip${hiddenClass}" id="liveStrip">
       <span>LIVE / Code: <b id="liveCode">${escapeHtml(inviteCode)}</b></span>
-<<<<<<< HEAD
-      <span id="livePlayers">Players: ${activeRound?.players?.length || 1}</span>
-=======
       <span id="livePlayers">Players: ${escapeHtml(players.join(", ") || "You")}</span>
->>>>>>> 2620b82 (add state-safe tab navigation)
     </div>
   `;
 }
@@ -10522,24 +10499,6 @@ function renderPrimaryActions(state, activeRound) {
   const hasActiveRound = Boolean(activeRound && activeRound.status === "active");
   const guided = shouldShowFirstRoundGuide(state) && !hasActiveRound;
   return `
-<<<<<<< HEAD
-    <div class="play-actions-grid">
-      <button class="button primary hero-button play-action-button ${guided ? "guided-action" : ""}" type="button" data-action="nav-view" data-view="round">Start round</button>
-      <button class="button secondary hero-button play-action-button" type="button" data-action="nav-view" data-view="community">Join game</button>
-      ${hasActiveRound
-        ? `
-          <button
-            class="button subtle hero-button play-action-button play-action-button--continue"
-            type="button"
-            data-action="resume-round"
-            data-round-id="${activeRound.id}"
-          >
-            Continue round
-          </button>
-        `
-        : ""}
-    </div>
-=======
       <div class="play-screen-actions">
         <button class="button primary primary-btn ${guided ? "guided-action" : ""}" type="button" data-action="nav-view" data-view="round">Start Round</button>
         <button class="button secondary secondary-btn" type="button" data-action="nav-view" data-view="community">Join Game</button>
@@ -10619,150 +10578,10 @@ function renderPlayFriendsCard(state) {
   const friendRows = getNearbyDiscoveryState(state).friends;
 
   return `
-    <article class="card play-compact-card">
+    <article class="card play-screen-card play-compact-card">
       <div class="section-heading section-heading--compact">
         <div>
-          <p class="eyebrow">Friends activity</p>
-          <h3>Your golf circle</h3>
-        </div>
-        <button class="button subtle" type="button" data-action="nav-view" data-view="community">Invite</button>
-      </div>
-      ${friendRows.length
-        ? `
-          <div class="stack-list compact-stack play-list">
-            ${friendRows.map((friend) => `
-              <article class="list-row play-list-row">
-                <div>
-                  <strong>${escapeHtml(friend.displayName)}</strong>
-                  <p>${escapeHtml(friend.statusLabel)}</p>
-                </div>
-                <div class="list-metrics">
-                  ${friend.canJoin ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${friend.inviteCode}">Join</button>` : ""}
-                  <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(friend.profileId)}">Open</button>
-                </div>
-              </article>
-            `).join("")}
-          </div>
-        `
-        : `
-          <div class="empty-state compact-empty-state">
-            <strong>No friends added yet.</strong>
-            <p>Invite golfers from Community and their cards will show up here for faster repeat rounds.</p>
-          </div>
-        `}
-    </article>
->>>>>>> 2620b82 (add state-safe tab navigation)
-  `;
-}
-
-function renderPlayActiveGameCard(state, activeRound) {
-  const activeGroup = getActiveGroup(state, activeRound);
-  const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "";
-
-  if (!activeRound) {
-    return `
-      <article class="card play-compact-card">
-        <div class="section-heading section-heading--compact">
-          <div>
-            <p class="eyebrow">Active game</p>
-            <h3>No round in progress</h3>
-          </div>
-        </div>
-        <p class="body-copy compact-copy">Start on Play, or jump into Score once a round is live. Golden Nugget stays preloaded for the fastest tester path.</p>
-        <div class="play-stat-strip">
-          <span class="status-pill">Default course ready</span>
-          <span class="status-pill">No code yet</span>
-        </div>
-      </article>
-    `;
-  }
-
-  return `
-    <article class="card play-compact-card">
-      <div class="section-heading section-heading--compact">
-        <div>
-          <p class="eyebrow">Active game</p>
-          <h3>${escapeHtml(activeRound.courseName)}</h3>
-        </div>
-        <span class="status-pill">${escapeHtml(inviteCode || "Host to share")}</span>
-      </div>
-      <div class="play-stat-grid">
-        <article>
-          <span>Hole</span>
-          <strong>${activeRound.currentHole}</strong>
-        </article>
-        <article>
-          <span>Players</span>
-          <strong>${activeRound.players.length}</strong>
-        </article>
-        <article>
-          <span>Sync</span>
-          <strong>${escapeHtml(activeRound.sync.label)}</strong>
-        </article>
-      </div>
-      <div class="participant-preview-row play-player-row">
-        ${activeRound.players.slice(0, 4).map((player) => `
-          <span class="player-preview-pill player-preview-pill--static">
-            ${renderAvatarChip(getProfileForPlayer(state, player)?.publicProfile.avatarLabel || player.avatarLabel)}
-            <span>${escapeHtml(player.name)}</span>
-          </span>
-        `).join("")}
-      </div>
-      <div class="row-actions compact-actions">
-        <button class="button primary" type="button" data-action="resume-round" data-round-id="${activeRound.id}">Continue round</button>
-        ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Copy code</button>` : `<button class="button secondary" type="button" data-action="host-active-round">Host round</button>`}
-      </div>
-    </article>
-  `;
-}
-
-function renderPlayNearbyPlayersCard(state) {
-  const nearbyPlayers = getNearbyDiscoveryState(state).players.slice(0, 3);
-
-  return `
-    <article class="card play-compact-card">
-      <div class="section-heading section-heading--compact">
-        <div>
-          <p class="eyebrow">Nearby players</p>
-          <h3>Open golfers around you</h3>
-        </div>
-        <button class="button subtle" type="button" data-action="nav-view" data-view="community">See all</button>
-      </div>
-      ${nearbyPlayers.length
-        ? `
-          <div class="stack-list compact-stack play-list">
-            ${nearbyPlayers.map((player) => `
-              <article class="list-row play-list-row">
-                <div>
-                  <strong>${escapeHtml(player.displayName)}</strong>
-                  <p>${escapeHtml(player.relationshipLabel)} / ${escapeHtml(player.statusLabel)} / ${escapeHtml(player.proximityLabel)}</p>
-                </div>
-                <div class="list-metrics">
-                  <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(player.profileId)}">View</button>
-                  ${player.inviteCode ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${player.inviteCode}">Join</button>` : `<button class="button subtle" type="button" data-action="toggle-follow-profile" data-profile-id="${escapeHtml(player.profileId)}">${player.isFollowed ? "Following" : "Follow"}</button>`}
-                </div>
-              </article>
-            `).join("")}
-          </div>
-        `
-        : `
-          <div class="empty-state compact-empty-state">
-            <strong>No nearby golfers yet.</strong>
-            <p>As more players go live, nearby rounds and golfers show up here first.</p>
-          </div>
-        `}
-    </article>
-  `;
-}
-
-function renderPlayFriendsCard(state) {
-  const friendRows = getNearbyDiscoveryState(state).friends;
-
-  return `
-    <article class="card play-compact-card">
-      <div class="section-heading section-heading--compact">
-        <div>
-          <p class="eyebrow">Friends activity</p>
+          <p class="eyebrow">Friends Activity</p>
           <h3>Your golf circle</h3>
         </div>
         <button class="button subtle" type="button" data-action="nav-view" data-view="community">Invite</button>
@@ -11735,63 +11554,24 @@ function renderHomeView(state) {
   const subscription = getSubscription(state);
   const premium = isPremiumSubscription(subscription);
   const firstName = state.currentUser.name.split(" ")[0];
-  const metrics = getHistoryMetrics(state.rounds, state.currentUser.id);
-  const nearby = getNearbyDiscoveryState(state);
 
   return `
-<<<<<<< HEAD
-    <section class="view-grid home-grid play-hub-grid">
-      <article class="card play-actions-card card-span-2">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Play</p>
-            <h3>${escapeHtml(`Ready to tee it up, ${firstName}?`)}</h3>
-=======
-      <section class="play-screen">
-        <article class="card play-screen-hero">
-          <div class="play-screen-card-head">
-            <h2>${escapeHtml(`Ready to tee it up, ${firstName}?`)}</h2>
-            <span class="status-pill">${premium ? "Premium access" : "Free membership"}</span>
->>>>>>> 2620b82 (add state-safe tab navigation)
-          </div>
-          ${renderPrimaryActions(state, activeRound)}
-        </article>
-        <div class="play-screen-grid">
+    <section class="play-screen">
+      <article class="card play-screen-hero">
+        <div class="play-screen-card-head">
+          <h2>${escapeHtml(`Ready to tee it up, ${firstName}?`)}</h2>
+          <span class="status-pill">${premium ? "Premium access" : "Free membership"}</span>
+        </div>
+        ${renderPrimaryActions(state, activeRound)}
+      </article>
+      <div class="play-screen-grid">
         ${renderPlayActiveGameCard(state, activeRound)}
         ${renderPlayNearbyPlayersCard(state)}
-        </div>
-<<<<<<< HEAD
-        <p class="body-copy">Start a round, join a game, or continue the live card already on this phone. The main actions stay visible first so you do not have to hunt for them.</p>
-        ${renderPrimaryActions(state, activeRound)}
-        <div class="play-stat-grid play-stat-grid--wide play-stat-grid--compact">
-          <article>
-            <span>Rounds</span>
-            <strong>${metrics.roundsPlayed}</strong>
-            <p>${metrics.scoringAverage ? `${metrics.scoringAverage.toFixed(1)} avg` : "Average builds after your first finish."}</p>
-          </article>
-          <article>
-            <span>Nearby players</span>
-            <strong>${nearby.players.length}</strong>
-            <p>${escapeHtml(nearby.strategy.badge)}</p>
-          </article>
-          <article>
-            <span>Nearby games</span>
-            <strong>${nearby.games.length}</strong>
-            <p>${escapeHtml(activeRound ? "Your active session stays pinned below." : "Join by code stays ready as the fallback.")}</p>
-          </article>
-        </div>
-      </article>
-      ${renderPlayActiveGameCard(state, activeRound)}
-      ${renderPlayNearbyGamesCard(state)}
-      ${renderPlayNearbyPlayersCard(state)}
+        ${renderPlayNearbyGamesCard(state)}
+      </div>
       ${renderPlayFriendsCard(state)}
-      ${renderNearbyStrategyPanel(nearby.strategy, { compact: true })}
     </section>
   `;
-=======
-      </section>
-    `;
->>>>>>> 2620b82 (add state-safe tab navigation)
 }
 
 function renderModeNotes(state, mode) {
@@ -12531,13 +12311,6 @@ function renderHoleEditor(state, round) {
         </div>
       </div>
       ${renderHoleNavigator(round, selectedHole)}
-<<<<<<< HEAD
-      <div class="round-entry-note">
-        <span class="mini-label">Your card first</span>
-        <strong>Score, save locally, then move to the next hole.</strong>
-      </div>
-=======
->>>>>>> 2620b82 (add state-safe tab navigation)
       <div class="participant-grid participant-grid--single">
         ${primaryParticipant ? renderEditableParticipant(primaryParticipant) : ""}
       </div>
