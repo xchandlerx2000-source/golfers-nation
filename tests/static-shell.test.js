@@ -42,9 +42,17 @@ describe("static app shell", () => {
     expect(manifest.start_url).toBe("/");
     expect(manifest.scope).toBe("/");
     expect(manifest.icons.every((icon) => icon.src.startsWith("/icons/"))).toBe(true);
-    expect(serviceWorker).toContain('const CACHE_NAME = "golfers-nation-shell-v7"');
+    expect(serviceWorker).toContain('const CACHE_NAME = "golfers-nation-shell-v8"');
     expect(serviceWorker).toContain('"/app.js"');
     expect(serviceWorker).toContain('"/runtime-config.js"');
+  });
+
+  it("includes an HTML-level cached-shell recovery path if app.js never starts", () => {
+    const indexHtml = readFileSync(path.join(projectRoot, "index.html"), "utf8");
+
+    expect(indexHtml).toContain("window.__GN_CLEAR_CACHED_APP__");
+    expect(indexHtml).toContain("Clear cached app");
+    expect(indexHtml).toContain("stale cached app shell");
   });
 
   it("marks app.js as a generated artifact", () => {

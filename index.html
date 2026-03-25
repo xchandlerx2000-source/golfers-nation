@@ -41,16 +41,59 @@
     </div>
     <script>
       window.__GN_APP_BOOT_STARTED__ = false;
+      window.__GN_APP_BOOT_FALLBACK_ACTIVE__ = false;
+
+      window.__GN_CLEAR_CACHED_APP__ = async function () {
+        try {
+          if ("serviceWorker" in navigator && typeof navigator.serviceWorker.getRegistrations === "function") {
+            var registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map(function (registration) {
+              return registration.unregister().catch(function () {
+                return false;
+              });
+            }));
+          }
+        } catch (error) {
+          console.warn("[Golfers Nation] Failed to unregister service workers during boot recovery.", error);
+        }
+
+        try {
+          if ("caches" in window && typeof caches.keys === "function") {
+            var cacheKeys = await caches.keys();
+            await Promise.all(cacheKeys
+              .filter(function (key) { return key.indexOf("golfers-nation-shell-") === 0; })
+              .map(function (key) {
+                return caches.delete(key).catch(function () {
+                  return false;
+                });
+              }));
+          }
+        } catch (error) {
+          console.warn("[Golfers Nation] Failed to clear cached shell assets during boot recovery.", error);
+        }
+
+        try {
+          window.localStorage && window.localStorage.removeItem("golfers-nation-platform-v2");
+        } catch (error) {
+          console.warn("[Golfers Nation] Failed to clear local app state during boot recovery.", error);
+        }
+
+        var nextUrl = window.location.origin + window.location.pathname + "?boot-retry=" + Date.now();
+        window.location.replace(nextUrl);
+      };
+
       window.setTimeout(function () {
         var appRoot = document.getElementById("app");
-        if (!window.__GN_APP_BOOT_STARTED__ && appRoot) {
+        if (!window.__GN_APP_BOOT_STARTED__ && appRoot && !window.__GN_APP_BOOT_FALLBACK_ACTIVE__) {
+          window.__GN_APP_BOOT_FALLBACK_ACTIVE__ = true;
           appRoot.innerHTML = '' +
             '<div class="boot-recovery-shell">' +
               '<div class="boot-recovery-card">' +
                 '<h1>Golfers Nation could not finish loading</h1>' +
-                '<p>The app shell loaded, but the live app did not start. Try reloading the page or refreshing the installed app.</p>' +
+                '<p>The app shell loaded, but the live app did not start. This is usually a stale cached app shell on the device.</p>' +
                 '<div class="boot-recovery-actions">' +
                   '<button class="button primary" type="button" onclick="window.location.reload()">Retry</button>' +
+                  '<button class="button button-secondary" type="button" onclick="window.__GN_CLEAR_CACHED_APP__()">Clear cached app</button>' +
                 '</div>' +
               '</div>' +
             '</div>';
