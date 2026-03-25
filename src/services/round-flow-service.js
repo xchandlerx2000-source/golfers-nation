@@ -171,6 +171,7 @@ export function focusRoundView(draft, roundId, profileId, setActiveView) {
   draft.session.activeRoundId = roundId;
   draft.session.selectedHole = 1;
   draft.session.selectedProfileId = profileId;
+  draft.session.roundScreenMode = "score";
   setActiveView(draft, "round", "focus-round");
 }
 

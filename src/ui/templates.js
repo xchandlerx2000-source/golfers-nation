@@ -2676,7 +2676,7 @@ function renderModeNotes(state, mode) {
 
 const ROUND_SETUP_STEP_COPY = [
   { id: "course", label: "Course" },
-  { id: "review", label: "Start" },
+  { id: "review", label: "Round Type" },
 ];
 
 function renderRoundSetupProgress(step = "type") {
@@ -2730,13 +2730,13 @@ function renderCoursePicker(state) {
   const discovery = getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {});
   const {
     searchResults,
-    quickPicks,
     selectedCourse,
     selectedTeeBox,
     nearbyCourses,
-    nearbyCopy,
   } = discovery;
   const courseMethod = String(roundSetup.courseMethod || "").trim();
+  const suggestedCourse = nearbyCourses[0] || null;
+  const suggestedTeeBox = suggestedCourse ? getDefaultCourseTeeBox(suggestedCourse) : null;
   const holeCountOptions = [9, 18]
     .filter((count) => count <= Number(selectedCourse?.holesCount || 18))
     .concat(
@@ -2744,36 +2744,109 @@ function renderCoursePicker(state) {
         ? [Number(selectedCourse.holesCount)]
         : []
     );
-  const locationStatusLabel = state.session?.nearby?.locationPermission === "granted"
-    ? "Location assist on"
-    : state.session?.nearby?.locationPermission === "denied"
-      ? "Location off"
-      : "Location optional";
 
   if (!courseMethod) {
+    if (state.session?.nearby?.locationPermission === "granted" && suggestedCourse && suggestedTeeBox) {
+      return `
+        <div class="stack-list course-picker-block round-setup-step-card">
+          <div class="round-setup-step-head">
+            <p class="eyebrow">Step 1</p>
+            <h4>Choose course</h4>
+          </div>
+          <article class="course-selected-card" data-selected-course="true">
+            <div class="course-selected-copy">
+              <span class="mini-label">Suggested course</span>
+              <strong>${escapeHtml(suggestedCourse.displayName || suggestedCourse.name)}</strong>
+              <p>${escapeHtml(suggestedTeeBox.name)} / ${suggestedTeeBox.totalYardage} yds / Par ${suggestedTeeBox.totalPar}</p>
+            </div>
+          </article>
+          <div class="stack-list round-setup-start-actions">
+            <button class="button primary" type="button" data-action="confirm-course-choice" data-course-id="${suggestedCourse.id}" data-tee-box-id="${suggestedTeeBox.id}">
+              Confirm Course
+            </button>
+            <button class="button secondary" type="button" data-action="search-another-course">
+              Search Another Course
+            </button>
+            <button class="button subtle" type="button" data-action="skip-course-for-now">
+              Skip for now
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
     return `
       <div class="stack-list course-picker-block round-setup-step-card">
         <div class="round-setup-step-head">
           <p class="eyebrow">Step 1</p>
           <h4>Choose course</h4>
         </div>
-        <div class="round-choice-grid round-choice-grid--tight">
-          <button class="round-choice-button" type="button" data-action="choose-course-method" data-method="detected">
-            <strong>Nearby Courses</strong>
-            <span>Use location assist</span>
+        <div class="stack-list round-setup-start-actions">
+          <button class="button primary" type="button" data-action="detect-nearby-courses">
+            Use My Location
           </button>
-          <button class="round-choice-button" type="button" data-action="choose-course-method" data-method="search">
-            <strong>Search Course</strong>
-            <span>Find by name or city</span>
+          <button class="button secondary" type="button" data-action="search-another-course">
+            Search Course
           </button>
-          <button class="round-choice-button" type="button" data-action="choose-course-method" data-method="manual">
-            <strong>Quick Custom</strong>
-            <span>Use a simple card</span>
+          <button class="button subtle" type="button" data-action="skip-course-for-now">
+            Skip for now
           </button>
         </div>
-        <div class="round-setup-footer">
-          <button class="button subtle" type="button" data-action="round-setup-step" data-direction="-1">Back</button>
-          <span class="round-setup-footer-spacer"></span>
+      </div>
+    `;
+  }
+
+  if (courseMethod === "detected") {
+    if (suggestedCourse && suggestedTeeBox) {
+      return `
+        <div class="stack-list course-picker-block round-setup-step-card">
+          <div class="round-setup-step-head">
+            <p class="eyebrow">Step 1</p>
+            <h4>Choose course</h4>
+          </div>
+          <article class="course-selected-card" data-selected-course="true">
+            <div class="course-selected-copy">
+              <span class="mini-label">Suggested course</span>
+              <strong>${escapeHtml(suggestedCourse.displayName || suggestedCourse.name)}</strong>
+              <p>${escapeHtml(suggestedTeeBox.name)} / ${suggestedTeeBox.totalYardage} yds / Par ${suggestedTeeBox.totalPar}</p>
+            </div>
+          </article>
+          <div class="stack-list round-setup-start-actions">
+            <button class="button primary" type="button" data-action="confirm-course-choice" data-course-id="${suggestedCourse.id}" data-tee-box-id="${suggestedTeeBox.id}">
+              Confirm Course
+            </button>
+            <button class="button secondary" type="button" data-action="search-another-course">
+              Search Another Course
+            </button>
+            <button class="button subtle" type="button" data-action="skip-course-for-now">
+              Skip for now
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="stack-list course-picker-block round-setup-step-card">
+        <div class="round-setup-step-head">
+          <p class="eyebrow">Step 1</p>
+          <h4>Choose course</h4>
+        </div>
+        <article class="course-detection-card">
+          <div class="course-detection-copy">
+            <strong>No nearby course found</strong>
+          </div>
+        </article>
+        <div class="stack-list round-setup-start-actions">
+          <button class="button primary" type="button" data-action="detect-nearby-courses">
+            Use My Location
+          </button>
+          <button class="button secondary" type="button" data-action="search-another-course">
+            Search Course
+          </button>
+          <button class="button subtle" type="button" data-action="skip-course-for-now">
+            Skip for now
+          </button>
         </div>
       </div>
     `;
@@ -2784,119 +2857,19 @@ function renderCoursePicker(state) {
       <div class="stack-list course-picker-block round-setup-step-card">
         <div class="round-setup-step-head">
           <p class="eyebrow">Step 1</p>
-          <h4>Custom course</h4>
+          <h4>Choose course</h4>
         </div>
-        <div class="split-inputs">
-          <label>
-            Course
-            <input
-              name="courseName"
-              type="text"
-              value="${escapeHtml(roundSetup.manualCourseName)}"
-              data-round-setup-field="manualCourseName"
-              placeholder="Course name"
-            />
-          </label>
-          <label>
-            Tee
-            <input
-              name="teeBox"
-              type="text"
-              value="${escapeHtml(roundSetup.manualTeeBoxName)}"
-              data-round-setup-field="manualTeeBoxName"
-              placeholder="Tee name"
-            />
-          </label>
-        </div>
-        <div class="row-actions compact-actions">
-          <button class="button subtle" type="button" data-action="back-course-methods">Change method</button>
-        </div>
+        <article class="course-selected-card" data-selected-course="true">
+          <div class="course-selected-copy">
+            <span class="mini-label">Skipped for now</span>
+            <strong>${escapeHtml(roundSetup.manualCourseName || "Course TBD")}</strong>
+            <p>${escapeHtml(roundSetup.manualTeeBoxName || "Default tee")}</p>
+          </div>
+        </article>
         ${renderRoundSetupFooter({
           canGoBack: true,
           nextLabel: "Next",
           nextDirection: 1,
-          nextDisabled: !String(roundSetup.manualCourseName || "").trim(),
-        })}
-      </div>
-    `;
-  }
-
-  if (courseMethod === "search") {
-    return `
-      <div class="stack-list course-picker-block round-setup-step-card">
-        <div class="round-setup-step-head">
-          <p class="eyebrow">Step 1</p>
-          <h4>Search course</h4>
-        </div>
-        <div class="course-search-shell" data-course-search-shell="true">
-          <label class="course-search-field">
-            <span>Search Course</span>
-            <input data-course-search-input="true" type="search" value="${escapeHtml(roundSetup.courseQuery)}" placeholder="Course or city" />
-          </label>
-        </div>
-        <div class="course-results-list course-results-list--compact">
-          ${searchResults.length
-            ? searchResults.slice(0, 6).map((course) => {
-                const featuredTee = getDefaultCourseTeeBox(course);
-                const isSelected = course.id === selectedCourse?.id;
-                return `
-                  <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
-                    <div class="course-result-copy">
-                      <strong>${escapeHtml(course.displayName || course.name)}</strong>
-                      <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
-                    </div>
-                    <div class="course-result-meta">
-                      <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
-                      <span>${featuredTee?.totalYardage || "--"} yds</span>
-                    </div>
-                  </button>
-                `;
-              }).join("")
-            : `
-              <div class="empty-state compact-empty-state">
-                <strong>No course match</strong>
-              </div>
-            `}
-        </div>
-        ${selectedCourse && selectedTeeBox
-          ? `
-            <article class="course-selected-card" data-selected-course="true">
-              <div class="course-selected-copy">
-                <span class="mini-label">Selected</span>
-                <strong>${escapeHtml(selectedCourse.displayName || selectedCourse.name)}</strong>
-                <p>${escapeHtml(selectedTeeBox.name)} / ${selectedTeeBox.totalYardage} yds / Par ${selectedTeeBox.totalPar}</p>
-              </div>
-              <div class="split-inputs course-selected-actions">
-                <label>
-                  Tee
-                  <select name="selectedTeeBoxId" form="create-round-form" data-course-tee-select="true">
-                    ${selectedCourse.teeBoxes.map((teeBox) => `
-                      <option value="${teeBox.id}" ${teeBox.id === selectedTeeBox.id ? "selected" : ""}>
-                        ${escapeHtml(teeBox.name)} / ${teeBox.totalYardage} yds
-                      </option>
-                    `).join("")}
-                  </select>
-                </label>
-                <label>
-                  Holes
-                  <select name="selectedHoleCount" form="create-round-form" data-course-hole-count-select="true">
-                    ${holeCountOptions.map((count) => `
-                      <option value="${count}" ${count === roundSetup.selectedHoleCount ? "selected" : ""}>${count}</option>
-                    `).join("")}
-                  </select>
-                </label>
-              </div>
-            </article>
-          `
-          : ""}
-        <div class="row-actions compact-actions">
-          <button class="button subtle" type="button" data-action="back-course-methods">Change method</button>
-        </div>
-        ${renderRoundSetupFooter({
-          canGoBack: true,
-          nextLabel: "Next",
-          nextDirection: 1,
-          nextDisabled: !selectedCourse,
         })}
       </div>
     `;
@@ -2906,52 +2879,38 @@ function renderCoursePicker(state) {
     <div class="stack-list course-picker-block round-setup-step-card">
       <div class="round-setup-step-head">
         <p class="eyebrow">Step 1</p>
-        <h4>Choose course</h4>
+        <h4>Search course</h4>
       </div>
-      <article class="course-detection-card">
-        <div class="course-detection-copy">
-          <strong>${escapeHtml(nearbyCopy.title)}</strong>
-          <span class="status-pill">${escapeHtml(locationStatusLabel)}</span>
-        </div>
-        ${nearbyCopy.canRefresh
-          ? `<div class="row-actions compact-actions"><button class="button subtle" type="button" data-action="detect-nearby-courses">${state.session?.nearby?.locationPermission === "granted" ? "Refresh" : "Nearby Courses"}</button></div>`
-          : ""}
-      </article>
-      ${nearbyCourses.length
-        ? `
-          <div class="round-setup-choice-row" aria-label="Likely nearby courses">
-            ${nearbyCourses.map((course) => {
-              const nearbyTee = getDefaultCourseTeeBox(course);
+      <div class="course-search-shell" data-course-search-shell="true">
+        <label class="course-search-field">
+          <span>Search Course</span>
+          <input data-course-search-input="true" type="search" value="${escapeHtml(roundSetup.courseQuery)}" placeholder="Course or city" />
+        </label>
+      </div>
+      <div class="course-results-list course-results-list--compact">
+        ${searchResults.length
+          ? searchResults.slice(0, 6).map((course) => {
+              const featuredTee = getDefaultCourseTeeBox(course);
               const isSelected = course.id === selectedCourse?.id;
               return `
-                <button class="course-result-card course-result-card--compact ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${nearbyTee?.id || ""}">
-                  <strong>${escapeHtml(course.displayName || course.name)}</strong>
-                  <p>${escapeHtml(course.nearbyDistanceLabel || `${course.city}, ${course.state}`)}</p>
-                </button>
-              `;
-            }).join("")}
-          </div>
-        `
-        : quickPicks.length
-          ? `
-            <div class="round-setup-choice-row" aria-label="Quick course picks">
-              ${quickPicks.map((course) => {
-                const featuredTee = getDefaultCourseTeeBox(course);
-                const isSelected = course.id === selectedCourse?.id;
-                return `
-                  <button class="course-result-card course-result-card--compact ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
+                <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
+                  <div class="course-result-copy">
                     <strong>${escapeHtml(course.displayName || course.name)}</strong>
                     <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
-                  </button>
-                `;
-              }).join("")}
-            </div>
-          `
+                  </div>
+                  <div class="course-result-meta">
+                    <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
+                    <span>${featuredTee?.totalYardage || "--"} yds</span>
+                  </div>
+                </button>
+              `;
+            }).join("")
           : `
             <div class="empty-state compact-empty-state">
-              <strong>No nearby course</strong>
+              <strong>No course match</strong>
             </div>
           `}
+      </div>
       ${selectedCourse && selectedTeeBox
         ? `
           <article class="course-selected-card" data-selected-course="true">
@@ -2984,7 +2943,7 @@ function renderCoursePicker(state) {
         `
         : ""}
       <div class="row-actions compact-actions">
-        <button class="button subtle" type="button" data-action="back-course-methods">Change method</button>
+        <button class="button subtle" type="button" data-action="back-course-methods">Back</button>
       </div>
       ${renderRoundSetupFooter({
         canGoBack: true,
@@ -3019,7 +2978,7 @@ function renderCreateRoundCard(state, activeRound) {
       <div class="round-setup-step-card">
         <div class="round-setup-step-head">
           <p class="eyebrow">Step 2</p>
-          <h4>Start round</h4>
+          <h4>Round type</h4>
         </div>
         <div class="round-setup-summary-grid">
           <article>
@@ -3039,16 +2998,14 @@ function renderCreateRoundCard(state, activeRound) {
             <strong>${escapeHtml(state.currentUser.name)}</strong>
           </article>
         </div>
-        <div class="round-setup-mini-note">
-          <span class="status-pill">Solo starts now</span>
-          <span class="status-pill">Live gives you a code right away</span>
-        </div>
-        <div class="stack-list round-setup-start-actions">
-          <button class="button primary" type="submit" name="intent" value="host">
-            Start Live Round
+        <div class="round-choice-grid">
+          <button class="round-choice-button is-active" type="submit" name="intent" value="local">
+            <strong>Solo Round</strong>
+            <span>Start scoring now</span>
           </button>
-          <button class="button secondary" type="submit" name="intent" value="local">
-            Start Solo Round
+          <button class="round-choice-button" type="submit" name="intent" value="host">
+            <strong>Live Round</strong>
+            <span>Get a code and invite golfers</span>
           </button>
         </div>
         <div class="round-setup-footer">
@@ -3704,6 +3661,58 @@ function renderRoundPlayersDrawer(state, round, group) {
   `;
 }
 
+function renderLiveRoundLobby(state, round, group) {
+  const sync = getSyncPresentation(round, group);
+  const inviteCode = group?.inviteCode || round?.inviteCode || "---";
+  const players = group?.members?.length
+    ? group.members.map((member) => member.displayName).filter(Boolean)
+    : round.players.map((player) => player.name).filter(Boolean);
+  const statusLine = sync.title || "Waiting for players";
+
+  return `
+    <section class="view-grid round-grid round-grid-live round-grid-live--score">
+      <div class="round-main-column round-main-column--score">
+        <article class="card round-card round-score-shell round-live-lobby-card">
+          <div class="round-score-heading">
+            <div>
+              <p class="eyebrow">Live Round</p>
+              <h3>${escapeHtml(round.courseName)}</h3>
+              <p class="body-copy compact-copy round-score-subcopy">${escapeHtml(round.teeBox || "Default tee")} / ${round.holes.length} holes</p>
+            </div>
+          </div>
+          <div class="round-setup-summary-grid">
+            <article>
+              <span>Invite Code</span>
+              <strong>${escapeHtml(inviteCode)}</strong>
+            </article>
+            <article>
+              <span>Players</span>
+              <strong>${players.length || 1}</strong>
+            </article>
+            <article>
+              <span>Status</span>
+              <strong>${escapeHtml(statusLine)}</strong>
+            </article>
+          </div>
+          <div class="participant-preview-row round-session-players">
+            ${players.length
+              ? players.map((name) => `<span class="player-preview-pill player-preview-pill--static">${escapeHtml(name)}</span>`).join("")
+              : `<span class="player-preview-pill player-preview-pill--static">You</span>`}
+          </div>
+          <div class="stack-list round-setup-start-actions">
+            <button class="button primary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">
+              Share Invite
+            </button>
+            <button class="button secondary" type="button" data-action="start-live-scoring">
+              Start Scoring
+            </button>
+          </div>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
 function renderRoundLeaderboardDrawer(state, round) {
   const summary = getRoundSummaryForState(state, round);
   const localEntry = summary.leaderboard.find((entry) => entry.isLocal);
@@ -3809,6 +3818,10 @@ function renderRoundView(state) {
         ${renderCreateRoundCard(state, null)}
       </section>
     `;
+  }
+
+  if (state.session?.roundScreenMode === "lobby") {
+    return renderLiveRoundLobby(state, activeRound, activeGroup);
   }
 
   return `

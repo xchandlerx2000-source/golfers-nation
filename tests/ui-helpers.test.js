@@ -216,6 +216,34 @@ describe("ui helpers", () => {
     expect(markup).toContain("Step 1 / 2");
   });
 
+  it("renders the live round waiting room for a hosted round before scoring starts", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "round";
+    state.session.roundScreenMode = "lobby";
+    state.rounds = [
+      createRound({
+        currentUser: state.currentUser,
+        courseName: "Pebble Beach Golf Links",
+        teeBox: "Championship",
+        mode: "stroke",
+        players: [state.currentUser.displayName],
+        syncTransport: "invite",
+        inviteCode: "PB1234",
+      }),
+    ];
+    state.rounds[0].sync.state = "hosting";
+    state.session.activeRoundId = state.rounds[0].id;
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Live Round");
+    expect(markup).toContain("Share Invite");
+    expect(markup).toContain("Start Scoring");
+    expect(markup).toContain("Waiting for players");
+  });
+
   it("shows the help center entry in the stats account area", () => {
     const state = createDefaultState();
     state.auth.status = "authenticated";

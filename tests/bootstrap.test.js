@@ -399,8 +399,7 @@ describe("bootstrap app", () => {
     });
 
     openRoundWizardForLocalRound();
-    document.querySelector('[data-action="choose-course-method"][data-method="detected"]').click();
-    clickRoundWizardNext();
+    document.querySelector('[data-action="skip-course-for-now"]').click();
     const form = document.querySelector('[data-form="create-round"]');
     form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));
 
@@ -428,7 +427,7 @@ describe("bootstrap app", () => {
     });
 
     openRoundWizardForLocalRound();
-    document.querySelector('[data-action="choose-course-method"][data-method="search"]').click();
+    document.querySelector('[data-action="search-another-course"]').click();
     const searchInput = document.querySelector('[data-course-search-input]');
     searchInput.value = "Pebble";
     searchInput.dispatchEvent(new Event("input", { bubbles: true }));
@@ -453,6 +452,36 @@ describe("bootstrap app", () => {
     result.destroy();
   });
 
+  it("starts a hosted live round into the waiting room with an invite code ready", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Live Tester",
+      email: "live@test.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    openRoundWizardForLocalRound();
+    document.querySelector('[data-action="skip-course-for-now"]').click();
+
+    const form = document.querySelector('[data-form="create-round"]');
+    form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="host"]'));
+
+    const currentState = result.store.getState();
+    expect(currentState.session.activeRoundId).toBeTruthy();
+    expect(currentState.session.roundScreenMode).toBe("lobby");
+    expect(currentState.rounds[0].inviteCode).toBeTruthy();
+    expect(currentState.session.feedback.title).toBe("Your round is live");
+
+    result.destroy();
+  });
+
   it("preserves scroll position during in-round score actions", () => {
     const state = createDefaultState();
     const created = createEmailAccount(state, {
@@ -469,8 +498,7 @@ describe("bootstrap app", () => {
     });
 
     openRoundWizardForLocalRound();
-    document.querySelector('[data-action="choose-course-method"][data-method="detected"]').click();
-    clickRoundWizardNext();
+    document.querySelector('[data-action="skip-course-for-now"]').click();
 
     const form = document.querySelector('[data-form="create-round"]');
     form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));
@@ -501,8 +529,7 @@ describe("bootstrap app", () => {
     });
 
     openRoundWizardForLocalRound();
-    document.querySelector('[data-action="choose-course-method"][data-method="detected"]').click();
-    clickRoundWizardNext();
+    document.querySelector('[data-action="skip-course-for-now"]').click();
 
     const form = document.querySelector('[data-form="create-round"]');
     form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));

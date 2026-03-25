@@ -1439,6 +1439,10 @@ export function bootstrapApp({
           return draft;
         }
 
+        if (nextView === "round") {
+          draft.session.roundScreenMode = draft.session.activeRoundId ? "score" : "setup";
+        }
+
         setActiveView(draft, nextView, "tab");
         return draft;
       }, { reason: "nav-view" });
@@ -1653,24 +1657,6 @@ export function bootstrapApp({
       return;
     }
 
-    if (action === "choose-round-intent") {
-      store.setState((draft) => {
-        setRoundSetupField(draft, "intent", String(actionElement.dataset.intent || "local"));
-        setRoundSetupStep(draft, "review");
-        return draft;
-      }, { reason: "choose-round-intent" });
-      return;
-    }
-
-    if (action === "choose-round-format") {
-      store.setState((draft) => {
-        setRoundSetupField(draft, "mode", String(actionElement.dataset.mode || "stroke"));
-        setRoundSetupStep(draft, "players");
-        return draft;
-      }, { reason: "choose-round-format" });
-      return;
-    }
-
     if (action === "choose-course-method") {
       store.setState((draft) => {
         const method = String(actionElement.dataset.method || "search");
@@ -1694,6 +1680,40 @@ export function bootstrapApp({
         };
         return draft;
       }, { reason: "choose-course-method" });
+      return;
+    }
+
+    if (action === "confirm-course-choice") {
+      store.setState((draft) => {
+        const courseId = String(actionElement.dataset.courseId || "").trim();
+        const teeBoxId = String(actionElement.dataset.teeBoxId || "").trim();
+        if (courseId) {
+          setSelectedCourse(draft, courseId, teeBoxId);
+        }
+        setRoundSetupStep(draft, "review");
+        return draft;
+      }, { reason: "confirm-course-choice" });
+      return;
+    }
+
+    if (action === "search-another-course") {
+      store.setState((draft) => {
+        setRoundSetupField(draft, "courseMethod", "search");
+        return draft;
+      }, { reason: "search-another-course" });
+      return;
+    }
+
+    if (action === "skip-course-for-now") {
+      store.setState((draft) => {
+        setRoundSetupField(draft, "courseMethod", "manual");
+        setRoundSetupField(draft, "selectedCourseId", "");
+        setRoundSetupField(draft, "selectedTeeBoxId", "");
+        setRoundSetupField(draft, "manualCourseName", "Course TBD");
+        setRoundSetupField(draft, "manualTeeBoxName", "Default");
+        setRoundSetupStep(draft, "review");
+        return draft;
+      }, { reason: "skip-course-for-now" });
       return;
     }
 
@@ -1722,35 +1742,12 @@ export function bootstrapApp({
       return;
     }
 
-    if (action === "round-setup-add-player") {
+    if (action === "start-live-scoring") {
       store.setState((draft) => {
-        const roundSetup = getRoundSetupState(draft);
-        const currentNames = String(roundSetup.players || draft.currentUser?.name || "")
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean);
-        const nextName = String(actionElement.dataset.playerName || "").trim();
-        const deduped = [];
-        const seen = new Set();
-
-        [...currentNames, nextName].forEach((name) => {
-          const normalized = String(name || "").trim();
-          if (!normalized) {
-            return;
-          }
-
-          const key = normalized.toLowerCase();
-          if (seen.has(key)) {
-            return;
-          }
-
-          seen.add(key);
-          deduped.push(normalized);
-        });
-
-        setRoundSetupField(draft, "players", deduped.join(", "));
+        draft.session.roundScreenMode = "score";
+        setFeedback(draft, "success", "Scoring open", "Live scoring is ready.");
         return draft;
-      }, { reason: "round-setup-add-player" });
+      }, { reason: "start-live-scoring" });
       return;
     }
 
@@ -2014,23 +2011,60 @@ export function bootstrapApp({
         return;
       }
 
+      if (navigator.share) {
+        navigator.share({
+          title: "Golfers Nation live round",
+          text: `Join my live round with code ${code}.`,
+        })
+          .then(() => {
+            store.setState((draft) => {
+              setFeedback(draft, "success", "Invite shared", `${code} is ready for the group.`);
+              return draft;
+            }, { reason: "share-invite-success" });
+          })
+          .catch(() => {
+            if (navigator.clipboard?.writeText) {
+              navigator.clipboard.writeText(code)
+                .then(() => {
+                  store.setState((draft) => {
+                    setFeedback(draft, "success", "Invite copied", `${code} is ready to share.`);
+                    return draft;
+                  }, { reason: "copy-invite-code-success" });
+                })
+                .catch(() => {
+                  store.setState((draft) => {
+                    setFeedback(draft, "info", "Share Invite", `Share code ${code} with the group.`);
+                    return draft;
+                  }, { reason: "copy-invite-code-fallback" });
+                });
+              return;
+            }
+
+            store.setState((draft) => {
+              setFeedback(draft, "info", "Share Invite", `Share code ${code} with the group.`);
+              return draft;
+            }, { reason: "copy-invite-code-unsupported" });
+          });
+        return;
+      }
+
       if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(code)
           .then(() => {
             store.setState((draft) => {
-              setFeedback(draft, "success", "Invite code copied", `${code} is ready to share with the group.`);
+              setFeedback(draft, "success", "Invite copied", `${code} is ready to share.`);
               return draft;
             }, { reason: "copy-invite-code-success" });
           })
           .catch(() => {
             store.setState((draft) => {
-              setFeedback(draft, "info", "Share this code", `Copy and share invite code ${code} with the group.`);
+              setFeedback(draft, "info", "Share Invite", `Share code ${code} with the group.`);
               return draft;
             }, { reason: "copy-invite-code-fallback" });
           });
       } else {
         store.setState((draft) => {
-          setFeedback(draft, "info", "Share this code", `Copy and share invite code ${code} with the group.`);
+          setFeedback(draft, "info", "Share Invite", `Share code ${code} with the group.`);
           return draft;
         }, { reason: "copy-invite-code-unsupported" });
       }
@@ -2062,6 +2096,7 @@ export function bootstrapApp({
             ? `Code ${hosted.group.inviteCode} is ready. Share it now.`
             : `Code ${hosted.group.inviteCode} is still live.`
         );
+        draft.session.roundScreenMode = "lobby";
         hostedRoundId = round.id;
         return draft;
       }, { reason: "host-active-round" });
@@ -2089,6 +2124,12 @@ export function bootstrapApp({
     }
 
     if (action === "detect-nearby-courses") {
+      store.setState((draft) => {
+        if (!draft.session.activeRoundId) {
+          setRoundSetupField(draft, "courseMethod", "detected");
+        }
+        return draft;
+      }, { reason: "detect-nearby-courses-prep" });
       requestNearbyLocationAssist(null);
       return;
     }
@@ -2147,6 +2188,7 @@ export function bootstrapApp({
     if (action === "resume-round") {
       store.setState((draft) => {
         focusRoundView(draft, actionElement.dataset.roundId, draft.currentUser.profileId, setActiveView);
+        draft.session.roundScreenMode = "score";
         return draft;
       }, { reason: "resume-round" });
       return;
@@ -3130,6 +3172,7 @@ export function bootstrapApp({
 
         draft.rounds.unshift(round);
         focusRoundView(draft, round.id, draft.currentUser.profileId, setActiveView);
+        draft.session.roundScreenMode = intent === "host" ? "lobby" : "score";
         appendActivity(draft, `${round.courseName} started in ${round.mode} mode.`, "round");
         setFeedback(
           draft,
