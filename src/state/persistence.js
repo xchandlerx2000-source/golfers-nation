@@ -136,7 +136,7 @@ export function subscribeStorePersistence({
       });
     }
 
-    safeRender(state, "state-render");
+    safeRender(state, "state-render", meta);
     applyAppearanceToDocument(state);
     applyShellModeToDocument(state);
   });
@@ -149,7 +149,7 @@ export function renderInitialAppState({
   applyShellModeToDocument = () => {},
 } = {}) {
   const state = store.getState();
-  if (!safeRender(state, "initial-render")) {
+  if (!safeRender(state, "initial-render", { reason: "initial-render" })) {
     return false;
   }
 

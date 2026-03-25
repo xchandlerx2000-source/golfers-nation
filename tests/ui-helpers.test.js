@@ -175,6 +175,8 @@ describe("ui helpers", () => {
     state.groups = [];
     state.session.activeRoundId = null;
     state.session.roundSetup = {
+      ...state.session.roundSetup,
+      step: "course",
       courseQuery: "California",
       selectedCourseId: "pebble-beach-california",
       selectedTeeBoxId: "pebble-beach-california-championship",
@@ -182,9 +184,10 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Course library");
+    expect(markup).toContain("Step 2");
+    expect(markup).toContain("Choose course");
     expect(markup).toContain("Pebble Beach Golf Links");
-    expect(markup).toContain("Selected course");
+    expect(markup).toContain("Selected");
     expect(markup).toContain('name="selectedCourseId" value="pebble-beach-california"');
   });
 
@@ -204,9 +207,10 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("The Country Club at Golden Nugget");
+    expect(markup).toContain("Start in five quick steps");
+    expect(markup).toContain("Choose round type");
     expect(markup).toContain('name="selectedCourseId" value="golden-nugget-lake-charles"');
-    expect(markup).toContain("Default local tester course");
+    expect(markup).toContain("Step 1 / 5");
   });
 
   it("shows the help center entry in the stats account area", () => {
@@ -364,7 +368,8 @@ describe("ui helpers", () => {
     expect(markup).toContain('class="score-screen"');
     expect(markup).toContain("Hole 1");
     expect(markup).toContain('data-action="adjust-score"');
-    expect(markup).toContain("Next Hole →");
+    expect(markup).toContain("Next Hole");
+    expect(markup).toContain("More stats");
   });
 
   it("renders the in-app tester feedback form in app support settings", () => {
@@ -548,7 +553,7 @@ describe("ui helpers", () => {
 
     expect(markup).toContain("Saved locally");
     expect(markup).toContain("stored safely on this phone first and waiting for cloud backup");
-    expect(markup).toContain("Open room tools");
+    expect(markup).toContain("Room");
   });
 
   it("renders the mobile-first four-tab primary navigation", () => {

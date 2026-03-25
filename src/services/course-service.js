@@ -158,10 +158,16 @@ export function getCourseDefaultRoundSetup() {
   const featuredTeeBox = getDefaultCourseTeeBox(featuredCourse);
 
   return {
+    step: "type",
+    intent: "local",
     courseQuery: "",
     selectedCourseId: featuredCourse?.id || "",
     selectedTeeBoxId: featuredTeeBox?.id || "",
     selectedHoleCount: 18,
+    mode: "stroke",
+    players: "",
+    manualCourseName: "National Pines",
+    manualTeeBoxName: "Blue",
   };
 }
 

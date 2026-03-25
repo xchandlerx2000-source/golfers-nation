@@ -8,6 +8,7 @@ import { hostRoundGroup } from "./mock-api.js";
 
 const HOSTED_ROUND_NOTE = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
 const JOINED_ROUND_NOTE = "This device now carries its own safe copy of the live round, even if the original host leaves.";
+export const ROUND_SETUP_STEPS = ["type", "course", "format", "players", "review"];
 
 export function parsePlayers(value, currentUserName) {
   const safeCurrentUserName = String(currentUserName || "").trim() || "Golfer";
@@ -64,12 +65,50 @@ export function getRoundSetupState(state) {
   return getCourseRoundSetupState(state?.session?.roundSetup || {});
 }
 
+export function getRoundSetupStep(state) {
+  const step = getRoundSetupState(state).step;
+  return ROUND_SETUP_STEPS.includes(step) ? step : ROUND_SETUP_STEPS[0];
+}
+
 export function resetRoundSetup(draft) {
   if (!draft?.session) {
     return;
   }
 
   draft.session.roundSetup = getDefaultRoundSetup();
+}
+
+export function setRoundSetupStep(draft, step) {
+  if (!draft?.session) {
+    return;
+  }
+
+  draft.session.roundSetup = {
+    ...getRoundSetupState(draft),
+    step: ROUND_SETUP_STEPS.includes(step) ? step : ROUND_SETUP_STEPS[0],
+  };
+}
+
+export function moveRoundSetupStep(draft, direction = 1) {
+  if (!draft?.session) {
+    return;
+  }
+
+  const currentStep = getRoundSetupStep(draft);
+  const currentIndex = ROUND_SETUP_STEPS.indexOf(currentStep);
+  const nextIndex = Math.max(0, Math.min(ROUND_SETUP_STEPS.length - 1, currentIndex + Number(direction || 0)));
+  setRoundSetupStep(draft, ROUND_SETUP_STEPS[nextIndex]);
+}
+
+export function setRoundSetupField(draft, field, value) {
+  if (!draft?.session || !field) {
+    return;
+  }
+
+  draft.session.roundSetup = {
+    ...getRoundSetupState(draft),
+    [field]: value,
+  };
 }
 
 export function setSelectedCourse(draft, courseId, teeBoxId = "") {

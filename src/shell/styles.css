@@ -5343,14 +5343,23 @@ body {
 
 .score-screen {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .score-screen h2 {
   margin: 0;
-  font-size: 1.55rem;
+  font-size: 1.5rem;
   line-height: 1.05;
   text-align: center;
+}
+
+.score-screen-meta {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 0.8rem;
 }
 
 .score-control {
@@ -5359,7 +5368,7 @@ body {
   align-items: center;
   gap: 20px;
   font-size: 24px;
-  margin: 20px 0;
+  margin: 10px 0 14px;
 }
 
 .score-control button {
@@ -5399,8 +5408,221 @@ body {
   gap: 6px;
 }
 
+.score-feedback-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-soft);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.score-feedback-pill.is-saved {
+  border-color: rgba(123, 208, 154, 0.24);
+  background: rgba(123, 208, 154, 0.12);
+  color: color-mix(in srgb, var(--accent-strong) 82%, white);
+}
+
+.round-setup-wizard-card {
+  display: grid;
+  gap: 14px;
+}
+
+.round-setup-wizard {
+  display: grid;
+  gap: 12px;
+}
+
+.round-setup-wizard-head {
+  display: grid;
+  gap: 10px;
+}
+
+.round-setup-progress {
+  display: grid;
+  gap: 8px;
+}
+
+.round-setup-progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.round-setup-progress-track {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.round-setup-progress-step {
+  min-height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: transparent;
+}
+
+.round-setup-progress-step.is-complete {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 88%, white 8%), var(--accent-strong));
+}
+
+.round-setup-step-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--line-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 60%),
+    var(--surface-soft);
+}
+
+.round-setup-step-head {
+  display: grid;
+  gap: 4px;
+}
+
+.round-setup-step-head h4,
+.round-setup-step-head p {
+  margin: 0;
+}
+
+.round-choice-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.round-choice-grid--tight {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.round-choice-button {
+  display: grid;
+  gap: 6px;
+  min-height: 84px;
+  padding: 14px;
+  text-align: left;
+  border-radius: 16px;
+  border: 1px solid var(--line-soft);
+  background: var(--button-subtle-bg);
+  color: var(--text);
+}
+
+.round-choice-button span {
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.round-choice-button.is-active {
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, transparent), rgba(255, 255, 255, 0.03));
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.12);
+}
+
+.round-setup-choice-row,
+.round-setup-inline-list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.round-setup-choice-row::-webkit-scrollbar,
+.round-setup-inline-list::-webkit-scrollbar {
+  display: none;
+}
+
+.course-result-card--compact {
+  flex: 0 0 auto;
+  min-width: 180px;
+  padding: 12px 14px;
+}
+
+.course-results-list--compact {
+  display: grid;
+  gap: 8px;
+}
+
+.round-setup-step-card .split-inputs {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+}
+
+.round-setup-player-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.round-setup-player-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.round-setup-mini-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.round-setup-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.round-setup-summary-grid article {
+  padding: 12px;
+}
+
+.round-setup-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.round-setup-footer-spacer {
+  min-height: 1px;
+}
+
+.round-setup-submit-row {
+  display: grid;
+  gap: 10px;
+}
+
+.round-session-card .body-copy {
+  margin: 0;
+}
+
+.round-session-strip {
+  gap: 6px;
+}
+
 @media (min-width: 768px) {
   .play-screen-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .round-setup-step-card .split-inputs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .round-setup-submit-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -45,6 +45,15 @@ function createSuccessPlatform() {
   };
 }
 
+function openRoundWizardForLocalRound() {
+  document.querySelector('[data-action="nav-view"][data-view="round"]').click();
+  document.querySelector('[data-action="choose-round-intent"][data-intent="local"]').click();
+}
+
+function clickRoundWizardNext() {
+  document.querySelector('.round-setup-wizard-card [data-action="round-setup-step"][data-direction="1"]').click();
+}
+
 describe("bootstrap app", () => {
   beforeEach(() => {
     document.body.innerHTML = `
@@ -390,10 +399,15 @@ describe("bootstrap app", () => {
       timeoutMs: 50,
     });
 
-    document.querySelector('[data-action="nav-view"][data-view="round"]').click();
+    openRoundWizardForLocalRound();
+    clickRoundWizardNext();
+    clickRoundWizardNext();
+    const playerInput = document.querySelector('[data-round-setup-field="players"]');
+    playerInput.value = "Field Tester";
+    playerInput.dispatchEvent(new Event("input", { bubbles: true }));
+    clickRoundWizardNext();
     const form = document.querySelector('[data-form="create-round"]');
-    form.querySelector('[name="players"]').value = "Field Tester";
-    form.requestSubmit(form.querySelector('button[name="intent"][value="local"]'));
+    form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));
 
     const currentState = result.store.getState();
     expect(currentState.session.activeRoundId).toBeTruthy();
@@ -418,7 +432,7 @@ describe("bootstrap app", () => {
       timeoutMs: 50,
     });
 
-    document.querySelector('[data-action="nav-view"][data-view="round"]').click();
+    openRoundWizardForLocalRound();
     const searchInput = document.querySelector('[data-course-search-input]');
     searchInput.value = "Pebble";
     searchInput.dispatchEvent(new Event("input", { bubbles: true }));
@@ -429,15 +443,86 @@ describe("bootstrap app", () => {
     teeSelect.value = alternateTeeId;
     teeSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
+    clickRoundWizardNext();
+    clickRoundWizardNext();
+    clickRoundWizardNext();
+
     const form = document.querySelector('[data-form="create-round"]');
-    form.querySelector('[name="players"]').value = "Course Tester, Maya Chen";
-    form.requestSubmit(form.querySelector('button[name="intent"][value="local"]'));
+    form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));
 
     const round = result.store.getState().rounds[0];
     expect(round.courseId).toBe("pebble-beach-california");
     expect(round.courseName).toBe("Pebble Beach Golf Links");
     expect(round.teeBoxId).toBe(alternateTeeId);
     expect(round.holes[0].yards).toBeGreaterThan(300);
+
+    result.destroy();
+  });
+
+  it("preserves scroll position during in-round score actions", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Scroll Tester",
+      email: "scroll@test.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    openRoundWizardForLocalRound();
+    clickRoundWizardNext();
+    clickRoundWizardNext();
+    clickRoundWizardNext();
+
+    const form = document.querySelector('[data-form="create-round"]');
+    form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));
+
+    const scrollHost = document.scrollingElement || document.documentElement;
+    scrollHost.scrollTop = 240;
+
+    document.querySelector('[data-action="adjust-score"][data-direction="1"]').click();
+
+    expect((document.scrollingElement || document.documentElement).scrollTop).toBe(240);
+
+    result.destroy();
+  });
+
+  it("keeps score accordions open after in-place score edits", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Accordion Tester",
+      email: "accordion@test.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    openRoundWizardForLocalRound();
+    clickRoundWizardNext();
+    clickRoundWizardNext();
+    clickRoundWizardNext();
+
+    const form = document.querySelector('[data-form="create-round"]');
+    form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));
+
+    const details = document.querySelector(".advanced-hole-stats");
+    details.open = true;
+
+    const puttsInput = document.querySelector('[data-score-field="putts"]');
+    puttsInput.value = "2";
+    puttsInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(document.querySelector(".advanced-hole-stats").open).toBe(true);
 
     result.destroy();
   });

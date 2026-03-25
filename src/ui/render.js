@@ -198,10 +198,107 @@ function updateLiveSession(root, session) {
   }
 }
 
+const HARD_RESET_RENDER_REASONS = new Set([
+  "create-round",
+  "join-code",
+  "resume-round",
+  "finish-round",
+  "auth-login",
+  "auth-signup",
+  "sign-out",
+]);
+
+function getScrollHost(root) {
+  if (!root) {
+    return null;
+  }
+
+  const doc = root.ownerDocument || document;
+  const shellHost = root.querySelector("#appContent") || root.querySelector(".content-shell");
+  const shellMode = doc?.body?.dataset?.appShellMode || "browser";
+
+  if (shellMode === "standalone" && shellHost) {
+    return shellHost;
+  }
+
+  return doc?.scrollingElement || doc?.documentElement || doc?.body || shellHost || null;
+}
+
+function capturePersistedDetailKeys(root) {
+  if (!root) {
+    return [];
+  }
+
+  return [...root.querySelectorAll("details[data-persist-key][open]")]
+    .map((item) => String(item.dataset.persistKey || "").trim())
+    .filter(Boolean);
+}
+
+function restorePersistedDetailKeys(root, detailKeys = []) {
+  if (!root || !detailKeys.length) {
+    return;
+  }
+
+  detailKeys.forEach((key) => {
+    const detail = root.querySelector(`details[data-persist-key="${key}"]`);
+    if (detail) {
+      detail.open = true;
+    }
+  });
+}
+
 export function createRenderer(root) {
-  return function render(state) {
+  const scrollPositions = new Map();
+  let lastRenderedView = null;
+  let pendingScrollRestore = 0;
+
+  return function render(state, meta = {}) {
     const renderableState = getRenderableState(state);
+    const nextView = renderableState.session?.activeView || "home";
+    const sameView = lastRenderedView === nextView;
+    const currentScrollHost = getScrollHost(root);
+    const persistedDetailKeys = sameView ? capturePersistedDetailKeys(root) : [];
+
+    if (currentScrollHost && lastRenderedView) {
+      scrollPositions.set(lastRenderedView, {
+        top: currentScrollHost.scrollTop,
+        left: currentScrollHost.scrollLeft,
+      });
+    }
+
     root.innerHTML = renderAppTemplate(renderableState);
     updateLiveSession(root, getLiveSessionFromState(renderableState));
+
+    const nextScrollHost = getScrollHost(root);
+    const shouldHardReset = HARD_RESET_RENDER_REASONS.has(meta?.reason || "");
+    const nextScrollPosition = sameView && !shouldHardReset
+      ? scrollPositions.get(nextView) || { top: 0, left: 0 }
+      : (shouldHardReset ? { top: 0, left: 0 } : scrollPositions.get(nextView) || { top: 0, left: 0 });
+
+    if (sameView) {
+      restorePersistedDetailKeys(root, persistedDetailKeys);
+    }
+
+    if (pendingScrollRestore && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(pendingScrollRestore);
+      pendingScrollRestore = 0;
+    }
+
+    if (nextScrollHost) {
+      const applyScrollPosition = () => {
+        nextScrollHost.scrollTop = Number(nextScrollPosition.top || 0);
+        nextScrollHost.scrollLeft = Number(nextScrollPosition.left || 0);
+      };
+
+      applyScrollPosition();
+      if (typeof requestAnimationFrame === "function") {
+        pendingScrollRestore = requestAnimationFrame(() => {
+          applyScrollPosition();
+          pendingScrollRestore = 0;
+        });
+      }
+    }
+
+    lastRenderedView = nextView;
   };
 }

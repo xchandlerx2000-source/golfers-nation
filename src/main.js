@@ -55,10 +55,13 @@ import { describeLiveRoomFailure, hostLiveRoundSession, joinLiveRoundSession, pu
 import {
   ensureHostedGroupForRound,
   focusRoundView,
-  getDefaultRoundSetup,
   getRoundSetupState,
+  getRoundSetupStep,
+  moveRoundSetupStep,
   parsePlayers,
   resetRoundSetup,
+  setRoundSetupField,
+  setRoundSetupStep,
   setSelectedCourse,
   setSelectedHoleCount,
   setSelectedTeeBox,
@@ -411,9 +414,9 @@ export function bootstrapApp({
     return failBoot("renderer-init", error);
   }
 
-  const safeRender = (state, stage = "render") => {
+  const safeRender = (state, stage = "render", meta = {}) => {
     try {
-      render(state);
+      render(state, meta);
       runtimeRecoveryActive = false;
       lastRuntimeFailureKey = "";
       return true;
@@ -500,6 +503,25 @@ export function bootstrapApp({
       }, { reason: "score-pulse-clear" });
       scorePulseTimer = null;
     }, 850);
+  };
+
+  const advanceRoundSetup = (draft, direction = 1) => {
+    const currentStep = getRoundSetupStep(draft);
+    const roundSetup = getRoundSetupState(draft);
+
+    if (Number(direction) > 0) {
+      if (currentStep === "course" && !roundSetup.selectedCourseId && !String(roundSetup.manualCourseName || "").trim()) {
+        setFeedback(draft, "info", "Choose Course", "Pick a course or enter a quick custom course first.");
+        return false;
+      }
+
+      if (currentStep === "players" && !String(roundSetup.players || draft.currentUser?.name || "").trim()) {
+        setRoundSetupField(draft, "players", draft.currentUser?.name || "Golfer");
+      }
+    }
+
+    moveRoundSetupStep(draft, direction);
+    return true;
   };
 
   const captureRoundAction = (draft, round, {
@@ -1588,11 +1610,73 @@ export function bootstrapApp({
 
     if (action === "clear-course-search") {
       store.setState((draft) => {
-        draft.session.roundSetup = {
-          ...getDefaultRoundSetup(),
-        };
+        setRoundSetupField(draft, "courseQuery", "");
         return draft;
       }, { reason: "clear-course-search" });
+      return;
+    }
+
+    if (action === "choose-round-intent") {
+      store.setState((draft) => {
+        setRoundSetupField(draft, "intent", String(actionElement.dataset.intent || "local"));
+        setRoundSetupStep(draft, "course");
+        return draft;
+      }, { reason: "choose-round-intent" });
+      return;
+    }
+
+    if (action === "choose-round-format") {
+      store.setState((draft) => {
+        setRoundSetupField(draft, "mode", String(actionElement.dataset.mode || "stroke"));
+        setRoundSetupStep(draft, "players");
+        return draft;
+      }, { reason: "choose-round-format" });
+      return;
+    }
+
+    if (action === "round-setup-step") {
+      store.setState((draft) => {
+        const explicitStep = String(actionElement.dataset.step || "").trim();
+        if (explicitStep) {
+          setRoundSetupStep(draft, explicitStep);
+          return draft;
+        }
+
+        advanceRoundSetup(draft, Number(actionElement.dataset.direction || 1));
+        return draft;
+      }, { reason: "round-setup-step" });
+      return;
+    }
+
+    if (action === "round-setup-add-player") {
+      store.setState((draft) => {
+        const roundSetup = getRoundSetupState(draft);
+        const currentNames = String(roundSetup.players || draft.currentUser?.name || "")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+        const nextName = String(actionElement.dataset.playerName || "").trim();
+        const deduped = [];
+        const seen = new Set();
+
+        [...currentNames, nextName].forEach((name) => {
+          const normalized = String(name || "").trim();
+          if (!normalized) {
+            return;
+          }
+
+          const key = normalized.toLowerCase();
+          if (seen.has(key)) {
+            return;
+          }
+
+          seen.add(key);
+          deduped.push(normalized);
+        });
+
+        setRoundSetupField(draft, "players", deduped.join(", "));
+        return draft;
+      }, { reason: "round-setup-add-player" });
       return;
     }
 
@@ -2520,6 +2604,21 @@ export function bootstrapApp({
   });
 
   root.addEventListener("input", (event) => {
+    const roundSetupInput = getClosestEventElement(event.target, "[data-round-setup-field]");
+    if (roundSetupInput) {
+      store.setState((draft) => {
+        const field = String(roundSetupInput.dataset.roundSetupField || "").trim();
+        const value = String(roundSetupInput.value || "");
+        setRoundSetupField(draft, field, value);
+        if (field === "manualCourseName" || field === "manualTeeBoxName") {
+          setRoundSetupField(draft, "selectedCourseId", "");
+          setRoundSetupField(draft, "selectedTeeBoxId", "");
+        }
+        return draft;
+      }, { reason: "round-setup-field-input" });
+      return;
+    }
+
     const courseSearchInput = getClosestEventElement(event.target, "[data-course-search-input]");
     if (!courseSearchInput) {
       return;
@@ -2860,12 +2959,12 @@ export function bootstrapApp({
 
     if (formName === "create-round") {
       const submitter = event.submitter;
-      const intent = submitter?.value || "local";
+      const intent = submitter?.value || getRoundSetupState(store.getState()).intent || "local";
       let hostedRoundId = null;
 
       store.setState((draft) => {
         const roundSetup = getRoundSetupState(draft);
-        const playerSetup = parsePlayers(String(data.get("players") || ""), draft.currentUser.name);
+        const playerSetup = parsePlayers(String(roundSetup.players || data.get("players") || ""), draft.currentUser.name);
         const playerProfiles = ensureProfilesForNames(
           draft,
           playerSetup.names
@@ -2879,8 +2978,8 @@ export function bootstrapApp({
           { holeCount: selectedHoleCount }
         );
         const manualCourse = buildManualRoundTemplate(
-          String(data.get("courseName") || "").trim(),
-          String(data.get("teeBox") || "").trim(),
+          String(roundSetup.manualCourseName || data.get("courseName") || "").trim(),
+          String(roundSetup.manualTeeBoxName || data.get("teeBox") || "").trim(),
           { holeCount: selectedHoleCount }
         );
         const courseSelection = selectedCourse || manualCourse;
@@ -2911,7 +3010,7 @@ export function bootstrapApp({
           holesTemplate: courseSelection.holes,
           selectedHoleCount: courseSelection.selectedHoleCount || selectedHoleCount,
           weather: String(data.get("weather") || "").trim(),
-          mode: String(data.get("mode") || "stroke"),
+          mode: String(roundSetup.mode || data.get("mode") || "stroke"),
           players: playerProfiles,
           syncTransport: intent === "host" ? "invite" : "local",
         });
