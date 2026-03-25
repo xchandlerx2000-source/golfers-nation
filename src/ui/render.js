@@ -193,7 +193,8 @@ function updateLiveSession(root, session) {
   }
 
   if (playersElement) {
-    playersElement.textContent = `Players: ${session.players.join(", ")}`;
+    const playerCount = session.players.length || 1;
+    playersElement.textContent = `${playerCount} ${playerCount === 1 ? "golfer" : "golfers"}`;
   }
 }
 

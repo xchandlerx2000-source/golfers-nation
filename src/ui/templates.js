@@ -846,19 +846,33 @@ function renderLiveSessionStrip(activeRound, activeGroup) {
   const players = activeGroup?.members?.length
     ? activeGroup.members.map((member) => member.displayName).filter(Boolean)
     : activeRound?.players?.map((player) => player.name).filter(Boolean) || [];
-  const liveStatus = activeRound
-    ? `${activeRound.sync?.label || "Live room"} / ${activeRound.teeBox || "Default tee"} / ${activeRound.holes?.length || activeRound.selectedHoleCount || 18} holes`
-    : "Live room";
+  const playerCount = players.length || 1;
+  const liveStatus = activeRound?.connectionState === "live"
+    ? "Live sync"
+    : "Saved local";
+  const holeLabel = activeRound?.currentHole ? `Hole ${activeRound.currentHole}` : "Hole 1";
+  const detailSummary = [
+    activeRound?.courseName || "Active round",
+    activeRound?.teeBox ? `${activeRound.teeBox} tees` : null,
+    `${activeRound?.holes?.length || activeRound?.selectedHoleCount || 18} holes`,
+  ].filter(Boolean).join(" / ");
   const hiddenClass = activeRound ? "" : " hidden";
   return `
-    <div class="live-strip${hiddenClass}" id="liveStrip">
-      <div class="live-strip-main">
-        <span class="live-strip-badge">LIVE</span>
-        <span class="live-strip-code">Code <b id="liveCode">${escapeHtml(inviteCode)}</b></span>
-        <span class="live-strip-status">${escapeHtml(liveStatus)}</span>
+    <details class="live-strip${hiddenClass}" id="liveStrip">
+      <summary class="live-strip-summary">
+        <div class="live-strip-main">
+          <span class="live-strip-badge">LIVE</span>
+          <span class="live-strip-code"><b id="liveCode">${escapeHtml(inviteCode)}</b></span>
+          <span id="livePlayers" class="live-strip-players">${playerCount} ${playerCount === 1 ? "golfer" : "golfers"}</span>
+          <span class="live-strip-status">${escapeHtml(`${holeLabel} / ${liveStatus}`)}</span>
+        </div>
+        <span class="live-strip-toggle">Details</span>
+      </summary>
+      <div class="live-strip-detail-row">
+        <span>${escapeHtml(detailSummary)}</span>
+        <span>${escapeHtml(players.join(", ") || "You")}</span>
       </div>
-      <span id="livePlayers" class="live-strip-players">Players: ${escapeHtml(players.join(", ") || "You")}</span>
-    </div>
+    </details>
   `;
 }
 
@@ -1356,9 +1370,8 @@ function renderPlayNearbyGamesCard(state) {
       <div class="section-heading section-heading--compact">
         <div>
           <p class="eyebrow">Nearby Games</p>
-          <h3>Join active groups fast</h3>
+          <h3>${nearbyGames.length ? `${nearbyGames.length} active now` : "Join fast"}</h3>
         </div>
-        <button class="button subtle" type="button" data-action="nav-view" data-view="community">See all</button>
       </div>
       ${nearbyGames.length
         ? `
@@ -1379,7 +1392,7 @@ function renderPlayNearbyGamesCard(state) {
         : `
           <div class="empty-state compact-empty-state">
             <strong>No nearby games yet.</strong>
-            <p>Hosted rounds show up here as soon as golfers go live, and join by code stays ready as the backup.</p>
+            <p>Live rounds show up here automatically.</p>
           </div>
         `}
     </article>
@@ -1452,7 +1465,7 @@ function renderPlayActiveGameCard(state, activeRound) {
           </div>
           <span class="status-pill">Ready</span>
         </div>
-        <p class="play-active-copy">Start a round or join one by code. Golden Nugget stays ready as the fastest first round.</p>
+        <p class="play-active-copy">Start or join to see a live room here.</p>
       </article>
     `;
   }
@@ -1494,9 +1507,8 @@ function renderPlayNearbyPlayersCard(state) {
         <div class="section-heading section-heading--compact">
           <div>
             <p class="eyebrow">Nearby Players</p>
-            <h3>Golfers active now</h3>
+            <h3>${nearbyPlayers.length ? `${nearbyPlayers.length} golfers active` : "Active now"}</h3>
           </div>
-          <button class="button subtle" type="button" data-action="nav-view" data-view="community">See all</button>
         </div>
         ${nearbyPlayers.length
           ? `
@@ -1517,7 +1529,7 @@ function renderPlayNearbyPlayersCard(state) {
           : `
             <div class="empty-state compact-empty-state play-screen-empty">
               <strong>No nearby golfers yet.</strong>
-              <p>Hosted rounds and active golfers will appear here automatically.</p>
+              <p>Active golfers appear here automatically.</p>
             </div>
           `}
       </article>
@@ -1557,12 +1569,9 @@ function renderPlayFriendsCard(state) {
           : `
             <div class="empty-state compact-empty-state">
               <strong>No friends added yet.</strong>
-              <p>Invite golfers from Community and their cards will show up here for faster repeat rounds.</p>
+              <p>Add golfers from Community for faster repeat rounds.</p>
             </div>
           `}
-        <div class="row-actions">
-          <button class="button subtle" type="button" data-action="nav-view" data-view="community">Open Community</button>
-        </div>
       </div>
     </details>
   `;
@@ -1787,7 +1796,7 @@ function getSettingsDestinationCopy(destination = "landing") {
     return {
       title: "My Profile",
       eyebrow: "Golfer identity",
-      description: "Your display name, golf identity, public stats, and social profile live here.",
+      description: "Identity, stats, sharing, and privacy.",
     };
   }
 
@@ -1795,7 +1804,7 @@ function getSettingsDestinationCopy(destination = "landing") {
     return {
       title: "App Settings",
       eyebrow: "How you use the app",
-      description: "Appearance, account access, support, and optional integrations stay here.",
+      description: "Appearance, account, support, and integrations.",
     };
   }
 
@@ -1992,10 +2001,10 @@ function renderSettingsLandingView(state) {
           <div>
             <p class="eyebrow">Profile</p>
             <h3>${escapeHtml(state.currentUser.displayName || state.currentUser.name)}</h3>
-            <p>${escapeHtml(state.currentUser.username || "@golfer")} / ${escapeHtml(subscription.tier === "premium" ? "Premium access" : "Free plan")} / ${escapeHtml(provider)} sign-in</p>
+            <p>${escapeHtml(state.currentUser.username || "@golfer")} / ${escapeHtml(subscription.tier === "premium" ? "Premium" : "Free")} / ${escapeHtml(provider)}</p>
           </div>
         </div>
-        <div class="summary-grid compact">
+        <div class="summary-grid compact settings-summary-grid">
           <article>
             <span>Rounds</span>
             <strong>${preview?.roundsPlayed || state.currentUser.roundsPlayed || 0}</strong>
@@ -2012,37 +2021,55 @@ function renderSettingsLandingView(state) {
             <span>Friends</span>
             <strong>${relationshipCounts.friends}</strong>
           </article>
-          <article>
-            <span>Following</span>
-            <strong>${relationshipCounts.following}</strong>
-          </article>
-          <article>
-            <span>Member since</span>
-            <strong>${formatDate(state.currentUser.createdAt)}</strong>
-          </article>
         </div>
-        <p class="body-copy compact-copy">Choose the part of Profile you need right now: your golfer identity or the way the app works on this phone.</p>
       </article>
       <div class="settings-destination-grid card-span-3">
         <button class="card settings-destination-card" type="button" data-action="set-settings-destination" data-destination="profile" data-section="profile-identity">
           <span class="mini-label">My Profile</span>
-          <strong>Golfer identity and public card</strong>
-          <p>Display name, avatar, bio, golf profile, stats, privacy, and social sharing.</p>
+          <strong>Golfer identity</strong>
+          <p>Public card, stats, and privacy.</p>
         </button>
         <button class="card settings-destination-card" type="button" data-action="set-settings-destination" data-destination="app" data-section="account">
           <span class="mini-label">App Settings</span>
-          <strong>How you use Golfers Nation</strong>
-          <p>Appearance, account access, Spotify, support, and app-level controls.</p>
+          <strong>App controls</strong>
+          <p>Appearance, account, support, Spotify.</p>
         </button>
       </div>
     </section>
   `;
 }
 
+function renderSettingsDestinationSwitch(destination) {
+  return `
+    <div class="settings-destination-switch" role="tablist" aria-label="Profile destinations">
+      <button
+        class="settings-destination-pill ${destination === "profile" ? "is-active" : ""}"
+        type="button"
+        data-action="set-settings-destination"
+        data-destination="profile"
+        data-section="profile-identity"
+        role="tab"
+        aria-selected="${destination === "profile" ? "true" : "false"}"
+      >
+        My Profile
+      </button>
+      <button
+        class="settings-destination-pill ${destination === "app" ? "is-active" : ""}"
+        type="button"
+        data-action="set-settings-destination"
+        data-destination="app"
+        data-section="account"
+        role="tab"
+        aria-selected="${destination === "app" ? "true" : "false"}"
+      >
+        App Settings
+      </button>
+    </div>
+  `;
+}
+
 function renderSettingsDestinationHeader(state, destination) {
   const copy = getSettingsDestinationCopy(destination);
-  const returnView = state.session.settingsReturnView || "home";
-  const returnLabel = VIEW_ORDER.find((view) => view.id === returnView)?.label || "Play";
 
   return `
     <article class="card settings-top-card card-span-3">
@@ -2054,10 +2081,8 @@ function renderSettingsDestinationHeader(state, destination) {
           <p>${escapeHtml(copy.description)}</p>
         </div>
       </div>
-      <div class="row-actions settings-top-actions">
-        <button class="button subtle" type="button" data-action="set-settings-destination" data-destination="landing">Back to Profile</button>
-        <button class="button secondary" type="button" data-action="close-settings">Back to ${escapeHtml(returnLabel)}</button>
-      </div>
+      ${renderSettingsDestinationSwitch(destination)}
+      ${renderSettingsSectionNav(state, destination)}
     </article>
   `;
 }
@@ -2584,22 +2609,9 @@ function renderSettingsView(state) {
     spotify: renderSpotifySettingsCard(state),
     "app-support": renderAppSupportSettingsCard(state),
   };
-  const heading = destination === "profile"
-    ? { eyebrow: "My Profile", title: "Golfer identity and sharing" }
-    : { eyebrow: "App Settings", title: "Controls for this app" };
-
   return `
     <section class="view-grid settings-grid">
       ${renderSettingsDestinationHeader(state, destination)}
-      <article class="card settings-nav-card card-span-3">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">${escapeHtml(heading.eyebrow)}</p>
-            <h3>${escapeHtml(heading.title)}</h3>
-          </div>
-        </div>
-        ${renderSettingsSectionNav(state, destination)}
-      </article>
       ${cards[selectedSectionId] || ""}
     </section>
   `;
@@ -4398,7 +4410,6 @@ function renderCommunityView(state) {
         </div>
         <p class="body-copy compact-copy">Community is now built around fast joining, visible golfers, and easy shared-round confidence. Invite codes stay ready anytime nearby discovery is not enough.</p>
         <div class="row-actions empty-state-actions">
-          <button class="button primary" type="button" data-action="nav-view" data-view="round">Back to round</button>
           ${renderHelpLink("Shared round guide", "playing-round", true)}
         </div>
       </article>

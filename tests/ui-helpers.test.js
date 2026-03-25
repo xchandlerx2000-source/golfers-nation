@@ -88,7 +88,8 @@ describe("ui helpers", () => {
 
     expect(markup).toContain('id="liveStrip"');
     expect(markup).toContain("ABC123");
-    expect(markup).toContain("Players: Avery Brooks, Maya Chen");
+    expect(markup).toContain("2 golfers");
+    expect(markup).toContain("Details");
   });
 
   it("shows local-first trust messaging when live round backup needs a retry", () => {
@@ -258,6 +259,7 @@ describe("ui helpers", () => {
     expect(markup).toContain("Ember");
     expect(markup).toContain('data-theme="ocean"');
     expect(markup).toContain('data-color-mode="light"');
+    expect(markup).not.toContain("Back to Profile");
     expect(markup).not.toContain("Log out account");
     expect(markup).toMatch(/id="tab-settings"[\s\S]*?aria-selected="true"/);
   });
@@ -284,7 +286,7 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Choose the part of Profile you need right now");
+    expect(markup).toContain("Golfer identity");
     expect(markup).toContain("My Profile");
     expect(markup).toContain("App Settings");
   });
