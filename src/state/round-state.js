@@ -7,7 +7,7 @@ import { refreshProfileSnapshots, syncCurrentUserProfile } from "../services/pla
 import { appendActivity, setFeedback } from "./session-state.js";
 
 export function findRound(state, roundId) {
-  return state.rounds.find((round) => round.id === roundId);
+  return (state?.rounds || []).find((round) => round.id === roundId) || null;
 }
 
 export function getRoundEventSyncCopy(round, pendingCount = getPendingRoundEvents(round).length) {
@@ -408,11 +408,12 @@ export function mergeLiveSessionMember(draft, {
 }
 
 export function getNextIncompleteHoleNumber(round, participantId, currentHoleNumber) {
-  const orderedHoles = round.holes
+  const holes = Array.isArray(round?.holes) ? round.holes : [];
+  const orderedHoles = holes
     .slice(currentHoleNumber)
-    .concat(round.holes.slice(0, currentHoleNumber));
+    .concat(holes.slice(0, currentHoleNumber));
   const nextHole = orderedHoles.find((hole) => {
-    const entry = hole.entries.find((item) => item.participantId === participantId);
+    const entry = (hole.entries || []).find((item) => item.participantId === participantId);
     return entry && (entry.strokes === null || entry.strokes === 0);
   });
 
@@ -420,12 +421,12 @@ export function getNextIncompleteHoleNumber(round, participantId, currentHoleNum
 }
 
 export function finishRound(draft, roundId, dataGateway, setActiveView) {
-  const round = draft.rounds.find((item) => item.id === roundId);
+  const round = (draft?.rounds || []).find((item) => item.id === roundId) || null;
   if (!round) {
     return null;
   }
 
-  const progress = round.holes.filter((hole) => hole.entries.some((entry) => entry.strokes && entry.strokes > 0)).length;
+  const progress = (round.holes || []).filter((hole) => (hole.entries || []).some((entry) => entry.strokes && entry.strokes > 0)).length;
   if (!progress) {
     setFeedback(
       draft,

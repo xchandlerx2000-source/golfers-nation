@@ -43,6 +43,10 @@ export function getDefaultSettingsSectionForDestination(destination = "landing")
 }
 
 export function setActiveView(draft, nextView, transitionKind = "tab") {
+  if (!draft?.session) {
+    return;
+  }
+
   const previousView = draft.session.activeView || "home";
   const previousIndex = getViewIndex(previousView);
   const nextIndex = getViewIndex(nextView);
@@ -70,6 +74,10 @@ export function setActiveView(draft, nextView, transitionKind = "tab") {
 }
 
 export function openHelpView(draft, sectionId = "getting-started") {
+  if (!draft?.session) {
+    return;
+  }
+
   const currentView = draft.session.activeView || "home";
   draft.session.helpReturnView = draft.auth?.status === "authenticated"
     ? (currentView === "help" ? draft.session.helpReturnView || "home" : currentView)
@@ -80,11 +88,19 @@ export function openHelpView(draft, sectionId = "getting-started") {
 }
 
 export function closeHelpView(draft) {
+  if (!draft?.session) {
+    return;
+  }
+
   const returnView = draft.session.helpReturnView || "home";
   setActiveView(draft, returnView === "auth" ? "home" : returnView, "return");
 }
 
 export function openSettingsView(draft, sectionId = "account", destination = null) {
+  if (!draft?.session) {
+    return;
+  }
+
   const currentView = draft.session.activeView || "home";
   draft.session.settingsReturnView = currentView === "settings"
     ? (draft.session.settingsReturnView || "home")
@@ -99,6 +115,10 @@ export function openSettingsView(draft, sectionId = "account", destination = nul
 }
 
 export function closeSettingsView(draft) {
+  if (!draft?.session) {
+    return;
+  }
+
   const returnView = draft.session.settingsReturnView || "home";
   setActiveView(draft, returnView, "return");
 }

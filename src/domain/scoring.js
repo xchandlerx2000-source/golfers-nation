@@ -3,6 +3,10 @@ import { average, formatRelationToPar } from "../utils/formatters.js";
 
 const PAR_TYPES = [3, 4, 5];
 
+function getGameModeLabel(modeId = "stroke") {
+  return GAME_MODES[modeId]?.label || GAME_MODES.stroke.label;
+}
+
 function isPlayedEntry(entry) {
   return Boolean(entry && entry.strokes !== null && entry.strokes > 0);
 }
@@ -841,7 +845,7 @@ export function getRoundSummary(round, currentUserId, options = {}) {
   return {
     leaderboard,
     holesPlayed,
-    totalHoles: round.holes.length,
+    totalHoles: Array.isArray(round?.holes) ? round.holes.length : 0,
     localParticipant,
     localTotals,
     roundInsights: localTotals ? buildPerformanceInsights({
@@ -854,7 +858,7 @@ export function getRoundSummary(round, currentUserId, options = {}) {
     friendLeaderboard,
     sideGame,
     tournamentScaffold,
-    roundLabel: GAME_MODES[round.mode].label,
+    roundLabel: getGameModeLabel(round?.mode),
     averagePutts: localTotals?.averagePutts ?? null,
     completed: round.status === "completed",
     winnerLabel: leaderboard.length ? leaderboard[0].name : "No leader yet",

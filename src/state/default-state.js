@@ -3,6 +3,7 @@ import { createSpotifySessionState } from "../integrations/spotify-service.js";
 import { createDefaultNearbyState } from "../services/nearby-detection-service.js";
 import { getCourseDefaultRoundSetup } from "../services/course-service.js";
 import { cloneData } from "../utils/formatters.js";
+import { getDefaultCrashLogState } from "./session-state.js";
 
 export function createDefaultState() {
   const seeded = createDefaultAccountState();
@@ -97,6 +98,7 @@ export function createDefaultState() {
         retryCount: 0,
       },
       roundSetup: getCourseDefaultRoundSetup(),
+      crashLog: getDefaultCrashLogState(),
       nearby: createDefaultNearbyState(),
       spotify: createSpotifySessionState(),
     },

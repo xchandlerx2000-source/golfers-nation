@@ -642,6 +642,10 @@ function describeSide(side) {
 // ---- src/domain/scoring.js ----
 const PAR_TYPES = [3, 4, 5];
 
+function getGameModeLabel(modeId = "stroke") {
+  return GAME_MODES[modeId]?.label || GAME_MODES.stroke.label;
+}
+
 function isPlayedEntry(entry) {
   return Boolean(entry && entry.strokes !== null && entry.strokes > 0);
 }
@@ -1471,7 +1475,7 @@ function getRoundSummary(round, currentUserId, options = {}) {
   return {
     leaderboard,
     holesPlayed,
-    totalHoles: round.holes.length,
+    totalHoles: Array.isArray(round?.holes) ? round.holes.length : 0,
     localParticipant,
     localTotals,
     roundInsights: localTotals ? buildPerformanceInsights({
@@ -1484,7 +1488,7 @@ function getRoundSummary(round, currentUserId, options = {}) {
     friendLeaderboard,
     sideGame,
     tournamentScaffold,
-    roundLabel: GAME_MODES[round.mode].label,
+    roundLabel: getGameModeLabel(round?.mode),
     averagePutts: localTotals?.averagePutts ?? null,
     completed: round.status === "completed",
     winnerLabel: leaderboard.length ? leaderboard[0].name : "No leader yet",
@@ -2235,9 +2239,27 @@ function appendActivity(draft, message, type = "product") {
     lastSuccessAt: 0,
     retryCount: 0,
   };
-}function getDefaultNearbySessionState() {
+}
+function getDefaultCrashLogState() {
+  return {
+    count: 0,
+    lastCrashAt: "",
+    latestStage: "",
+    latestMessage: "",
+    entries: [],
+  };
+}
+function setCrashLogState(draft, summary = {}) {
+  draft.session.crashLog = {
+    ...getDefaultCrashLogState(),
+    ...(summary || {}),
+    entries: Array.isArray(summary?.entries) ? summary.entries : [],
+  };
+}
+function getDefaultNearbySessionState() {
   return createDefaultNearbyState();
-}function mergeNearbySessionState(current = {}, updates = {}) {
+}
+function mergeNearbySessionState(current = {}, updates = {}) {
   return {
     ...getDefaultNearbySessionState(),
     ...(current || {}),
@@ -2335,7 +2357,7 @@ function appendActivity(draft, message, type = "product") {
 
 // ---- src/state/round-state.js ----
 function findRound(state, roundId) {
-  return state.rounds.find((round) => round.id === roundId);
+  return (state?.rounds || []).find((round) => round.id === roundId) || null;
 }
 function getRoundEventSyncCopy(round, pendingCount = getPendingRoundEvents(round).length) {
   const courseName = round?.courseName || "This round";
@@ -2727,23 +2749,24 @@ function mergeLiveSessionMember(draft, {
   };
 }
 function getNextIncompleteHoleNumber(round, participantId, currentHoleNumber) {
-  const orderedHoles = round.holes
+  const holes = Array.isArray(round?.holes) ? round.holes : [];
+  const orderedHoles = holes
     .slice(currentHoleNumber)
-    .concat(round.holes.slice(0, currentHoleNumber));
+    .concat(holes.slice(0, currentHoleNumber));
   const nextHole = orderedHoles.find((hole) => {
-    const entry = hole.entries.find((item) => item.participantId === participantId);
+    const entry = (hole.entries || []).find((item) => item.participantId === participantId);
     return entry && (entry.strokes === null || entry.strokes === 0);
   });
 
   return nextHole ? nextHole.number : currentHoleNumber;
 }
 function finishRound(draft, roundId, dataGateway, setActiveView) {
-  const round = draft.rounds.find((item) => item.id === roundId);
+  const round = (draft?.rounds || []).find((item) => item.id === roundId) || null;
   if (!round) {
     return null;
   }
 
-  const progress = round.holes.filter((hole) => hole.entries.some((entry) => entry.strokes && entry.strokes > 0)).length;
+  const progress = (round.holes || []).filter((hole) => (hole.entries || []).some((entry) => entry.strokes && entry.strokes > 0)).length;
   if (!progress) {
     setFeedback(
       draft,
@@ -2783,6 +2806,188 @@ function loadStoredState(createDefaultState) {
 }
 function persistState(state) {
   return persistAppState(state);
+}
+
+// ---- src/services/crash-log-service.js ----
+const CRASH_LOG_STORAGE_KEY = "golfers-nation-crash-log-v1";
+const CRASH_LOG_LIMIT = 20;
+
+function getCrashLogStorage(storage = null) {
+  if (storage) {
+    return storage;
+  }
+
+  try {
+    if (typeof localStorage === "undefined") {
+      return null;
+    }
+
+    return localStorage;
+  } catch (error) {
+    console.warn("[Golfers Nation] Crash log storage is unavailable.", error);
+    return null;
+  }
+}
+
+function normalizeCrashLogError(error) {
+  if (error instanceof Error) {
+    return {
+      name: error.name || "Error",
+      message: error.message || "Unknown error.",
+      stack: typeof error.stack === "string" ? error.stack : "",
+    };
+  }
+
+  if (error && typeof error === "object") {
+    return {
+      name: String(error.name || "Error"),
+      message: String(error.message || "Unknown error."),
+      stack: typeof error.stack === "string" ? error.stack : "",
+    };
+  }
+
+  return {
+    name: "Error",
+    message: String(error || "Unknown error."),
+    stack: "",
+  };
+}
+
+function sanitizeCrashLogContext(context = {}) {
+  try {
+    return JSON.parse(JSON.stringify(context || {}));
+  } catch (error) {
+    return {
+      note: "Crash context could not be fully serialized.",
+    };
+  }
+}
+
+function getCrashLogWindowHref() {
+  if (typeof window === "undefined" || !window.location) {
+    return "";
+  }
+
+  return window.location.href || "";
+}
+
+function getCrashLogUserAgent() {
+  if (typeof navigator === "undefined") {
+    return "";
+  }
+
+  return navigator.userAgent || "";
+}
+
+function writeCrashLogEntries(entries, { storage = null } = {}) {
+  const availableStorage = getCrashLogStorage(storage);
+  if (!availableStorage || typeof availableStorage.setItem !== "function") {
+    return false;
+  }
+
+  try {
+    availableStorage.setItem(CRASH_LOG_STORAGE_KEY, JSON.stringify(entries));
+    return true;
+  } catch (error) {
+    console.warn("[Golfers Nation] Failed to write crash logs.", error);
+    return false;
+  }
+}
+function readCrashLogEntries({ storage = null } = {}) {
+  const availableStorage = getCrashLogStorage(storage);
+  if (!availableStorage || typeof availableStorage.getItem !== "function") {
+    return [];
+  }
+
+  try {
+    const raw = availableStorage.getItem(CRASH_LOG_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.warn("[Golfers Nation] Failed to read crash logs.", error);
+    return [];
+  }
+}
+function recordCrashLog({
+  stage = "runtime",
+  source = "app",
+  error = null,
+  context = {},
+  storage = null,
+} = {}) {
+  const normalizedError = normalizeCrashLogError(error);
+  const entry = {
+    id: `crash-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    createdAt: new Date().toISOString(),
+    stage: String(stage || "runtime"),
+    source: String(source || "app"),
+    appVersion: APP_VERSION,
+    href: getCrashLogWindowHref(),
+    userAgent: getCrashLogUserAgent(),
+    ...normalizedError,
+    context: sanitizeCrashLogContext(context),
+  };
+
+  const entries = [entry, ...readCrashLogEntries({ storage })].slice(0, CRASH_LOG_LIMIT);
+  writeCrashLogEntries(entries, { storage });
+  return entry;
+}
+function clearCrashLogEntries({ storage = null } = {}) {
+  const availableStorage = getCrashLogStorage(storage);
+  if (!availableStorage || typeof availableStorage.removeItem !== "function") {
+    return false;
+  }
+
+  try {
+    availableStorage.removeItem(CRASH_LOG_STORAGE_KEY);
+    return true;
+  } catch (error) {
+    console.warn("[Golfers Nation] Failed to clear crash logs.", error);
+    return false;
+  }
+}
+function getCrashLogSummary({ storage = null, limit = 5 } = {}) {
+  const entries = readCrashLogEntries({ storage });
+  const latestEntry = entries[0] || null;
+
+  return {
+    count: entries.length,
+    lastCrashAt: latestEntry?.createdAt || "",
+    latestStage: latestEntry?.stage || "",
+    latestMessage: latestEntry?.message || "",
+    entries: entries.slice(0, Math.max(1, Number(limit || 5))),
+  };
+}
+function createCrashLogReport(summary = null, { storage = null } = {}) {
+  const crashSummary = summary || getCrashLogSummary({ storage, limit: CRASH_LOG_LIMIT });
+  if (!crashSummary.count) {
+    return "";
+  }
+
+  return [
+    "Golfers Nation Crash Report",
+    `Generated: ${new Date().toISOString()}`,
+    `App version: ${APP_VERSION}`,
+    "",
+    ...crashSummary.entries.flatMap((entry, index) => ([
+      `Crash ${index + 1}`,
+      `ID: ${entry.id}`,
+      `Time: ${entry.createdAt}`,
+      `Stage: ${entry.stage}`,
+      `Source: ${entry.source}`,
+      `Name: ${entry.name}`,
+      `Message: ${entry.message}`,
+      `URL: ${entry.href || ""}`,
+      `User agent: ${entry.userAgent || ""}`,
+      `Context: ${JSON.stringify(entry.context || {}, null, 2)}`,
+      entry.stack ? `Stack:\n${entry.stack}` : "Stack:",
+      "",
+    ])),
+  ].join("\n");
 }
 
 // ---- src/integrations/spotify-service.js ----
@@ -7236,6 +7441,7 @@ function createSyncService({ store }) {
 const HOSTED_ROUND_NOTE = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
 const JOINED_ROUND_NOTE = "This device now carries its own safe copy of the live round, even if the original host leaves.";
 function parsePlayers(value, currentUserName) {
+  const safeCurrentUserName = String(currentUserName || "").trim() || "Golfer";
   const names = String(value || "")
     .split(",")
     .map((item) => item.trim())
@@ -7253,11 +7459,11 @@ function parsePlayers(value, currentUserName) {
     deduped.push(name);
   });
 
-  if (!seen.has(currentUserName.toLowerCase())) {
-    deduped.unshift(currentUserName);
-    seen.add(currentUserName.toLowerCase());
+  if (!seen.has(safeCurrentUserName.toLowerCase())) {
+    deduped.unshift(safeCurrentUserName);
+    seen.add(safeCurrentUserName.toLowerCase());
   } else {
-    const currentIndex = deduped.findIndex((name) => name.toLowerCase() === currentUserName.toLowerCase());
+    const currentIndex = deduped.findIndex((name) => name.toLowerCase() === safeCurrentUserName.toLowerCase());
     if (currentIndex > 0) {
       const [currentName] = deduped.splice(currentIndex, 1);
       deduped.unshift(currentName);
@@ -7284,12 +7490,20 @@ function getDefaultRoundSetup() {
   return getCourseDefaultRoundSetup();
 }
 function getRoundSetupState(state) {
-  return getCourseRoundSetupState(state.session?.roundSetup || {});
+  return getCourseRoundSetupState(state?.session?.roundSetup || {});
 }
 function resetRoundSetup(draft) {
+  if (!draft?.session) {
+    return;
+  }
+
   draft.session.roundSetup = getDefaultRoundSetup();
 }
 function setSelectedCourse(draft, courseId, teeBoxId = "") {
+  if (!draft?.session) {
+    return;
+  }
+
   const course = getCourseById(courseId);
   if (!course) {
     draft.session.roundSetup = {
@@ -7312,12 +7526,20 @@ function setSelectedCourse(draft, courseId, teeBoxId = "") {
   };
 }
 function setSelectedTeeBox(draft, teeBoxId = "") {
+  if (!draft?.session) {
+    return;
+  }
+
   draft.session.roundSetup = {
     ...getRoundSetupState(draft),
     selectedTeeBoxId: teeBoxId || "",
   };
 }
 function setSelectedHoleCount(draft, holeCount = 18) {
+  if (!draft?.session) {
+    return;
+  }
+
   const roundSetup = getRoundSetupState(draft);
   const course = roundSetup.selectedCourseId ? getCourseById(roundSetup.selectedCourseId) : null;
   const maxHoleCount = Number(course?.holesCount || 18);
@@ -7329,6 +7551,10 @@ function setSelectedHoleCount(draft, holeCount = 18) {
   };
 }
 function focusRoundView(draft, roundId, profileId, setActiveView) {
+  if (!draft?.session || typeof setActiveView !== "function") {
+    return;
+  }
+
   draft.session.activeRoundId = roundId;
   draft.session.selectedHole = 1;
   draft.session.selectedProfileId = profileId;
@@ -9695,6 +9921,7 @@ function createDefaultState() {
         retryCount: 0,
       },
       roundSetup: getCourseDefaultRoundSetup(),
+      crashLog: getDefaultCrashLogState(),
       nearby: createDefaultNearbyState(),
       spotify: createSpotifySessionState(),
     },
@@ -10029,11 +10256,11 @@ const PRIMARY_NAV_TABS = [
 ];
 
 function getActiveRound(state) {
-  return state.rounds.find((round) => round.id === state.session.activeRoundId) || null;
+  return (state?.rounds || []).find((round) => round.id === state?.session?.activeRoundId) || null;
 }
 
 function getSummaryRound(state) {
-  return state.rounds.find((round) => round.id === state.session.summaryRoundId) || null;
+  return (state?.rounds || []).find((round) => round.id === state?.session?.summaryRoundId) || null;
 }
 
 function getActiveGroup(state, round) {
@@ -10041,17 +10268,17 @@ function getActiveGroup(state, round) {
     return null;
   }
 
-  return state.groups.find((group) => group.roundId === round.id) || null;
+  return (state?.groups || []).find((group) => group.roundId === round.id) || null;
 }
 
 function getCompletedRounds(state) {
-  return state.rounds
+  return (state?.rounds || [])
     .filter((round) => round.status === "completed")
     .sort((left, right) => (right.completedAt || 0) - (left.completedAt || 0));
 }
 
 function getSubscription(state) {
-  return state.currentUser.subscription || {
+  return state?.currentUser?.subscription || {
     tier: "free",
     planName: "Free",
     status: "active",
@@ -10059,8 +10286,12 @@ function getSubscription(state) {
   };
 }
 
+function getGameModeLabel(modeId = "stroke") {
+  return GAME_MODES[modeId]?.label || GAME_MODES.stroke.label;
+}
+
 function getNavActiveView(state) {
-  const activeView = state.session.activeView || "home";
+  const activeView = state?.session?.activeView || "home";
 
   if (PRIMARY_NAV_TABS.some((view) => view.id === activeView)) {
     return activeView;
@@ -10071,7 +10302,7 @@ function getNavActiveView(state) {
   }
 
   if (activeView === "help") {
-    const fallback = state.session.helpReturnView || state.session.previousView || "home";
+    const fallback = state?.session?.helpReturnView || state?.session?.previousView || "home";
     if (fallback === "auth") {
       return "home";
     }
@@ -12202,6 +12433,14 @@ function renderAppSupportSettingsCard(state) {
     .map((entry) => entry.message)
     .join(" | ");
   const contextView = state.session.settingsReturnView || state.session.previousView || "stats";
+  const crashLog = state.session?.crashLog || {
+    count: 0,
+    lastCrashAt: "",
+    latestStage: "",
+    latestMessage: "",
+    entries: [],
+  };
+  const crashEntries = Array.isArray(crashLog.entries) ? crashLog.entries.slice(0, 3) : [];
 
   return `
     <article class="card settings-card" data-settings-card="app-support">
@@ -12255,6 +12494,33 @@ function renderAppSupportSettingsCard(state) {
           <span>Email</span>
         </button>
       </div>
+      <article class="settings-support-panel">
+        <span class="mini-label">Crash logs</span>
+        <strong>Local startup and runtime reports</strong>
+        <p class="body-copy compact-copy">
+          ${crashLog.count
+            ? `Stored on this device for developer review. Latest crash: ${escapeHtml(crashLog.latestStage || "runtime")} at ${escapeHtml(formatDateTime(crashLog.lastCrashAt))}.`
+            : "No startup or runtime crashes have been recorded on this device yet."}
+        </p>
+        <div class="row-actions">
+          <button class="button secondary" type="button" data-action="copy-crash-report" ${crashLog.count ? "" : "disabled"}>Copy crash report</button>
+          <button class="button subtle" type="button" data-action="clear-crash-logs" ${crashLog.count ? "" : "disabled"}>Clear logs</button>
+        </div>
+        ${crashEntries.length ? `
+          <div class="stack-list settings-support-list crash-log-list">
+            ${crashEntries.map((entry) => `
+              <article class="list-row large crash-log-entry">
+                <div>
+                  <strong>${escapeHtml(entry.stage || "runtime")}</strong>
+                  <p>${escapeHtml(entry.message || "Unknown error.")}</p>
+                  <p>${escapeHtml(formatDateTime(entry.createdAt))}</p>
+                </div>
+                <span>${escapeHtml(entry.id || "")}</span>
+              </article>
+            `).join("")}
+          </div>
+        ` : ""}
+      </article>
       <article class="settings-support-panel">
         <span class="mini-label">Tester feedback</span>
         <strong>Send field-test notes without leaving the app</strong>
@@ -12453,11 +12719,11 @@ function renderHomeView(state) {
 
 function renderModeNotes(state, mode) {
   const subscription = getSubscription(state);
-  const premiumModes = PREMIUM_MODE_IDS.map((modeId) => GAME_MODES[modeId].label).join(" and ");
+  const premiumModes = PREMIUM_MODE_IDS.map((modeId) => getGameModeLabel(modeId)).join(" and ");
 
   return `
     <div class="mode-strip">
-      <span class="status-pill">Mode in play: ${escapeHtml(GAME_MODES[mode].label)}</span>
+      <span class="status-pill">Mode in play: ${escapeHtml(getGameModeLabel(mode))}</span>
       <span class="status-pill">${isPremiumSubscription(subscription) ? "Premium modes unlocked" : `${escapeHtml(premiumModes)} unlock with Premium`}</span>
     </div>
   `;
@@ -12667,7 +12933,7 @@ function renderCreateRoundCard(state, activeRound) {
     activeRound?.teeBox || "Blue",
     { holeCount: roundSetup.selectedHoleCount || 18 }
   );
-  const premiumModesLabel = PREMIUM_MODE_IDS.map((modeId) => GAME_MODES[modeId].label).join(" and ");
+  const premiumModesLabel = PREMIUM_MODE_IDS.map((modeId) => getGameModeLabel(modeId)).join(" and ");
 
   return `
     <article class="card">
@@ -14018,7 +14284,7 @@ function renderCommunityView(state) {
               </article>
               <article>
                 <span>Mode</span>
-                <strong>${escapeHtml(GAME_MODES[activeRound.mode].label)}</strong>
+                <strong>${escapeHtml(getGameModeLabel(activeRound.mode))}</strong>
               </article>
               <article>
                 <span>Invite</span>
@@ -14413,7 +14679,7 @@ function renderCurrentView(state) {
 
 // ---- src/ui/render.js ----
 function getActiveRound(state) {
-  return state.rounds.find((round) => round.id === state.session.activeRoundId) || null;
+  return (state?.rounds || []).find((round) => round.id === state?.session?.activeRoundId) || null;
 }
 
 function getActiveGroup(state, round) {
@@ -14421,11 +14687,148 @@ function getActiveGroup(state, round) {
     return null;
   }
 
-  return state.groups.find((group) =>
+  return (state?.groups || []).find((group) =>
     group.roundId === round.id
     || group.id === round.groupId
     || (round.inviteCode && group.inviteCode === round.inviteCode)
   ) || null;
+}
+
+const RENDER_FALLBACK_STATE = createDefaultState();
+
+function createRenderableHole(number) {
+  return {
+    id: `render-hole-${number}`,
+    number,
+    par: 4,
+    yards: "--",
+    handicapIndex: null,
+    notes: "",
+    entries: [],
+  };
+}
+
+function getRenderableHoles(round = {}) {
+  if (Array.isArray(round?.holes) && round.holes.length) {
+    return round.holes.map((hole, index) => ({
+      id: hole?.id || `render-hole-${hole?.number || index + 1}`,
+      number: Number.isFinite(Number(hole?.number)) ? Number(hole.number) : index + 1,
+      par: Number.isFinite(Number(hole?.par)) ? Number(hole.par) : 4,
+      yards: hole?.yards ?? "--",
+      handicapIndex: hole?.handicapIndex ?? null,
+      notes: hole?.notes || "",
+      entries: Array.isArray(hole?.entries) ? hole.entries : [],
+      ...hole,
+      entries: Array.isArray(hole?.entries) ? hole.entries : [],
+    }));
+  }
+
+  const holeCount = Number(round?.selectedHoleCount || round?.courseHoleCount || 18);
+  return Array.from({ length: holeCount > 0 ? holeCount : 18 }, (_, index) => createRenderableHole(index + 1));
+}
+
+function normalizeRenderableRound(round = {}) {
+  return {
+    ...round,
+    players: Array.isArray(round?.players) ? round.players : [],
+    holes: getRenderableHoles(round),
+    sides: Array.isArray(round?.sides) ? round.sides : [],
+    sync: {
+      label: "Local only",
+      note: "Offline-first local data foundation.",
+      transport: "local",
+      state: "idle",
+      ...(round?.sync || {}),
+    },
+  };
+}
+
+function normalizeRenderableGroup(group = {}) {
+  return {
+    ...group,
+    members: Array.isArray(group?.members) ? group.members : [],
+    feed: Array.isArray(group?.feed) ? group.feed : [],
+  };
+}
+
+function getRenderableState(state = {}) {
+  return {
+    ...RENDER_FALLBACK_STATE,
+    ...(state || {}),
+    auth: {
+      ...(RENDER_FALLBACK_STATE.auth || {}),
+      ...(state?.auth || {}),
+    },
+    currentUser: {
+      ...(RENDER_FALLBACK_STATE.currentUser || {}),
+      ...(state?.currentUser || {}),
+      privacy: {
+        ...(RENDER_FALLBACK_STATE.currentUser?.privacy || {}),
+        ...(state?.currentUser?.privacy || {}),
+      },
+      appearance: {
+        ...(RENDER_FALLBACK_STATE.currentUser?.appearance || {}),
+        ...(state?.currentUser?.appearance || {}),
+      },
+      social: {
+        ...(RENDER_FALLBACK_STATE.currentUser?.social || {}),
+        ...(state?.currentUser?.social || {}),
+        handles: {
+          ...(RENDER_FALLBACK_STATE.currentUser?.social?.handles || {}),
+          ...(state?.currentUser?.social?.handles || {}),
+        },
+      },
+      integrations: {
+        ...(RENDER_FALLBACK_STATE.currentUser?.integrations || {}),
+        ...(state?.currentUser?.integrations || {}),
+        spotify: {
+          ...(RENDER_FALLBACK_STATE.currentUser?.integrations?.spotify || {}),
+          ...(state?.currentUser?.integrations?.spotify || {}),
+        },
+      },
+      subscription: {
+        ...(RENDER_FALLBACK_STATE.currentUser?.subscription || {}),
+        ...(state?.currentUser?.subscription || {}),
+      },
+    },
+    social: {
+      ...(RENDER_FALLBACK_STATE.social || {}),
+      ...(state?.social || {}),
+      activity: Array.isArray(state?.social?.activity)
+        ? state.social.activity
+        : (RENDER_FALLBACK_STATE.social?.activity || []),
+    },
+    session: {
+      ...(RENDER_FALLBACK_STATE.session || {}),
+      ...(state?.session || {}),
+      cloudSync: {
+        ...(RENDER_FALLBACK_STATE.session?.cloudSync || {}),
+        ...(state?.session?.cloudSync || {}),
+      },
+      nearby: {
+        ...(RENDER_FALLBACK_STATE.session?.nearby || {}),
+        ...(state?.session?.nearby || {}),
+      },
+      spotify: {
+        ...(RENDER_FALLBACK_STATE.session?.spotify || {}),
+        ...(state?.session?.spotify || {}),
+      },
+      crashLog: {
+        ...(RENDER_FALLBACK_STATE.session?.crashLog || {}),
+        ...(state?.session?.crashLog || {}),
+      },
+    },
+    gear: {
+      ...(RENDER_FALLBACK_STATE.gear || {}),
+      ...(state?.gear || {}),
+    },
+    profiles: Array.isArray(state?.profiles) ? state.profiles : [],
+    rounds: Array.isArray(state?.rounds) ? state.rounds.map((round) => normalizeRenderableRound(round)) : [],
+    groups: Array.isArray(state?.groups) ? state.groups.map((group) => normalizeRenderableGroup(group)) : [],
+    tournaments: Array.isArray(state?.tournaments) ? state.tournaments : [],
+    accounts: Array.isArray(state?.accounts) ? state.accounts : (RENDER_FALLBACK_STATE.accounts || []),
+    accountVault: state?.accountVault || RENDER_FALLBACK_STATE.accountVault || {},
+  };
 }
 
 function getLiveSessionFromState(state) {
@@ -14471,8 +14874,9 @@ function updateLiveSession(root, session) {
   }
 }function createRenderer(root) {
   return function render(state) {
-    root.innerHTML = renderAppTemplate(state);
-    updateLiveSession(root, getLiveSessionFromState(state));
+    const renderableState = getRenderableState(state);
+    root.innerHTML = renderAppTemplate(renderableState);
+    updateLiveSession(root, getLiveSessionFromState(renderableState));
   };
 }
 
@@ -14510,6 +14914,10 @@ function getDefaultSettingsSectionForDestination(destination = "landing") {
   return "account";
 }
 function setActiveView(draft, nextView, transitionKind = "tab") {
+  if (!draft?.session) {
+    return;
+  }
+
   const previousView = draft.session.activeView || "home";
   const previousIndex = getViewIndex(previousView);
   const nextIndex = getViewIndex(nextView);
@@ -14535,6 +14943,10 @@ function setActiveView(draft, nextView, transitionKind = "tab") {
 
   draft.session.transitionDirection = "steady";
 }function openHelpView(draft, sectionId = "getting-started") {
+  if (!draft?.session) {
+    return;
+  }
+
   const currentView = draft.session.activeView || "home";
   draft.session.helpReturnView = draft.auth?.status === "authenticated"
     ? (currentView === "help" ? draft.session.helpReturnView || "home" : currentView)
@@ -14544,9 +14956,18 @@ function setActiveView(draft, nextView, transitionKind = "tab") {
   setActiveView(draft, "help", "focus");
 }
 function closeHelpView(draft) {
+  if (!draft?.session) {
+    return;
+  }
+
   const returnView = draft.session.helpReturnView || "home";
   setActiveView(draft, returnView === "auth" ? "home" : returnView, "return");
-}function openSettingsView(draft, sectionId = "account", destination = null) {
+}
+function openSettingsView(draft, sectionId = "account", destination = null) {
+  if (!draft?.session) {
+    return;
+  }
+
   const currentView = draft.session.activeView || "home";
   draft.session.settingsReturnView = currentView === "settings"
     ? (draft.session.settingsReturnView || "home")
@@ -14560,9 +14981,14 @@ function closeHelpView(draft) {
   setActiveView(draft, "settings", "focus");
 }
 function closeSettingsView(draft) {
+  if (!draft?.session) {
+    return;
+  }
+
   const returnView = draft.session.settingsReturnView || "home";
   setActiveView(draft, returnView, "return");
-}function applyJoinedRoundState(draft, joined, successTitle, successMessage) {
+}
+function applyJoinedRoundState(draft, joined, successTitle, successMessage) {
   upsertJoinedRoundIntoState(draft, joined);
   applyJoinedRoundConnectionState(joined.round, joined.source);
   focusRoundView(draft, joined.round.id, draft.currentUser.profileId, setActiveView);
@@ -14608,6 +15034,7 @@ function renderStartupShell(root, caption = "Preparing live rounds, player profi
 function showBootRecoveryScreen(root, {
   stage,
   error,
+  crashEntry = null,
   locationRef = typeof window !== "undefined" ? window.location : null,
   storage = null,
   onRetry = null,
@@ -14633,6 +15060,12 @@ function showBootRecoveryScreen(root, {
           <strong>${detail.stageLabel}</strong>
           <span>${detail.message}</span>
         </div>
+        ${crashEntry ? `
+          <div class="boot-recovery-detail">
+            <strong>Crash log saved</strong>
+            <span>${crashEntry.id}</span>
+          </div>
+        ` : ""}
         <div class="boot-recovery-actions">
           <button type="button" class="button button-primary" data-boot-action="retry">Retry</button>
           <button type="button" class="button button-secondary" data-boot-action="reset">Reset local app data</button>
@@ -14674,6 +15107,64 @@ function showBootRecoveryScreen(root, {
       }
     }
 
+    if (locationRef && typeof locationRef.reload === "function") {
+      locationRef.reload();
+    }
+  });
+}
+function showRuntimeRecoveryScreen(root, {
+  stage,
+  error,
+  crashEntry = null,
+  locationRef = typeof window !== "undefined" ? window.location : null,
+  onRetry = null,
+  onReturnHome = null,
+} = {}) {
+  const detail = createBootErrorMessage(stage, error);
+  console.error(`[Golfers Nation] Runtime render failed during ${stage || "runtime"}.`, error);
+
+  root.innerHTML = `
+    <section class="boot-recovery-shell" aria-live="polite">
+      <article class="boot-recovery-card" role="alert">
+        <p class="eyebrow">Golfers Nation</p>
+        <h1>This screen hit a problem.</h1>
+        <p class="body-copy">Golfers Nation is still on this device, but the current screen failed to render safely. Retry this screen, jump back to Play, or reload the app.</p>
+        <div class="boot-recovery-detail">
+          <strong>${detail.stageLabel}</strong>
+          <span>${detail.message}</span>
+        </div>
+        ${crashEntry ? `
+          <div class="boot-recovery-detail">
+            <strong>Crash log saved</strong>
+            <span>${crashEntry.id}</span>
+          </div>
+        ` : ""}
+        <div class="boot-recovery-actions">
+          <button type="button" class="button button-primary" data-runtime-action="retry">Retry screen</button>
+          <button type="button" class="button button-secondary" data-runtime-action="home">Go to Play</button>
+          <button type="button" class="button subtle" data-runtime-action="reload">Reload app</button>
+        </div>
+      </article>
+    </section>
+  `;
+
+  root.querySelector('[data-runtime-action="retry"]')?.addEventListener("click", () => {
+    try {
+      onRetry?.();
+    } catch (retryError) {
+      console.error("[Golfers Nation] Runtime retry failed immediately.", retryError);
+    }
+  });
+
+  root.querySelector('[data-runtime-action="home"]')?.addEventListener("click", () => {
+    try {
+      onReturnHome?.();
+    } catch (homeError) {
+      console.error("[Golfers Nation] Runtime recovery home action failed immediately.", homeError);
+    }
+  });
+
+  root.querySelector('[data-runtime-action="reload"]')?.addEventListener("click", () => {
     if (locationRef && typeof locationRef.reload === "function") {
       locationRef.reload();
     }
@@ -14965,6 +15456,31 @@ function getRoundHoleLimit(state) {
   const round = state.rounds?.find((entry) => entry.id === state.session?.activeRoundId) || null;
   return Math.max(1, Number(round?.holes?.length || round?.selectedHoleCount || 18));
 }
+
+function buildCrashContextSnapshot(state = null, extraContext = {}) {
+  const activeRound = state?.rounds?.find((round) => round.id === state?.session?.activeRoundId) || null;
+  const activeGroup = state?.groups?.find((group) =>
+    group.roundId === activeRound?.id
+    || group.id === activeRound?.groupId
+    || (activeRound?.inviteCode && group.inviteCode === activeRound.inviteCode)
+  ) || null;
+
+  return {
+    activeView: state?.session?.activeView || "",
+    activeRoundId: activeRound?.id || null,
+    activeGroupId: activeGroup?.id || null,
+    inviteCode: activeGroup?.inviteCode || activeRound?.inviteCode || null,
+    activeUserId: state?.auth?.activeUserId || null,
+    currentUserId: state?.currentUser?.id || null,
+    ...extraContext,
+  };
+}
+
+function getClosestEventElement(target, selector) {
+  return target && typeof target.closest === "function"
+    ? target.closest(selector)
+    : null;
+}
 function bootstrapApp({
   root = typeof document !== "undefined" ? document.querySelector("#app") : null,
   platformFactory = createProductPlatform,
@@ -14995,6 +15511,8 @@ function bootstrapApp({
 
   let bootFailed = false;
   let bootSettled = false;
+  let runtimeRecoveryActive = false;
+  let lastRuntimeFailureKey = "";
   let bootWatchdog = null;
   let scorePulseTimer = null;
   let roundSyncRetryTimer = null;
@@ -15006,6 +15524,34 @@ function bootstrapApp({
   const removeStartupGuards = [];
   const removeRuntimeListeners = [];
   const localDeviceId = `device-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  let initialState = null;
+  let store = null;
+
+  const getCrashLogSnapshot = () => getCrashLogSummary({ storage: availableStorage });
+
+  const refreshCrashLogState = () => {
+    if (!store) {
+      return getDefaultCrashLogState();
+    }
+
+    const summary = getCrashLogSnapshot();
+    store.setState((draft) => {
+      setCrashLogState(draft, summary);
+      return draft;
+    }, { reason: "refresh-crash-log-state" });
+    return summary;
+  };
+
+  const recordAppCrash = (stage, error, extraContext = {}) => {
+    const state = store?.getState?.() || initialState || null;
+    return recordCrashLog({
+      stage,
+      source: bootSettled ? "runtime" : "startup",
+      error,
+      storage: availableStorage,
+      context: buildCrashContextSnapshot(state, extraContext),
+    });
+  };
 
   const cleanupRuntime = () => {
     if (scorePulseTimer) {
@@ -15066,12 +15612,16 @@ function bootstrapApp({
     }
 
     bootFailed = true;
+    const crashEntry = recordAppCrash(stage, error, {
+      phase: "boot-failure",
+    });
     clearBootGuards();
     removeBeforeUnload();
     cleanupRuntime();
     showBootRecoveryScreen(root, {
       stage,
       error,
+      crashEntry,
       locationRef,
       storage: availableStorage,
       onRetry: () => bootstrapApp({
@@ -15085,6 +15635,34 @@ function bootstrapApp({
       }),
     });
     return { status: "failed", stage, error };
+  };
+
+  const failRuntime = (stage, error) => {
+    const failureKey = `${stage}:${error instanceof Error ? error.message : String(error || "")}`;
+    if (!runtimeRecoveryActive || failureKey !== lastRuntimeFailureKey) {
+      recordAppCrash(stage, error, {
+        phase: "runtime-render-failure",
+      });
+      lastRuntimeFailureKey = failureKey;
+    }
+
+    runtimeRecoveryActive = true;
+    showRuntimeRecoveryScreen(root, {
+      stage,
+      error,
+      crashEntry: getCrashLogSnapshot().entries?.[0] || null,
+      locationRef,
+      onRetry: () => {
+        safeRender(store?.getState?.() || initialState || createDefaultStateFn(), `${stage}-retry`);
+      },
+      onReturnHome: () => {
+        store?.setState((draft) => {
+          setActiveView(draft, "home", "return");
+          return draft;
+        }, { reason: "runtime-recovery-home" });
+      },
+    });
+    return { status: "runtime-failed", stage, error };
   };
 
   if (typeof window !== "undefined") {
@@ -15123,7 +15701,6 @@ function bootstrapApp({
     return failBoot("platform-init", error);
   }
 
-  let initialState;
   try {
     initialState = platform.data.loadInitialState(createDefaultStateFn);
   } catch (error) {
@@ -15153,7 +15730,9 @@ function bootstrapApp({
     initialState.session.transitionDirection = "steady";
   }
 
-  let store;
+  initialState.session = initialState.session || {};
+  initialState.session.crashLog = getCrashLogSnapshot();
+
   try {
     store = createStore(initialState);
   } catch (error) {
@@ -15170,9 +15749,15 @@ function bootstrapApp({
   const safeRender = (state, stage = "render") => {
     try {
       render(state);
+      runtimeRecoveryActive = false;
+      lastRuntimeFailureKey = "";
       return true;
     } catch (error) {
-      failBoot(stage, error);
+      if (bootSettled) {
+        failRuntime(stage, error);
+      } else {
+        failBoot(stage, error);
+      }
       return false;
     }
   };
@@ -15192,6 +15777,12 @@ function bootstrapApp({
       return draft;
     }, { reason: "render-tab" });
     return true;
+  };
+
+  const refreshCrashLogsIfNeeded = (destination = "", section = "") => {
+    if (destination === "app" && section === "app-support") {
+      refreshCrashLogState();
+    }
   };
 
   if (typeof window !== "undefined") {
@@ -15456,6 +16047,39 @@ function bootstrapApp({
   }
 
   finalizeBoot();
+
+  if (typeof window !== "undefined") {
+    const handleRuntimeError = (event) => {
+      if (!bootSettled || bootFailed) {
+        return;
+      }
+
+      const error = event?.error || new Error(event?.message || "Unhandled runtime error.");
+      recordAppCrash("window-error", error, {
+        phase: "runtime-window-error",
+      });
+      console.error("[Golfers Nation] Runtime window error recorded.", error);
+    };
+
+    const handleRuntimeRejection = (event) => {
+      if (!bootSettled || bootFailed) {
+        return;
+      }
+
+      const reason = event?.reason instanceof Error
+        ? event.reason
+        : new Error(String(event?.reason || "Unhandled runtime rejection."));
+      recordAppCrash("unhandled-rejection", reason, {
+        phase: "runtime-unhandled-rejection",
+      });
+      console.error("[Golfers Nation] Runtime rejection recorded.", reason);
+    };
+
+    window.addEventListener("error", handleRuntimeError);
+    window.addEventListener("unhandledrejection", handleRuntimeRejection);
+    removeRuntimeListeners.push(() => window.removeEventListener("error", handleRuntimeError));
+    removeRuntimeListeners.push(() => window.removeEventListener("unhandledrejection", handleRuntimeRejection));
+  }
 
   const syncInstallState = () => {
     const next = getInstallEnvironment(Boolean(deferredInstallPrompt));
@@ -16046,15 +16670,15 @@ function bootstrapApp({
   }
 
   root.addEventListener("click", async (event) => {
-      const clickedInsideMenu = Boolean(event.target.closest("[data-app-menu]"));
-      const clickedMenuToggle = Boolean(event.target.closest('[data-action="toggle-app-menu"]'));
-      const navButton = event.target.closest(".nav-btn[data-tab]");
+      const clickedInsideMenu = Boolean(getClosestEventElement(event.target, "[data-app-menu]"));
+      const clickedMenuToggle = Boolean(getClosestEventElement(event.target, '[data-action="toggle-app-menu"]'));
+      const navButton = getClosestEventElement(event.target, ".nav-btn[data-tab]");
       if (navButton) {
         renderTab(navButton.dataset.tab);
         return;
       }
 
-      const actionElement = event.target.closest("[data-action]");
+      const actionElement = getClosestEventElement(event.target, "[data-action]");
       if (!actionElement) {
         if (store.getState().session.appMenuOpen && !clickedInsideMenu && !clickedMenuToggle) {
           store.setState((draft) => {
@@ -16089,16 +16713,21 @@ function bootstrapApp({
           return;
         }
 
-        store.setState((draft) => {
-          const nextView = actionElement.dataset.view;
-          if (nextView === "help") {
-            openHelpView(draft, actionElement.dataset.section);
-            return draft;
-          }
-
-          setActiveView(draft, nextView, "tab");
+      store.setState((draft) => {
+        const nextView = actionElement.dataset.view;
+        if (nextView === "help") {
+          openHelpView(draft, actionElement.dataset.section);
           return draft;
-        }, { reason: "nav-view" });
+        }
+
+        if (!nextView) {
+          setFeedback(draft, "warning", "Screen unavailable", "That screen could not be opened from this action.");
+          return draft;
+        }
+
+        setActiveView(draft, nextView, "tab");
+        return draft;
+      }, { reason: "nav-view" });
         return;
       }
 
@@ -16128,6 +16757,10 @@ function bootstrapApp({
         );
         return draft;
       }, { reason: "open-settings" });
+      refreshCrashLogsIfNeeded(
+        store.getState().session?.settingsDestination || "",
+        store.getState().session?.settingsSection || ""
+      );
       return;
     }
 
@@ -16148,6 +16781,10 @@ function bootstrapApp({
         draft.session.appMenuOpen = false;
         return draft;
       }, { reason: "set-settings-section" });
+      refreshCrashLogsIfNeeded(
+        store.getState().session?.settingsDestination || "",
+        store.getState().session?.settingsSection || ""
+      );
       return;
     }
 
@@ -16162,6 +16799,10 @@ function bootstrapApp({
         draft.session.appMenuOpen = false;
         return draft;
       }, { reason: "set-settings-destination" });
+      refreshCrashLogsIfNeeded(
+        store.getState().session?.settingsDestination || "",
+        store.getState().session?.settingsSection || ""
+      );
       return;
     }
 
@@ -16993,6 +17634,63 @@ function bootstrapApp({
       return;
     }
 
+    if (action === "copy-crash-report") {
+      const summary = refreshCrashLogState();
+      if (!summary.count) {
+        store.setState((draft) => {
+          setFeedback(draft, "info", "No crash logs yet", "No startup or runtime crashes have been recorded on this device.");
+          return draft;
+        }, { reason: "copy-crash-report-empty" });
+        return;
+      }
+
+      const report = createCrashLogReport(summary, { storage: availableStorage });
+      const clipboard = typeof navigator === "undefined" ? null : navigator.clipboard;
+
+      if (!clipboard?.writeText) {
+        store.setState((draft) => {
+          setFeedback(
+            draft,
+            "warning",
+            "Clipboard unavailable",
+            "Crash logs are stored on this device, but clipboard copy is unavailable in this browser."
+          );
+          return draft;
+        }, { reason: "copy-crash-report-unavailable" });
+        return;
+      }
+
+      try {
+        await clipboard.writeText(report);
+        store.setState((draft) => {
+          setFeedback(draft, "success", "Crash report copied", "The local crash report is on your clipboard and ready to share with developers.");
+          return draft;
+        }, { reason: "copy-crash-report-success" });
+      } catch (error) {
+        console.warn("[Golfers Nation] Crash report copy failed.", error);
+        store.setState((draft) => {
+          setFeedback(
+            draft,
+            "warning",
+            "Crash report not copied",
+            "The crash report could not be copied. Try again in a browser with clipboard access."
+          );
+          return draft;
+        }, { reason: "copy-crash-report-error" });
+      }
+      return;
+    }
+
+    if (action === "clear-crash-logs") {
+      clearCrashLogEntries({ storage: availableStorage });
+      refreshCrashLogState();
+      store.setState((draft) => {
+        setFeedback(draft, "success", "Crash logs cleared", "Stored startup and runtime crash reports were removed from this device.");
+        return draft;
+      }, { reason: "clear-crash-logs" });
+      return;
+    }
+
     if (action === "invite-friends") {
       store.setState((draft) => {
         const activeRound = draft.rounds.find((round) => round.id === draft.session.activeRoundId) || null;
@@ -17104,13 +17802,13 @@ function bootstrapApp({
   });
 
   root.addEventListener("change", (event) => {
-    const appearanceInput = event.target.closest('[data-appearance-input]');
+    const appearanceInput = getClosestEventElement(event.target, '[data-appearance-input]');
     if (appearanceInput) {
       previewAppearanceFromForm(appearanceInput.form);
       return;
     }
 
-    const courseTeeInput = event.target.closest("[data-course-tee-select]");
+    const courseTeeInput = getClosestEventElement(event.target, "[data-course-tee-select]");
     if (courseTeeInput) {
       store.setState((draft) => {
         setSelectedTeeBox(draft, String(courseTeeInput.value || ""));
@@ -17119,7 +17817,7 @@ function bootstrapApp({
       return;
     }
 
-    const courseHoleCountInput = event.target.closest("[data-course-hole-count-select]");
+    const courseHoleCountInput = getClosestEventElement(event.target, "[data-course-hole-count-select]");
     if (courseHoleCountInput) {
       store.setState((draft) => {
         setSelectedHoleCount(draft, Number(courseHoleCountInput.value || 18));
@@ -17128,7 +17826,7 @@ function bootstrapApp({
       return;
     }
 
-    const input = event.target.closest("[data-score-field]");
+    const input = getClosestEventElement(event.target, "[data-score-field]");
     if (!input) {
       return;
     }
@@ -17157,7 +17855,7 @@ function bootstrapApp({
   });
 
   root.addEventListener("input", (event) => {
-    const courseSearchInput = event.target.closest("[data-course-search-input]");
+    const courseSearchInput = getClosestEventElement(event.target, "[data-course-search-input]");
     if (!courseSearchInput) {
       return;
     }
@@ -17172,7 +17870,7 @@ function bootstrapApp({
   });
 
   root.addEventListener("submit", async (event) => {
-    const form = event.target.closest("[data-form]");
+    const form = getClosestEventElement(event.target, "[data-form]");
     if (!form) {
       return;
     }

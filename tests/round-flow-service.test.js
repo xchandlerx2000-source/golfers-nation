@@ -27,6 +27,12 @@ describe("round flow service", () => {
     expect(minimal.note).toContain("A second golfer was added");
   });
 
+  it("falls back safely when the current user name is missing", () => {
+    const result = parsePlayers("Jordan Wells", "");
+
+    expect(result.names).toEqual(["Golfer", "Jordan Wells"]);
+  });
+
   it("builds a hosted group once and reuses it on later host requests", () => {
     const state = createDefaultState();
     const round = createRound({

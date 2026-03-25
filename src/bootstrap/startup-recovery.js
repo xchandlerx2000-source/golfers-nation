@@ -38,6 +38,7 @@ export function renderStartupShell(root, caption = "Preparing live rounds, playe
 export function showBootRecoveryScreen(root, {
   stage,
   error,
+  crashEntry = null,
   locationRef = typeof window !== "undefined" ? window.location : null,
   storage = null,
   onRetry = null,
@@ -63,6 +64,12 @@ export function showBootRecoveryScreen(root, {
           <strong>${detail.stageLabel}</strong>
           <span>${detail.message}</span>
         </div>
+        ${crashEntry ? `
+          <div class="boot-recovery-detail">
+            <strong>Crash log saved</strong>
+            <span>${crashEntry.id}</span>
+          </div>
+        ` : ""}
         <div class="boot-recovery-actions">
           <button type="button" class="button button-primary" data-boot-action="retry">Retry</button>
           <button type="button" class="button button-secondary" data-boot-action="reset">Reset local app data</button>
@@ -104,6 +111,65 @@ export function showBootRecoveryScreen(root, {
       }
     }
 
+    if (locationRef && typeof locationRef.reload === "function") {
+      locationRef.reload();
+    }
+  });
+}
+
+export function showRuntimeRecoveryScreen(root, {
+  stage,
+  error,
+  crashEntry = null,
+  locationRef = typeof window !== "undefined" ? window.location : null,
+  onRetry = null,
+  onReturnHome = null,
+} = {}) {
+  const detail = createBootErrorMessage(stage, error);
+  console.error(`[Golfers Nation] Runtime render failed during ${stage || "runtime"}.`, error);
+
+  root.innerHTML = `
+    <section class="boot-recovery-shell" aria-live="polite">
+      <article class="boot-recovery-card" role="alert">
+        <p class="eyebrow">Golfers Nation</p>
+        <h1>This screen hit a problem.</h1>
+        <p class="body-copy">Golfers Nation is still on this device, but the current screen failed to render safely. Retry this screen, jump back to Play, or reload the app.</p>
+        <div class="boot-recovery-detail">
+          <strong>${detail.stageLabel}</strong>
+          <span>${detail.message}</span>
+        </div>
+        ${crashEntry ? `
+          <div class="boot-recovery-detail">
+            <strong>Crash log saved</strong>
+            <span>${crashEntry.id}</span>
+          </div>
+        ` : ""}
+        <div class="boot-recovery-actions">
+          <button type="button" class="button button-primary" data-runtime-action="retry">Retry screen</button>
+          <button type="button" class="button button-secondary" data-runtime-action="home">Go to Play</button>
+          <button type="button" class="button subtle" data-runtime-action="reload">Reload app</button>
+        </div>
+      </article>
+    </section>
+  `;
+
+  root.querySelector('[data-runtime-action="retry"]')?.addEventListener("click", () => {
+    try {
+      onRetry?.();
+    } catch (retryError) {
+      console.error("[Golfers Nation] Runtime retry failed immediately.", retryError);
+    }
+  });
+
+  root.querySelector('[data-runtime-action="home"]')?.addEventListener("click", () => {
+    try {
+      onReturnHome?.();
+    } catch (homeError) {
+      console.error("[Golfers Nation] Runtime recovery home action failed immediately.", homeError);
+    }
+  });
+
+  root.querySelector('[data-runtime-action="reload"]')?.addEventListener("click", () => {
     if (locationRef && typeof locationRef.reload === "function") {
       locationRef.reload();
     }

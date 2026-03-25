@@ -39,6 +39,24 @@ export function getDefaultCloudSyncState() {
   };
 }
 
+export function getDefaultCrashLogState() {
+  return {
+    count: 0,
+    lastCrashAt: "",
+    latestStage: "",
+    latestMessage: "",
+    entries: [],
+  };
+}
+
+export function setCrashLogState(draft, summary = {}) {
+  draft.session.crashLog = {
+    ...getDefaultCrashLogState(),
+    ...(summary || {}),
+    entries: Array.isArray(summary?.entries) ? summary.entries : [],
+  };
+}
+
 export function getDefaultNearbySessionState() {
   return createDefaultNearbyState();
 }

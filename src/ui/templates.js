@@ -224,11 +224,11 @@ const PRIMARY_NAV_TABS = [
 ];
 
 function getActiveRound(state) {
-  return state.rounds.find((round) => round.id === state.session.activeRoundId) || null;
+  return (state?.rounds || []).find((round) => round.id === state?.session?.activeRoundId) || null;
 }
 
 function getSummaryRound(state) {
-  return state.rounds.find((round) => round.id === state.session.summaryRoundId) || null;
+  return (state?.rounds || []).find((round) => round.id === state?.session?.summaryRoundId) || null;
 }
 
 function getActiveGroup(state, round) {
@@ -236,17 +236,17 @@ function getActiveGroup(state, round) {
     return null;
   }
 
-  return state.groups.find((group) => group.roundId === round.id) || null;
+  return (state?.groups || []).find((group) => group.roundId === round.id) || null;
 }
 
 function getCompletedRounds(state) {
-  return state.rounds
+  return (state?.rounds || [])
     .filter((round) => round.status === "completed")
     .sort((left, right) => (right.completedAt || 0) - (left.completedAt || 0));
 }
 
 function getSubscription(state) {
-  return state.currentUser.subscription || {
+  return state?.currentUser?.subscription || {
     tier: "free",
     planName: "Free",
     status: "active",
@@ -254,8 +254,12 @@ function getSubscription(state) {
   };
 }
 
+function getGameModeLabel(modeId = "stroke") {
+  return GAME_MODES[modeId]?.label || GAME_MODES.stroke.label;
+}
+
 function getNavActiveView(state) {
-  const activeView = state.session.activeView || "home";
+  const activeView = state?.session?.activeView || "home";
 
   if (PRIMARY_NAV_TABS.some((view) => view.id === activeView)) {
     return activeView;
@@ -266,7 +270,7 @@ function getNavActiveView(state) {
   }
 
   if (activeView === "help") {
-    const fallback = state.session.helpReturnView || state.session.previousView || "home";
+    const fallback = state?.session?.helpReturnView || state?.session?.previousView || "home";
     if (fallback === "auth") {
       return "home";
     }
@@ -2405,6 +2409,14 @@ function renderAppSupportSettingsCard(state) {
     .map((entry) => entry.message)
     .join(" | ");
   const contextView = state.session.settingsReturnView || state.session.previousView || "stats";
+  const crashLog = state.session?.crashLog || {
+    count: 0,
+    lastCrashAt: "",
+    latestStage: "",
+    latestMessage: "",
+    entries: [],
+  };
+  const crashEntries = Array.isArray(crashLog.entries) ? crashLog.entries.slice(0, 3) : [];
 
   return `
     <article class="card settings-card" data-settings-card="app-support">
@@ -2458,6 +2470,33 @@ function renderAppSupportSettingsCard(state) {
           <span>Email</span>
         </button>
       </div>
+      <article class="settings-support-panel">
+        <span class="mini-label">Crash logs</span>
+        <strong>Local startup and runtime reports</strong>
+        <p class="body-copy compact-copy">
+          ${crashLog.count
+            ? `Stored on this device for developer review. Latest crash: ${escapeHtml(crashLog.latestStage || "runtime")} at ${escapeHtml(formatDateTime(crashLog.lastCrashAt))}.`
+            : "No startup or runtime crashes have been recorded on this device yet."}
+        </p>
+        <div class="row-actions">
+          <button class="button secondary" type="button" data-action="copy-crash-report" ${crashLog.count ? "" : "disabled"}>Copy crash report</button>
+          <button class="button subtle" type="button" data-action="clear-crash-logs" ${crashLog.count ? "" : "disabled"}>Clear logs</button>
+        </div>
+        ${crashEntries.length ? `
+          <div class="stack-list settings-support-list crash-log-list">
+            ${crashEntries.map((entry) => `
+              <article class="list-row large crash-log-entry">
+                <div>
+                  <strong>${escapeHtml(entry.stage || "runtime")}</strong>
+                  <p>${escapeHtml(entry.message || "Unknown error.")}</p>
+                  <p>${escapeHtml(formatDateTime(entry.createdAt))}</p>
+                </div>
+                <span>${escapeHtml(entry.id || "")}</span>
+              </article>
+            `).join("")}
+          </div>
+        ` : ""}
+      </article>
       <article class="settings-support-panel">
         <span class="mini-label">Tester feedback</span>
         <strong>Send field-test notes without leaving the app</strong>
@@ -2656,11 +2695,11 @@ function renderHomeView(state) {
 
 function renderModeNotes(state, mode) {
   const subscription = getSubscription(state);
-  const premiumModes = PREMIUM_MODE_IDS.map((modeId) => GAME_MODES[modeId].label).join(" and ");
+  const premiumModes = PREMIUM_MODE_IDS.map((modeId) => getGameModeLabel(modeId)).join(" and ");
 
   return `
     <div class="mode-strip">
-      <span class="status-pill">Mode in play: ${escapeHtml(GAME_MODES[mode].label)}</span>
+      <span class="status-pill">Mode in play: ${escapeHtml(getGameModeLabel(mode))}</span>
       <span class="status-pill">${isPremiumSubscription(subscription) ? "Premium modes unlocked" : `${escapeHtml(premiumModes)} unlock with Premium`}</span>
     </div>
   `;
@@ -2870,7 +2909,7 @@ function renderCreateRoundCard(state, activeRound) {
     activeRound?.teeBox || "Blue",
     { holeCount: roundSetup.selectedHoleCount || 18 }
   );
-  const premiumModesLabel = PREMIUM_MODE_IDS.map((modeId) => GAME_MODES[modeId].label).join(" and ");
+  const premiumModesLabel = PREMIUM_MODE_IDS.map((modeId) => getGameModeLabel(modeId)).join(" and ");
 
   return `
     <article class="card">
@@ -4221,7 +4260,7 @@ function renderCommunityView(state) {
               </article>
               <article>
                 <span>Mode</span>
-                <strong>${escapeHtml(GAME_MODES[activeRound.mode].label)}</strong>
+                <strong>${escapeHtml(getGameModeLabel(activeRound.mode))}</strong>
               </article>
               <article>
                 <span>Invite</span>

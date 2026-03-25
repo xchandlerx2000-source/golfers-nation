@@ -18,10 +18,21 @@ import {
   refreshAppBuild,
   registerServiceWorker,
 } from "./bootstrap/app-bootstrap.js";
-import { applyStartupWarning, renderStartupShell, showBootRecoveryScreen } from "./bootstrap/startup-recovery.js";
+import {
+  applyStartupWarning,
+  renderStartupShell,
+  showBootRecoveryScreen,
+  showRuntimeRecoveryScreen,
+} from "./bootstrap/startup-recovery.js";
 import { APP_VERSION, STORAGE_KEY } from "./config.js";
 import { joinByInviteCode } from "./services/mock-api.js";
 import { createDefaultNearbyState } from "./services/nearby-detection-service.js";
+import {
+  clearCrashLogEntries,
+  createCrashLogReport,
+  getCrashLogSummary,
+  recordCrashLog,
+} from "./services/crash-log-service.js";
 import {
   connectSpotifyCompanion,
   createSpotifySessionState,
@@ -67,8 +78,10 @@ import {
   appendActivity,
   clearFeedback,
   getCloudSyncCopy,
+  getDefaultCrashLogState,
   getDefaultNearbySessionState,
   resetCloudSyncState,
+  setCrashLogState,
   setCloudSyncState,
   setFeedback,
   setNearbySessionState,
@@ -108,6 +121,31 @@ function getRoundHoleLimit(state) {
   return Math.max(1, Number(round?.holes?.length || round?.selectedHoleCount || 18));
 }
 
+function buildCrashContextSnapshot(state = null, extraContext = {}) {
+  const activeRound = state?.rounds?.find((round) => round.id === state?.session?.activeRoundId) || null;
+  const activeGroup = state?.groups?.find((group) =>
+    group.roundId === activeRound?.id
+    || group.id === activeRound?.groupId
+    || (activeRound?.inviteCode && group.inviteCode === activeRound.inviteCode)
+  ) || null;
+
+  return {
+    activeView: state?.session?.activeView || "",
+    activeRoundId: activeRound?.id || null,
+    activeGroupId: activeGroup?.id || null,
+    inviteCode: activeGroup?.inviteCode || activeRound?.inviteCode || null,
+    activeUserId: state?.auth?.activeUserId || null,
+    currentUserId: state?.currentUser?.id || null,
+    ...extraContext,
+  };
+}
+
+function getClosestEventElement(target, selector) {
+  return target && typeof target.closest === "function"
+    ? target.closest(selector)
+    : null;
+}
+
 export function bootstrapApp({
   root = typeof document !== "undefined" ? document.querySelector("#app") : null,
   platformFactory = createProductPlatform,
@@ -138,6 +176,8 @@ export function bootstrapApp({
 
   let bootFailed = false;
   let bootSettled = false;
+  let runtimeRecoveryActive = false;
+  let lastRuntimeFailureKey = "";
   let bootWatchdog = null;
   let scorePulseTimer = null;
   let roundSyncRetryTimer = null;
@@ -149,6 +189,34 @@ export function bootstrapApp({
   const removeStartupGuards = [];
   const removeRuntimeListeners = [];
   const localDeviceId = `device-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  let initialState = null;
+  let store = null;
+
+  const getCrashLogSnapshot = () => getCrashLogSummary({ storage: availableStorage });
+
+  const refreshCrashLogState = () => {
+    if (!store) {
+      return getDefaultCrashLogState();
+    }
+
+    const summary = getCrashLogSnapshot();
+    store.setState((draft) => {
+      setCrashLogState(draft, summary);
+      return draft;
+    }, { reason: "refresh-crash-log-state" });
+    return summary;
+  };
+
+  const recordAppCrash = (stage, error, extraContext = {}) => {
+    const state = store?.getState?.() || initialState || null;
+    return recordCrashLog({
+      stage,
+      source: bootSettled ? "runtime" : "startup",
+      error,
+      storage: availableStorage,
+      context: buildCrashContextSnapshot(state, extraContext),
+    });
+  };
 
   const cleanupRuntime = () => {
     if (scorePulseTimer) {
@@ -209,12 +277,16 @@ export function bootstrapApp({
     }
 
     bootFailed = true;
+    const crashEntry = recordAppCrash(stage, error, {
+      phase: "boot-failure",
+    });
     clearBootGuards();
     removeBeforeUnload();
     cleanupRuntime();
     showBootRecoveryScreen(root, {
       stage,
       error,
+      crashEntry,
       locationRef,
       storage: availableStorage,
       onRetry: () => bootstrapApp({
@@ -228,6 +300,34 @@ export function bootstrapApp({
       }),
     });
     return { status: "failed", stage, error };
+  };
+
+  const failRuntime = (stage, error) => {
+    const failureKey = `${stage}:${error instanceof Error ? error.message : String(error || "")}`;
+    if (!runtimeRecoveryActive || failureKey !== lastRuntimeFailureKey) {
+      recordAppCrash(stage, error, {
+        phase: "runtime-render-failure",
+      });
+      lastRuntimeFailureKey = failureKey;
+    }
+
+    runtimeRecoveryActive = true;
+    showRuntimeRecoveryScreen(root, {
+      stage,
+      error,
+      crashEntry: getCrashLogSnapshot().entries?.[0] || null,
+      locationRef,
+      onRetry: () => {
+        safeRender(store?.getState?.() || initialState || createDefaultStateFn(), `${stage}-retry`);
+      },
+      onReturnHome: () => {
+        store?.setState((draft) => {
+          setActiveView(draft, "home", "return");
+          return draft;
+        }, { reason: "runtime-recovery-home" });
+      },
+    });
+    return { status: "runtime-failed", stage, error };
   };
 
   if (typeof window !== "undefined") {
@@ -266,7 +366,6 @@ export function bootstrapApp({
     return failBoot("platform-init", error);
   }
 
-  let initialState;
   try {
     initialState = platform.data.loadInitialState(createDefaultStateFn);
   } catch (error) {
@@ -296,7 +395,9 @@ export function bootstrapApp({
     initialState.session.transitionDirection = "steady";
   }
 
-  let store;
+  initialState.session = initialState.session || {};
+  initialState.session.crashLog = getCrashLogSnapshot();
+
   try {
     store = createStore(initialState);
   } catch (error) {
@@ -313,9 +414,15 @@ export function bootstrapApp({
   const safeRender = (state, stage = "render") => {
     try {
       render(state);
+      runtimeRecoveryActive = false;
+      lastRuntimeFailureKey = "";
       return true;
     } catch (error) {
-      failBoot(stage, error);
+      if (bootSettled) {
+        failRuntime(stage, error);
+      } else {
+        failBoot(stage, error);
+      }
       return false;
     }
   };
@@ -335,6 +442,12 @@ export function bootstrapApp({
       return draft;
     }, { reason: "render-tab" });
     return true;
+  };
+
+  const refreshCrashLogsIfNeeded = (destination = "", section = "") => {
+    if (destination === "app" && section === "app-support") {
+      refreshCrashLogState();
+    }
   };
 
   if (typeof window !== "undefined") {
@@ -599,6 +712,39 @@ export function bootstrapApp({
   }
 
   finalizeBoot();
+
+  if (typeof window !== "undefined") {
+    const handleRuntimeError = (event) => {
+      if (!bootSettled || bootFailed) {
+        return;
+      }
+
+      const error = event?.error || new Error(event?.message || "Unhandled runtime error.");
+      recordAppCrash("window-error", error, {
+        phase: "runtime-window-error",
+      });
+      console.error("[Golfers Nation] Runtime window error recorded.", error);
+    };
+
+    const handleRuntimeRejection = (event) => {
+      if (!bootSettled || bootFailed) {
+        return;
+      }
+
+      const reason = event?.reason instanceof Error
+        ? event.reason
+        : new Error(String(event?.reason || "Unhandled runtime rejection."));
+      recordAppCrash("unhandled-rejection", reason, {
+        phase: "runtime-unhandled-rejection",
+      });
+      console.error("[Golfers Nation] Runtime rejection recorded.", reason);
+    };
+
+    window.addEventListener("error", handleRuntimeError);
+    window.addEventListener("unhandledrejection", handleRuntimeRejection);
+    removeRuntimeListeners.push(() => window.removeEventListener("error", handleRuntimeError));
+    removeRuntimeListeners.push(() => window.removeEventListener("unhandledrejection", handleRuntimeRejection));
+  }
 
   const syncInstallState = () => {
     const next = getInstallEnvironment(Boolean(deferredInstallPrompt));
@@ -1189,15 +1335,15 @@ export function bootstrapApp({
   }
 
   root.addEventListener("click", async (event) => {
-      const clickedInsideMenu = Boolean(event.target.closest("[data-app-menu]"));
-      const clickedMenuToggle = Boolean(event.target.closest('[data-action="toggle-app-menu"]'));
-      const navButton = event.target.closest(".nav-btn[data-tab]");
+      const clickedInsideMenu = Boolean(getClosestEventElement(event.target, "[data-app-menu]"));
+      const clickedMenuToggle = Boolean(getClosestEventElement(event.target, '[data-action="toggle-app-menu"]'));
+      const navButton = getClosestEventElement(event.target, ".nav-btn[data-tab]");
       if (navButton) {
         renderTab(navButton.dataset.tab);
         return;
       }
 
-      const actionElement = event.target.closest("[data-action]");
+      const actionElement = getClosestEventElement(event.target, "[data-action]");
       if (!actionElement) {
         if (store.getState().session.appMenuOpen && !clickedInsideMenu && !clickedMenuToggle) {
           store.setState((draft) => {
@@ -1232,16 +1378,21 @@ export function bootstrapApp({
           return;
         }
 
-        store.setState((draft) => {
-          const nextView = actionElement.dataset.view;
-          if (nextView === "help") {
-            openHelpView(draft, actionElement.dataset.section);
-            return draft;
-          }
-
-          setActiveView(draft, nextView, "tab");
+      store.setState((draft) => {
+        const nextView = actionElement.dataset.view;
+        if (nextView === "help") {
+          openHelpView(draft, actionElement.dataset.section);
           return draft;
-        }, { reason: "nav-view" });
+        }
+
+        if (!nextView) {
+          setFeedback(draft, "warning", "Screen unavailable", "That screen could not be opened from this action.");
+          return draft;
+        }
+
+        setActiveView(draft, nextView, "tab");
+        return draft;
+      }, { reason: "nav-view" });
         return;
       }
 
@@ -1271,6 +1422,10 @@ export function bootstrapApp({
         );
         return draft;
       }, { reason: "open-settings" });
+      refreshCrashLogsIfNeeded(
+        store.getState().session?.settingsDestination || "",
+        store.getState().session?.settingsSection || ""
+      );
       return;
     }
 
@@ -1291,6 +1446,10 @@ export function bootstrapApp({
         draft.session.appMenuOpen = false;
         return draft;
       }, { reason: "set-settings-section" });
+      refreshCrashLogsIfNeeded(
+        store.getState().session?.settingsDestination || "",
+        store.getState().session?.settingsSection || ""
+      );
       return;
     }
 
@@ -1305,6 +1464,10 @@ export function bootstrapApp({
         draft.session.appMenuOpen = false;
         return draft;
       }, { reason: "set-settings-destination" });
+      refreshCrashLogsIfNeeded(
+        store.getState().session?.settingsDestination || "",
+        store.getState().session?.settingsSection || ""
+      );
       return;
     }
 
@@ -2136,6 +2299,63 @@ export function bootstrapApp({
       return;
     }
 
+    if (action === "copy-crash-report") {
+      const summary = refreshCrashLogState();
+      if (!summary.count) {
+        store.setState((draft) => {
+          setFeedback(draft, "info", "No crash logs yet", "No startup or runtime crashes have been recorded on this device.");
+          return draft;
+        }, { reason: "copy-crash-report-empty" });
+        return;
+      }
+
+      const report = createCrashLogReport(summary, { storage: availableStorage });
+      const clipboard = typeof navigator === "undefined" ? null : navigator.clipboard;
+
+      if (!clipboard?.writeText) {
+        store.setState((draft) => {
+          setFeedback(
+            draft,
+            "warning",
+            "Clipboard unavailable",
+            "Crash logs are stored on this device, but clipboard copy is unavailable in this browser."
+          );
+          return draft;
+        }, { reason: "copy-crash-report-unavailable" });
+        return;
+      }
+
+      try {
+        await clipboard.writeText(report);
+        store.setState((draft) => {
+          setFeedback(draft, "success", "Crash report copied", "The local crash report is on your clipboard and ready to share with developers.");
+          return draft;
+        }, { reason: "copy-crash-report-success" });
+      } catch (error) {
+        console.warn("[Golfers Nation] Crash report copy failed.", error);
+        store.setState((draft) => {
+          setFeedback(
+            draft,
+            "warning",
+            "Crash report not copied",
+            "The crash report could not be copied. Try again in a browser with clipboard access."
+          );
+          return draft;
+        }, { reason: "copy-crash-report-error" });
+      }
+      return;
+    }
+
+    if (action === "clear-crash-logs") {
+      clearCrashLogEntries({ storage: availableStorage });
+      refreshCrashLogState();
+      store.setState((draft) => {
+        setFeedback(draft, "success", "Crash logs cleared", "Stored startup and runtime crash reports were removed from this device.");
+        return draft;
+      }, { reason: "clear-crash-logs" });
+      return;
+    }
+
     if (action === "invite-friends") {
       store.setState((draft) => {
         const activeRound = draft.rounds.find((round) => round.id === draft.session.activeRoundId) || null;
@@ -2247,13 +2467,13 @@ export function bootstrapApp({
   });
 
   root.addEventListener("change", (event) => {
-    const appearanceInput = event.target.closest('[data-appearance-input]');
+    const appearanceInput = getClosestEventElement(event.target, '[data-appearance-input]');
     if (appearanceInput) {
       previewAppearanceFromForm(appearanceInput.form);
       return;
     }
 
-    const courseTeeInput = event.target.closest("[data-course-tee-select]");
+    const courseTeeInput = getClosestEventElement(event.target, "[data-course-tee-select]");
     if (courseTeeInput) {
       store.setState((draft) => {
         setSelectedTeeBox(draft, String(courseTeeInput.value || ""));
@@ -2262,7 +2482,7 @@ export function bootstrapApp({
       return;
     }
 
-    const courseHoleCountInput = event.target.closest("[data-course-hole-count-select]");
+    const courseHoleCountInput = getClosestEventElement(event.target, "[data-course-hole-count-select]");
     if (courseHoleCountInput) {
       store.setState((draft) => {
         setSelectedHoleCount(draft, Number(courseHoleCountInput.value || 18));
@@ -2271,7 +2491,7 @@ export function bootstrapApp({
       return;
     }
 
-    const input = event.target.closest("[data-score-field]");
+    const input = getClosestEventElement(event.target, "[data-score-field]");
     if (!input) {
       return;
     }
@@ -2300,7 +2520,7 @@ export function bootstrapApp({
   });
 
   root.addEventListener("input", (event) => {
-    const courseSearchInput = event.target.closest("[data-course-search-input]");
+    const courseSearchInput = getClosestEventElement(event.target, "[data-course-search-input]");
     if (!courseSearchInput) {
       return;
     }
@@ -2315,7 +2535,7 @@ export function bootstrapApp({
   });
 
   root.addEventListener("submit", async (event) => {
-    const form = event.target.closest("[data-form]");
+    const form = getClosestEventElement(event.target, "[data-form]");
     if (!form) {
       return;
     }

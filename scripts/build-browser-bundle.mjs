@@ -18,6 +18,7 @@ const files = [
   "src/state/session-state.js",
   "src/state/round-state.js",
   "src/services/storage-service.js",
+  "src/services/crash-log-service.js",
   "src/integrations/spotify-service.js",
   "src/services/course-library.js",
   "src/services/course-providers/local-course-provider.js",

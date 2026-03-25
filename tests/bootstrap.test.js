@@ -6,6 +6,7 @@ import { bootstrapApp } from "../src/main.js";
 import { createRound } from "../src/domain/factories.js";
 import { appendRoundAction, applyRoundActionEvent, createRoundActionEvent } from "../src/domain/round-sync.js";
 import { createEmailAccount, loadAccountIntoState, prepareStateForPersistence } from "../src/services/account-service.js";
+import { readCrashLogEntries } from "../src/services/crash-log-service.js";
 import { persistState } from "../src/services/storage-service.js";
 import { createDefaultState } from "../src/state/default-state.js";
 import { createRenderer } from "../src/ui/render.js";
@@ -524,6 +525,96 @@ describe("bootstrap app", () => {
     expect(reload).toHaveBeenCalledTimes(0);
 
     expect(secondResult.status).toBe("failed");
+  });
+
+  it("records a local crash log when startup fails before the app shell is ready", () => {
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      platformFactory: createSuccessPlatform,
+      createDefaultStateFn: createDefaultState,
+      rendererFactory() {
+        throw new Error("Renderer could not start.");
+      },
+      timeoutMs: 50,
+    });
+
+    expect(result.status).toBe("failed");
+    expect(document.body.textContent).toContain("Crash log saved");
+
+    const entries = readCrashLogEntries();
+    expect(entries[0].stage).toBe("renderer-init");
+    expect(entries[0].message).toBe("Renderer could not start.");
+  });
+
+  it("shows a runtime recovery screen when a later render fails after boot", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Runtime Guard",
+      email: "runtimeguard@example.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+
+    let renderCount = 0;
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      platformFactory() {
+        return {
+          auth: {
+            restoreSession(nextState) {
+              return nextState;
+            },
+          },
+          data: {
+            loadInitialState() {
+              return state;
+            },
+            prepareForPersistence(nextState) {
+              return nextState;
+            },
+            persist() {},
+            saveWorkspace() {},
+          },
+          realtime: {
+            createSession() {
+              return {
+                connect() {},
+                disconnect() {},
+                publishRoundUpdate() {},
+                enableNearbySync() {},
+                enableBluetoothSync() {
+                  return Promise.resolve();
+                },
+                updateTransport() {},
+              };
+            },
+          },
+        };
+      },
+      rendererFactory(root) {
+        const baseRender = createRenderer(root);
+        return (nextState) => {
+          renderCount += 1;
+          if (renderCount > 1) {
+            throw new Error("Late screen render failure.");
+          }
+          baseRender(nextState);
+        };
+      },
+      timeoutMs: 50,
+    });
+
+    expect(result.status).toBe("ready");
+
+    result.store.setState((draft) => {
+      draft.session.activeView = "community";
+      return draft;
+    }, { reason: "test-runtime-render-failure" });
+
+    expect(document.body.textContent).toContain("This screen hit a problem.");
+    expect(document.body.textContent).toContain("Go to Play");
+
+    result.destroy();
   });
 
   it("previews appearance changes immediately and saves them to the golfer account", () => {

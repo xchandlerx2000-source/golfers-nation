@@ -10,6 +10,7 @@ const HOSTED_ROUND_NOTE = "Invite code is live. The original host can leave and 
 const JOINED_ROUND_NOTE = "This device now carries its own safe copy of the live round, even if the original host leaves.";
 
 export function parsePlayers(value, currentUserName) {
+  const safeCurrentUserName = String(currentUserName || "").trim() || "Golfer";
   const names = String(value || "")
     .split(",")
     .map((item) => item.trim())
@@ -27,11 +28,11 @@ export function parsePlayers(value, currentUserName) {
     deduped.push(name);
   });
 
-  if (!seen.has(currentUserName.toLowerCase())) {
-    deduped.unshift(currentUserName);
-    seen.add(currentUserName.toLowerCase());
+  if (!seen.has(safeCurrentUserName.toLowerCase())) {
+    deduped.unshift(safeCurrentUserName);
+    seen.add(safeCurrentUserName.toLowerCase());
   } else {
-    const currentIndex = deduped.findIndex((name) => name.toLowerCase() === currentUserName.toLowerCase());
+    const currentIndex = deduped.findIndex((name) => name.toLowerCase() === safeCurrentUserName.toLowerCase());
     if (currentIndex > 0) {
       const [currentName] = deduped.splice(currentIndex, 1);
       deduped.unshift(currentName);
@@ -60,14 +61,22 @@ export function getDefaultRoundSetup() {
 }
 
 export function getRoundSetupState(state) {
-  return getCourseRoundSetupState(state.session?.roundSetup || {});
+  return getCourseRoundSetupState(state?.session?.roundSetup || {});
 }
 
 export function resetRoundSetup(draft) {
+  if (!draft?.session) {
+    return;
+  }
+
   draft.session.roundSetup = getDefaultRoundSetup();
 }
 
 export function setSelectedCourse(draft, courseId, teeBoxId = "") {
+  if (!draft?.session) {
+    return;
+  }
+
   const course = getCourseById(courseId);
   if (!course) {
     draft.session.roundSetup = {
@@ -91,6 +100,10 @@ export function setSelectedCourse(draft, courseId, teeBoxId = "") {
 }
 
 export function setSelectedTeeBox(draft, teeBoxId = "") {
+  if (!draft?.session) {
+    return;
+  }
+
   draft.session.roundSetup = {
     ...getRoundSetupState(draft),
     selectedTeeBoxId: teeBoxId || "",
@@ -98,6 +111,10 @@ export function setSelectedTeeBox(draft, teeBoxId = "") {
 }
 
 export function setSelectedHoleCount(draft, holeCount = 18) {
+  if (!draft?.session) {
+    return;
+  }
+
   const roundSetup = getRoundSetupState(draft);
   const course = roundSetup.selectedCourseId ? getCourseById(roundSetup.selectedCourseId) : null;
   const maxHoleCount = Number(course?.holesCount || 18);
@@ -110,6 +127,10 @@ export function setSelectedHoleCount(draft, holeCount = 18) {
 }
 
 export function focusRoundView(draft, roundId, profileId, setActiveView) {
+  if (!draft?.session || typeof setActiveView !== "function") {
+    return;
+  }
+
   draft.session.activeRoundId = roundId;
   draft.session.selectedHole = 1;
   draft.session.selectedProfileId = profileId;

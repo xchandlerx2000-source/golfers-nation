@@ -373,11 +373,28 @@ describe("ui helpers", () => {
     state.session.settingsDestination = "app";
     state.session.settingsSection = "app-support";
     state.session.settingsReturnView = "stats";
+    state.session.crashLog = {
+      count: 1,
+      lastCrashAt: "2026-03-24T06:30:00.000Z",
+      latestStage: "window-error",
+      latestMessage: "Boom",
+      entries: [
+        {
+          id: "crash-123",
+          createdAt: "2026-03-24T06:30:00.000Z",
+          stage: "window-error",
+          message: "Boom",
+        },
+      ],
+    };
 
     const markup = renderAppTemplate(state);
 
     expect(markup).toContain('data-form="submit-tester-feedback"');
     expect(markup).toContain("Send tester feedback");
+    expect(markup).toContain("Crash logs");
+    expect(markup).toContain('data-action="copy-crash-report"');
+    expect(markup).toContain("crash-123");
   });
 
   it("disables community sync controls when there is no active round", () => {
