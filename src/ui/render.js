@@ -208,6 +208,16 @@ const HARD_RESET_RENDER_REASONS = new Set([
   "sign-out",
 ]);
 
+const LOCAL_SETTINGS_SYNC_REASONS = new Set([
+  "initial-render",
+  "open-settings",
+  "open-current-profile",
+  "render-tab",
+  "nav-view",
+  "auth-login",
+  "auth-signup",
+]);
+
 function getScrollHost(root) {
   if (!root) {
     return null;
@@ -247,17 +257,180 @@ function restorePersistedDetailKeys(root, detailKeys = []) {
   });
 }
 
+function getDefaultSettingsSectionId(destination = "landing") {
+  if (destination === "profile") {
+    return "profile-identity";
+  }
+
+  if (destination === "app") {
+    return "account";
+  }
+
+  return "account";
+}
+
+function normalizeLocalSettingsState(localUiState = {}, state = {}) {
+  const destination = localUiState.settingsDestination || state?.session?.settingsDestination || "landing";
+  const section = localUiState.settingsSection || state?.session?.settingsSection || getDefaultSettingsSectionId(destination);
+  return {
+    destination,
+    section: destination === "landing" ? getDefaultSettingsSectionId("app") : section,
+  };
+}
+
+function applyLocalUiOverrides(state = {}, localUiState = {}) {
+  const nextState = {
+    ...state,
+    session: {
+      ...(state?.session || {}),
+    },
+  };
+
+  if (typeof localUiState.appMenuOpen === "boolean") {
+    nextState.session.appMenuOpen = localUiState.appMenuOpen;
+  }
+
+  if (nextState.session.activeView === "settings") {
+    const settingsState = normalizeLocalSettingsState(localUiState, nextState);
+    nextState.session.settingsDestination = settingsState.destination;
+    nextState.session.settingsSection = settingsState.section;
+  }
+
+  return nextState;
+}
+
+function applyLocalAppMenuUi(root, isOpen) {
+  if (!root) {
+    return;
+  }
+
+  const toggle = root.querySelector('[data-action="toggle-app-menu"]');
+  const panel = root.querySelector("[data-app-menu-panel]");
+
+  if (toggle) {
+    toggle.classList.toggle("is-open", Boolean(isOpen));
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+
+  if (panel) {
+    panel.hidden = !isOpen;
+  }
+}
+
+function applyLocalSettingsUi(root, localUiState = {}) {
+  if (!root) {
+    return;
+  }
+
+  const settingsRoot = root.querySelector("[data-settings-view-root]");
+  if (!settingsRoot) {
+    return;
+  }
+
+  const { destination, section } = normalizeLocalSettingsState(localUiState, {
+    session: {
+      settingsDestination: settingsRoot.dataset.settingsDestination || "landing",
+      settingsSection: settingsRoot.dataset.settingsSection || "account",
+    },
+  });
+
+  settingsRoot.dataset.settingsDestination = destination;
+  settingsRoot.dataset.settingsSection = section;
+
+  [...settingsRoot.querySelectorAll("[data-settings-destination-panel]")]
+    .forEach((panel) => {
+      panel.hidden = panel.dataset.settingsDestinationPanel !== destination;
+    });
+
+  [...settingsRoot.querySelectorAll('[data-action="set-settings-destination"]')]
+    .forEach((button) => {
+      const isActive = button.dataset.destination === destination;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+
+  [...settingsRoot.querySelectorAll("[data-settings-section-panel]")]
+    .forEach((panel) => {
+      const ownsDestination = panel.dataset.settingsDestinationOwner === destination;
+      const isActive = ownsDestination && panel.dataset.settingsSectionPanel === section;
+      panel.hidden = !isActive;
+    });
+
+  [...settingsRoot.querySelectorAll('[data-action="set-settings-section"]')]
+    .forEach((button) => {
+      const ownsDestination = button.dataset.destination === destination;
+      const isActive = ownsDestination && button.dataset.section === section;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+}
+
 export function createRenderer(root) {
   const scrollPositions = new Map();
   let lastRenderedView = null;
   let pendingScrollRestore = 0;
+  const localUiState = {
+    appMenuOpen: false,
+    settingsDestination: null,
+    settingsSection: null,
+  };
 
-  return function render(state, meta = {}) {
+  function updateLocalUi(patch = {}) {
+    if (Object.prototype.hasOwnProperty.call(patch, "appMenuOpen")) {
+      localUiState.appMenuOpen = Boolean(patch.appMenuOpen);
+      applyLocalAppMenuUi(root, localUiState.appMenuOpen);
+    }
+
+    const touchedSettings = Object.prototype.hasOwnProperty.call(patch, "settingsDestination")
+      || Object.prototype.hasOwnProperty.call(patch, "settingsSection");
+    if (touchedSettings) {
+      if (Object.prototype.hasOwnProperty.call(patch, "settingsDestination")) {
+        localUiState.settingsDestination = patch.settingsDestination || "landing";
+      }
+
+      if (Object.prototype.hasOwnProperty.call(patch, "settingsSection")) {
+        localUiState.settingsSection = patch.settingsSection || getDefaultSettingsSectionId(localUiState.settingsDestination || "app");
+      }
+
+      if (localUiState.settingsDestination !== "landing" && !localUiState.settingsSection) {
+        localUiState.settingsSection = getDefaultSettingsSectionId(localUiState.settingsDestination);
+      }
+
+      applyLocalSettingsUi(root, localUiState);
+    }
+  }
+
+  function closeTransientUi() {
+    if (localUiState.appMenuOpen) {
+      updateLocalUi({ appMenuOpen: false });
+    }
+  }
+
+  function getLocalUiState() {
+    return { ...localUiState };
+  }
+
+  function render(state, meta = {}) {
     const renderableState = getRenderableState(state);
     const nextView = renderableState.session?.activeView || "home";
     const sameView = lastRenderedView === nextView;
     const currentScrollHost = getScrollHost(root);
     const persistedDetailKeys = sameView ? capturePersistedDetailKeys(root) : [];
+
+    if (nextView === "settings" && (
+      localUiState.settingsDestination === null
+      || LOCAL_SETTINGS_SYNC_REASONS.has(meta?.reason || "")
+    )) {
+      localUiState.settingsDestination = renderableState.session?.settingsDestination || "landing";
+      localUiState.settingsSection = renderableState.session?.settingsSection
+        || getDefaultSettingsSectionId(localUiState.settingsDestination);
+    }
+
+    if (LOCAL_SETTINGS_SYNC_REASONS.has(meta?.reason || "") || nextView !== lastRenderedView) {
+      localUiState.appMenuOpen = false;
+    }
+
+    const uiRenderableState = applyLocalUiOverrides(renderableState, localUiState);
 
     if (currentScrollHost && lastRenderedView) {
       scrollPositions.set(lastRenderedView, {
@@ -266,8 +439,10 @@ export function createRenderer(root) {
       });
     }
 
-    root.innerHTML = renderAppTemplate(renderableState);
-    updateLiveSession(root, getLiveSessionFromState(renderableState));
+    root.innerHTML = renderAppTemplate(uiRenderableState);
+    updateLiveSession(root, getLiveSessionFromState(uiRenderableState));
+    applyLocalAppMenuUi(root, localUiState.appMenuOpen);
+    applyLocalSettingsUi(root, localUiState);
 
     const nextScrollHost = getScrollHost(root);
     const shouldHardReset = HARD_RESET_RENDER_REASONS.has(meta?.reason || "");
@@ -300,5 +475,11 @@ export function createRenderer(root) {
     }
 
     lastRenderedView = nextView;
-  };
+  }
+
+  render.updateLocalUi = updateLocalUi;
+  render.closeTransientUi = closeTransientUi;
+  render.getLocalUiState = getLocalUiState;
+
+  return render;
 }

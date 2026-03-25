@@ -264,7 +264,8 @@ describe("ui helpers", () => {
     expect(markup).toContain('data-theme="ocean"');
     expect(markup).toContain('data-color-mode="light"');
     expect(markup).not.toContain("Back to Profile");
-    expect(markup).not.toContain("Log out account");
+    expect(markup).toContain('data-settings-destination-panel="app"');
+    expect(markup).toContain('data-settings-section-panel="appearance"');
     expect(markup).toMatch(/id="tab-settings"[\s\S]*?aria-selected="true"/);
   });
 

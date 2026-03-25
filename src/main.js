@@ -430,6 +430,24 @@ export function bootstrapApp({
     }
   };
 
+  const updateLocalUi = (patch = {}) => {
+    if (typeof render.updateLocalUi === "function") {
+      render.updateLocalUi(patch);
+    }
+  };
+
+  const closeTransientUi = () => {
+    if (typeof render.closeTransientUi === "function") {
+      render.closeTransientUi();
+    }
+  };
+
+  const getLocalUiState = () => (
+    typeof render.getLocalUiState === "function"
+      ? render.getLocalUiState()
+      : {}
+  );
+
   const renderTab = (tab) => {
     const nextView = mapTabToView(tab);
     if (!nextView) {
@@ -1367,11 +1385,8 @@ export function bootstrapApp({
 
       const actionElement = getClosestEventElement(event.target, "[data-action]");
       if (!actionElement) {
-        if (store.getState().session.appMenuOpen && !clickedInsideMenu && !clickedMenuToggle) {
-          store.setState((draft) => {
-            draft.session.appMenuOpen = false;
-            return draft;
-          }, { reason: "close-app-menu-outside" });
+        if (getLocalUiState().appMenuOpen && !clickedInsideMenu && !clickedMenuToggle) {
+          updateLocalUi({ appMenuOpen: false });
         }
         return;
       }
@@ -1379,22 +1394,17 @@ export function bootstrapApp({
     const action = actionElement.dataset.action;
 
       if (action === "toggle-app-menu") {
-        store.setState((draft) => {
-          draft.session.appMenuOpen = !draft.session.appMenuOpen;
-          return draft;
-        }, { reason: "toggle-app-menu" });
+        updateLocalUi({ appMenuOpen: !getLocalUiState().appMenuOpen });
         return;
       }
 
       if (action === "close-app-menu") {
-        store.setState((draft) => {
-          draft.session.appMenuOpen = false;
-          return draft;
-        }, { reason: "close-app-menu" });
+        updateLocalUi({ appMenuOpen: false });
         return;
       }
 
       if (action === "nav-view") {
+        closeTransientUi();
         const tab = actionElement.dataset.tab;
         if (tab && renderTab(tab)) {
           return;
@@ -1419,8 +1429,8 @@ export function bootstrapApp({
       }
 
     if (action === "open-help-section") {
+      closeTransientUi();
       store.setState((draft) => {
-        draft.session.appMenuOpen = false;
         openHelpView(draft, actionElement.dataset.section);
         return draft;
       }, { reason: "open-help-section" });
@@ -1436,6 +1446,20 @@ export function bootstrapApp({
     }
 
     if (action === "open-settings") {
+      closeTransientUi();
+      if (store.getState().session.activeView === "settings") {
+        const destination = actionElement.dataset.destination || "landing";
+        const section = actionElement.dataset.section
+          || getDefaultSettingsSectionForDestination(destination)
+          || store.getState().session?.settingsSection
+          || "account";
+        updateLocalUi({
+          settingsDestination: destination,
+          settingsSection: section,
+        });
+        return;
+      }
+
       store.setState((draft) => {
         openSettingsView(
           draft,
@@ -1460,36 +1484,22 @@ export function bootstrapApp({
     }
 
     if (action === "set-settings-section") {
-      store.setState((draft) => {
-        draft.session.settingsSection = actionElement.dataset.section || draft.session.settingsSection || "account";
-        if (actionElement.dataset.destination) {
-          draft.session.settingsDestination = actionElement.dataset.destination;
-        }
-        draft.session.appMenuOpen = false;
-        return draft;
-      }, { reason: "set-settings-section" });
-      refreshCrashLogsIfNeeded(
-        store.getState().session?.settingsDestination || "",
-        store.getState().session?.settingsSection || ""
-      );
+      updateLocalUi({
+        settingsDestination: actionElement.dataset.destination || getLocalUiState().settingsDestination || "app",
+        settingsSection: actionElement.dataset.section || getLocalUiState().settingsSection || "account",
+      });
       return;
     }
 
     if (action === "set-settings-destination") {
-      store.setState((draft) => {
-        const destination = actionElement.dataset.destination || "landing";
-        draft.session.settingsDestination = destination;
-        draft.session.settingsSection = actionElement.dataset.section
+      const destination = actionElement.dataset.destination || "landing";
+      updateLocalUi({
+        settingsDestination: destination,
+        settingsSection: actionElement.dataset.section
           || getDefaultSettingsSectionForDestination(destination)
-          || draft.session.settingsSection
-          || "account";
-        draft.session.appMenuOpen = false;
-        return draft;
-      }, { reason: "set-settings-destination" });
-      refreshCrashLogsIfNeeded(
-        store.getState().session?.settingsDestination || "",
-        store.getState().session?.settingsSection || ""
-      );
+          || getLocalUiState().settingsSection
+          || "account",
+      });
       return;
     }
 

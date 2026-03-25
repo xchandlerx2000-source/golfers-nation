@@ -744,12 +744,15 @@ function renderNav(state) {
 }
 
 function renderAppMenu(state) {
-  if (!state.session?.appMenuOpen) {
-    return "";
-  }
-
   return `
-    <div class="app-menu-panel" data-app-menu="true" role="menu" aria-label="App menu">
+    <div
+      class="app-menu-panel"
+      data-app-menu="true"
+      data-app-menu-panel="true"
+      role="menu"
+      aria-label="App menu"
+      ${state.session?.appMenuOpen ? "" : "hidden"}
+    >
       <button class="app-menu-item" type="button" data-action="open-help-section" data-section="getting-started" role="menuitem">
         <strong>Help / FAQ</strong>
         <span>Quick answers for sign-in, rounds, and shared play.</span>
@@ -1788,14 +1791,26 @@ function getSettingsSectionsForDestination(destination = "landing") {
   return [];
 }
 
-function getOrderedSettingsSections(destination, selectedId) {
-  const sections = getSettingsSectionsForDestination(destination);
-  if (!selectedId || !sections.some((section) => section.id === selectedId)) {
-    return sections;
+function getDefaultSettingsSectionId(destination = "landing") {
+  if (destination === "profile") {
+    return "profile-identity";
   }
 
-  const selected = sections.find((section) => section.id === selectedId);
-  return [selected, ...sections.filter((section) => section.id !== selectedId)];
+  if (destination === "app") {
+    return "account";
+  }
+
+  return "account";
+}
+
+function getSelectedSettingsSectionId(state, destination = "landing") {
+  const selectedId = state.session?.settingsSection || "";
+  const sections = getSettingsSectionsForDestination(destination);
+  if (sections.some((section) => section.id === selectedId)) {
+    return selectedId;
+  }
+
+  return getDefaultSettingsSectionId(destination);
 }
 
 function getSettingsDestinationCopy(destination = "landing") {
@@ -1969,7 +1984,7 @@ function renderAuthScreen(state) {
 }
 
 function renderSettingsSectionNav(state, destination) {
-  const selected = state.session.settingsSection || "account";
+  const selected = getSelectedSettingsSectionId(state, destination);
   const sections = getSettingsSectionsForDestination(destination);
   if (!sections.length) {
     return "";
@@ -2091,6 +2106,48 @@ function renderSettingsDestinationHeader(state, destination) {
       ${renderSettingsDestinationSwitch(destination)}
       ${renderSettingsSectionNav(state, destination)}
     </article>
+  `;
+}
+
+function renderSettingsPanelsForDestination(state, destination) {
+  const selectedSectionId = getSelectedSettingsSectionId(state, destination);
+  const cards = {
+    "profile-identity": renderProfileIdentitySettingsCard(state),
+    account: renderAccountSettingsCard(state),
+    "golf-profile": renderGolfProfileSettingsCard(state),
+    appearance: renderAppearanceSettingsCard(state),
+    social: renderSocialSettingsCard(state),
+    spotify: renderSpotifySettingsCard(state),
+    "app-support": renderAppSupportSettingsCard(state),
+  };
+
+  return getSettingsSectionsForDestination(destination)
+    .map((section) => `
+      <section
+        class="settings-section-panel"
+        data-settings-section-panel="${section.id}"
+        data-settings-destination-owner="${destination}"
+        ${section.id === selectedSectionId ? "" : "hidden"}
+      >
+        ${cards[section.id] || ""}
+      </section>
+    `)
+    .join("");
+}
+
+function renderSettingsDestinationWorkspace(state, destination) {
+  const destinationCopy = getSettingsDestinationCopy(destination);
+
+  return `
+    <section
+      class="settings-destination-panel"
+      data-settings-destination-panel="${destination}"
+      data-settings-destination-title="${escapeHtml(destinationCopy.title)}"
+      ${getSettingsDestination(state) === destination ? "" : "hidden"}
+    >
+      ${renderSettingsDestinationHeader(state, destination)}
+      ${renderSettingsPanelsForDestination(state, destination)}
+    </section>
   `;
 }
 
@@ -2601,25 +2658,22 @@ function renderAppSupportSettingsCard(state) {
 
 function renderSettingsView(state) {
   const destination = getSettingsDestination(state);
-  if (destination === "landing") {
-    return renderSettingsLandingView(state);
-  }
-
-  const orderedSections = getOrderedSettingsSections(destination, state.session.settingsSection || "account");
-  const selectedSectionId = orderedSections[0]?.id || (destination === "profile" ? "profile-identity" : "account");
-  const cards = {
-    "profile-identity": renderProfileIdentitySettingsCard(state),
-    account: renderAccountSettingsCard(state),
-    "golf-profile": renderGolfProfileSettingsCard(state),
-    appearance: renderAppearanceSettingsCard(state),
-    social: renderSocialSettingsCard(state),
-    spotify: renderSpotifySettingsCard(state),
-    "app-support": renderAppSupportSettingsCard(state),
-  };
   return `
-    <section class="view-grid settings-grid">
-      ${renderSettingsDestinationHeader(state, destination)}
-      ${cards[selectedSectionId] || ""}
+    <section
+      class="view-grid settings-grid ${destination === "landing" ? "settings-grid--landing" : ""}"
+      data-settings-view-root="true"
+      data-settings-destination="${escapeHtml(destination)}"
+      data-settings-section="${escapeHtml(getSelectedSettingsSectionId(state, destination === "landing" ? "app" : destination))}"
+    >
+      <section
+        class="settings-destination-panel"
+        data-settings-destination-panel="landing"
+        ${destination === "landing" ? "" : "hidden"}
+      >
+        ${renderSettingsLandingView(state)}
+      </section>
+      ${renderSettingsDestinationWorkspace(state, "profile")}
+      ${renderSettingsDestinationWorkspace(state, "app")}
     </section>
   `;
 }

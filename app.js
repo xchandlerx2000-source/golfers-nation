@@ -10809,12 +10809,15 @@ function renderNav(state) {
 }
 
 function renderAppMenu(state) {
-  if (!state.session?.appMenuOpen) {
-    return "";
-  }
-
   return `
-    <div class="app-menu-panel" data-app-menu="true" role="menu" aria-label="App menu">
+    <div
+      class="app-menu-panel"
+      data-app-menu="true"
+      data-app-menu-panel="true"
+      role="menu"
+      aria-label="App menu"
+      ${state.session?.appMenuOpen ? "" : "hidden"}
+    >
       <button class="app-menu-item" type="button" data-action="open-help-section" data-section="getting-started" role="menuitem">
         <strong>Help / FAQ</strong>
         <span>Quick answers for sign-in, rounds, and shared play.</span>
@@ -11853,14 +11856,26 @@ function getSettingsSectionsForDestination(destination = "landing") {
   return [];
 }
 
-function getOrderedSettingsSections(destination, selectedId) {
-  const sections = getSettingsSectionsForDestination(destination);
-  if (!selectedId || !sections.some((section) => section.id === selectedId)) {
-    return sections;
+function getDefaultSettingsSectionId(destination = "landing") {
+  if (destination === "profile") {
+    return "profile-identity";
   }
 
-  const selected = sections.find((section) => section.id === selectedId);
-  return [selected, ...sections.filter((section) => section.id !== selectedId)];
+  if (destination === "app") {
+    return "account";
+  }
+
+  return "account";
+}
+
+function getSelectedSettingsSectionId(state, destination = "landing") {
+  const selectedId = state.session?.settingsSection || "";
+  const sections = getSettingsSectionsForDestination(destination);
+  if (sections.some((section) => section.id === selectedId)) {
+    return selectedId;
+  }
+
+  return getDefaultSettingsSectionId(destination);
 }
 
 function getSettingsDestinationCopy(destination = "landing") {
@@ -12034,7 +12049,7 @@ function renderAuthScreen(state) {
 }
 
 function renderSettingsSectionNav(state, destination) {
-  const selected = state.session.settingsSection || "account";
+  const selected = getSelectedSettingsSectionId(state, destination);
   const sections = getSettingsSectionsForDestination(destination);
   if (!sections.length) {
     return "";
@@ -12156,6 +12171,48 @@ function renderSettingsDestinationHeader(state, destination) {
       ${renderSettingsDestinationSwitch(destination)}
       ${renderSettingsSectionNav(state, destination)}
     </article>
+  `;
+}
+
+function renderSettingsPanelsForDestination(state, destination) {
+  const selectedSectionId = getSelectedSettingsSectionId(state, destination);
+  const cards = {
+    "profile-identity": renderProfileIdentitySettingsCard(state),
+    account: renderAccountSettingsCard(state),
+    "golf-profile": renderGolfProfileSettingsCard(state),
+    appearance: renderAppearanceSettingsCard(state),
+    social: renderSocialSettingsCard(state),
+    spotify: renderSpotifySettingsCard(state),
+    "app-support": renderAppSupportSettingsCard(state),
+  };
+
+  return getSettingsSectionsForDestination(destination)
+    .map((section) => `
+      <section
+        class="settings-section-panel"
+        data-settings-section-panel="${section.id}"
+        data-settings-destination-owner="${destination}"
+        ${section.id === selectedSectionId ? "" : "hidden"}
+      >
+        ${cards[section.id] || ""}
+      </section>
+    `)
+    .join("");
+}
+
+function renderSettingsDestinationWorkspace(state, destination) {
+  const destinationCopy = getSettingsDestinationCopy(destination);
+
+  return `
+    <section
+      class="settings-destination-panel"
+      data-settings-destination-panel="${destination}"
+      data-settings-destination-title="${escapeHtml(destinationCopy.title)}"
+      ${getSettingsDestination(state) === destination ? "" : "hidden"}
+    >
+      ${renderSettingsDestinationHeader(state, destination)}
+      ${renderSettingsPanelsForDestination(state, destination)}
+    </section>
   `;
 }
 
@@ -12666,25 +12723,22 @@ function renderAppSupportSettingsCard(state) {
 
 function renderSettingsView(state) {
   const destination = getSettingsDestination(state);
-  if (destination === "landing") {
-    return renderSettingsLandingView(state);
-  }
-
-  const orderedSections = getOrderedSettingsSections(destination, state.session.settingsSection || "account");
-  const selectedSectionId = orderedSections[0]?.id || (destination === "profile" ? "profile-identity" : "account");
-  const cards = {
-    "profile-identity": renderProfileIdentitySettingsCard(state),
-    account: renderAccountSettingsCard(state),
-    "golf-profile": renderGolfProfileSettingsCard(state),
-    appearance: renderAppearanceSettingsCard(state),
-    social: renderSocialSettingsCard(state),
-    spotify: renderSpotifySettingsCard(state),
-    "app-support": renderAppSupportSettingsCard(state),
-  };
   return `
-    <section class="view-grid settings-grid">
-      ${renderSettingsDestinationHeader(state, destination)}
-      ${cards[selectedSectionId] || ""}
+    <section
+      class="view-grid settings-grid ${destination === "landing" ? "settings-grid--landing" : ""}"
+      data-settings-view-root="true"
+      data-settings-destination="${escapeHtml(destination)}"
+      data-settings-section="${escapeHtml(getSelectedSettingsSectionId(state, destination === "landing" ? "app" : destination))}"
+    >
+      <section
+        class="settings-destination-panel"
+        data-settings-destination-panel="landing"
+        ${destination === "landing" ? "" : "hidden"}
+      >
+        ${renderSettingsLandingView(state)}
+      </section>
+      ${renderSettingsDestinationWorkspace(state, "profile")}
+      ${renderSettingsDestinationWorkspace(state, "app")}
     </section>
   `;
 }
@@ -15115,6 +15169,16 @@ const HARD_RESET_RENDER_REASONS = new Set([
   "sign-out",
 ]);
 
+const LOCAL_SETTINGS_SYNC_REASONS = new Set([
+  "initial-render",
+  "open-settings",
+  "open-current-profile",
+  "render-tab",
+  "nav-view",
+  "auth-login",
+  "auth-signup",
+]);
+
 function getScrollHost(root) {
   if (!root) {
     return null;
@@ -15153,17 +15217,180 @@ function restorePersistedDetailKeys(root, detailKeys = []) {
     }
   });
 }
+
+function getDefaultSettingsSectionId(destination = "landing") {
+  if (destination === "profile") {
+    return "profile-identity";
+  }
+
+  if (destination === "app") {
+    return "account";
+  }
+
+  return "account";
+}
+
+function normalizeLocalSettingsState(localUiState = {}, state = {}) {
+  const destination = localUiState.settingsDestination || state?.session?.settingsDestination || "landing";
+  const section = localUiState.settingsSection || state?.session?.settingsSection || getDefaultSettingsSectionId(destination);
+  return {
+    destination,
+    section: destination === "landing" ? getDefaultSettingsSectionId("app") : section,
+  };
+}
+
+function applyLocalUiOverrides(state = {}, localUiState = {}) {
+  const nextState = {
+    ...state,
+    session: {
+      ...(state?.session || {}),
+    },
+  };
+
+  if (typeof localUiState.appMenuOpen === "boolean") {
+    nextState.session.appMenuOpen = localUiState.appMenuOpen;
+  }
+
+  if (nextState.session.activeView === "settings") {
+    const settingsState = normalizeLocalSettingsState(localUiState, nextState);
+    nextState.session.settingsDestination = settingsState.destination;
+    nextState.session.settingsSection = settingsState.section;
+  }
+
+  return nextState;
+}
+
+function applyLocalAppMenuUi(root, isOpen) {
+  if (!root) {
+    return;
+  }
+
+  const toggle = root.querySelector('[data-action="toggle-app-menu"]');
+  const panel = root.querySelector("[data-app-menu-panel]");
+
+  if (toggle) {
+    toggle.classList.toggle("is-open", Boolean(isOpen));
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  }
+
+  if (panel) {
+    panel.hidden = !isOpen;
+  }
+}
+
+function applyLocalSettingsUi(root, localUiState = {}) {
+  if (!root) {
+    return;
+  }
+
+  const settingsRoot = root.querySelector("[data-settings-view-root]");
+  if (!settingsRoot) {
+    return;
+  }
+
+  const { destination, section } = normalizeLocalSettingsState(localUiState, {
+    session: {
+      settingsDestination: settingsRoot.dataset.settingsDestination || "landing",
+      settingsSection: settingsRoot.dataset.settingsSection || "account",
+    },
+  });
+
+  settingsRoot.dataset.settingsDestination = destination;
+  settingsRoot.dataset.settingsSection = section;
+
+  [...settingsRoot.querySelectorAll("[data-settings-destination-panel]")]
+    .forEach((panel) => {
+      panel.hidden = panel.dataset.settingsDestinationPanel !== destination;
+    });
+
+  [...settingsRoot.querySelectorAll('[data-action="set-settings-destination"]')]
+    .forEach((button) => {
+      const isActive = button.dataset.destination === destination;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+
+  [...settingsRoot.querySelectorAll("[data-settings-section-panel]")]
+    .forEach((panel) => {
+      const ownsDestination = panel.dataset.settingsDestinationOwner === destination;
+      const isActive = ownsDestination && panel.dataset.settingsSectionPanel === section;
+      panel.hidden = !isActive;
+    });
+
+  [...settingsRoot.querySelectorAll('[data-action="set-settings-section"]')]
+    .forEach((button) => {
+      const ownsDestination = button.dataset.destination === destination;
+      const isActive = ownsDestination && button.dataset.section === section;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+}
 function createRenderer(root) {
   const scrollPositions = new Map();
   let lastRenderedView = null;
   let pendingScrollRestore = 0;
+  const localUiState = {
+    appMenuOpen: false,
+    settingsDestination: null,
+    settingsSection: null,
+  };
 
-  return function render(state, meta = {}) {
+  function updateLocalUi(patch = {}) {
+    if (Object.prototype.hasOwnProperty.call(patch, "appMenuOpen")) {
+      localUiState.appMenuOpen = Boolean(patch.appMenuOpen);
+      applyLocalAppMenuUi(root, localUiState.appMenuOpen);
+    }
+
+    const touchedSettings = Object.prototype.hasOwnProperty.call(patch, "settingsDestination")
+      || Object.prototype.hasOwnProperty.call(patch, "settingsSection");
+    if (touchedSettings) {
+      if (Object.prototype.hasOwnProperty.call(patch, "settingsDestination")) {
+        localUiState.settingsDestination = patch.settingsDestination || "landing";
+      }
+
+      if (Object.prototype.hasOwnProperty.call(patch, "settingsSection")) {
+        localUiState.settingsSection = patch.settingsSection || getDefaultSettingsSectionId(localUiState.settingsDestination || "app");
+      }
+
+      if (localUiState.settingsDestination !== "landing" && !localUiState.settingsSection) {
+        localUiState.settingsSection = getDefaultSettingsSectionId(localUiState.settingsDestination);
+      }
+
+      applyLocalSettingsUi(root, localUiState);
+    }
+  }
+
+  function closeTransientUi() {
+    if (localUiState.appMenuOpen) {
+      updateLocalUi({ appMenuOpen: false });
+    }
+  }
+
+  function getLocalUiState() {
+    return { ...localUiState };
+  }
+
+  function render(state, meta = {}) {
     const renderableState = getRenderableState(state);
     const nextView = renderableState.session?.activeView || "home";
     const sameView = lastRenderedView === nextView;
     const currentScrollHost = getScrollHost(root);
     const persistedDetailKeys = sameView ? capturePersistedDetailKeys(root) : [];
+
+    if (nextView === "settings" && (
+      localUiState.settingsDestination === null
+      || LOCAL_SETTINGS_SYNC_REASONS.has(meta?.reason || "")
+    )) {
+      localUiState.settingsDestination = renderableState.session?.settingsDestination || "landing";
+      localUiState.settingsSection = renderableState.session?.settingsSection
+        || getDefaultSettingsSectionId(localUiState.settingsDestination);
+    }
+
+    if (LOCAL_SETTINGS_SYNC_REASONS.has(meta?.reason || "") || nextView !== lastRenderedView) {
+      localUiState.appMenuOpen = false;
+    }
+
+    const uiRenderableState = applyLocalUiOverrides(renderableState, localUiState);
 
     if (currentScrollHost && lastRenderedView) {
       scrollPositions.set(lastRenderedView, {
@@ -15172,8 +15399,10 @@ function createRenderer(root) {
       });
     }
 
-    root.innerHTML = renderAppTemplate(renderableState);
-    updateLiveSession(root, getLiveSessionFromState(renderableState));
+    root.innerHTML = renderAppTemplate(uiRenderableState);
+    updateLiveSession(root, getLiveSessionFromState(uiRenderableState));
+    applyLocalAppMenuUi(root, localUiState.appMenuOpen);
+    applyLocalSettingsUi(root, localUiState);
 
     const nextScrollHost = getScrollHost(root);
     const shouldHardReset = HARD_RESET_RENDER_REASONS.has(meta?.reason || "");
@@ -15206,7 +15435,13 @@ function createRenderer(root) {
     }
 
     lastRenderedView = nextView;
-  };
+  }
+
+  render.updateLocalUi = updateLocalUi;
+  render.closeTransientUi = closeTransientUi;
+  render.getLocalUiState = getLocalUiState;
+
+  return render;
 }
 
 // ---- src/ui/view-controller.js ----
@@ -16090,6 +16325,24 @@ function bootstrapApp({
       return false;
     }
   };
+
+  const updateLocalUi = (patch = {}) => {
+    if (typeof render.updateLocalUi === "function") {
+      render.updateLocalUi(patch);
+    }
+  };
+
+  const closeTransientUi = () => {
+    if (typeof render.closeTransientUi === "function") {
+      render.closeTransientUi();
+    }
+  };
+
+  const getLocalUiState = () => (
+    typeof render.getLocalUiState === "function"
+      ? render.getLocalUiState()
+      : {}
+  );
 
   const renderTab = (tab) => {
     const nextView = mapTabToView(tab);
@@ -17028,11 +17281,8 @@ function bootstrapApp({
 
       const actionElement = getClosestEventElement(event.target, "[data-action]");
       if (!actionElement) {
-        if (store.getState().session.appMenuOpen && !clickedInsideMenu && !clickedMenuToggle) {
-          store.setState((draft) => {
-            draft.session.appMenuOpen = false;
-            return draft;
-          }, { reason: "close-app-menu-outside" });
+        if (getLocalUiState().appMenuOpen && !clickedInsideMenu && !clickedMenuToggle) {
+          updateLocalUi({ appMenuOpen: false });
         }
         return;
       }
@@ -17040,22 +17290,17 @@ function bootstrapApp({
     const action = actionElement.dataset.action;
 
       if (action === "toggle-app-menu") {
-        store.setState((draft) => {
-          draft.session.appMenuOpen = !draft.session.appMenuOpen;
-          return draft;
-        }, { reason: "toggle-app-menu" });
+        updateLocalUi({ appMenuOpen: !getLocalUiState().appMenuOpen });
         return;
       }
 
       if (action === "close-app-menu") {
-        store.setState((draft) => {
-          draft.session.appMenuOpen = false;
-          return draft;
-        }, { reason: "close-app-menu" });
+        updateLocalUi({ appMenuOpen: false });
         return;
       }
 
       if (action === "nav-view") {
+        closeTransientUi();
         const tab = actionElement.dataset.tab;
         if (tab && renderTab(tab)) {
           return;
@@ -17080,8 +17325,8 @@ function bootstrapApp({
       }
 
     if (action === "open-help-section") {
+      closeTransientUi();
       store.setState((draft) => {
-        draft.session.appMenuOpen = false;
         openHelpView(draft, actionElement.dataset.section);
         return draft;
       }, { reason: "open-help-section" });
@@ -17097,6 +17342,20 @@ function bootstrapApp({
     }
 
     if (action === "open-settings") {
+      closeTransientUi();
+      if (store.getState().session.activeView === "settings") {
+        const destination = actionElement.dataset.destination || "landing";
+        const section = actionElement.dataset.section
+          || getDefaultSettingsSectionForDestination(destination)
+          || store.getState().session?.settingsSection
+          || "account";
+        updateLocalUi({
+          settingsDestination: destination,
+          settingsSection: section,
+        });
+        return;
+      }
+
       store.setState((draft) => {
         openSettingsView(
           draft,
@@ -17121,36 +17380,22 @@ function bootstrapApp({
     }
 
     if (action === "set-settings-section") {
-      store.setState((draft) => {
-        draft.session.settingsSection = actionElement.dataset.section || draft.session.settingsSection || "account";
-        if (actionElement.dataset.destination) {
-          draft.session.settingsDestination = actionElement.dataset.destination;
-        }
-        draft.session.appMenuOpen = false;
-        return draft;
-      }, { reason: "set-settings-section" });
-      refreshCrashLogsIfNeeded(
-        store.getState().session?.settingsDestination || "",
-        store.getState().session?.settingsSection || ""
-      );
+      updateLocalUi({
+        settingsDestination: actionElement.dataset.destination || getLocalUiState().settingsDestination || "app",
+        settingsSection: actionElement.dataset.section || getLocalUiState().settingsSection || "account",
+      });
       return;
     }
 
     if (action === "set-settings-destination") {
-      store.setState((draft) => {
-        const destination = actionElement.dataset.destination || "landing";
-        draft.session.settingsDestination = destination;
-        draft.session.settingsSection = actionElement.dataset.section
+      const destination = actionElement.dataset.destination || "landing";
+      updateLocalUi({
+        settingsDestination: destination,
+        settingsSection: actionElement.dataset.section
           || getDefaultSettingsSectionForDestination(destination)
-          || draft.session.settingsSection
-          || "account";
-        draft.session.appMenuOpen = false;
-        return draft;
-      }, { reason: "set-settings-destination" });
-      refreshCrashLogsIfNeeded(
-        store.getState().session?.settingsDestination || "",
-        store.getState().session?.settingsSection || ""
-      );
+          || getLocalUiState().settingsSection
+          || "account",
+      });
       return;
     }
 

@@ -54,6 +54,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -5652,6 +5656,15 @@ body {
     color-mix(in srgb, var(--surface) 92%, transparent);
   box-shadow: var(--shadow-soft);
   backdrop-filter: blur(18px);
+}
+
+.settings-destination-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-section-panel {
+  display: grid;
 }
 
 .app-menu-item {

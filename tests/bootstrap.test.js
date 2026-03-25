@@ -754,6 +754,40 @@ describe("bootstrap app", () => {
     result.destroy();
   });
 
+  it("switches settings destinations and sections locally without remounting the full view", () => {
+    const state = createDefaultState();
+    loadAccountIntoState(state, "user-demo-free");
+    persistState(prepareStateForPersistence(state));
+
+    let renderCount = 0;
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      rendererFactory(root) {
+        const baseRender = createRenderer(root);
+        const wrappedRender = (nextState, meta) => {
+          renderCount += 1;
+          return baseRender(nextState, meta);
+        };
+        Object.assign(wrappedRender, baseRender);
+        return wrappedRender;
+      },
+      timeoutMs: 50,
+    });
+
+    document.querySelector('[data-action="open-settings"]').click();
+    const renderCountAfterOpen = renderCount;
+
+    document.querySelector('[data-action="set-settings-destination"][data-destination="app"]').click();
+    document.querySelector('[data-action="set-settings-section"][data-section="appearance"]').click();
+
+    expect(renderCount).toBe(renderCountAfterOpen);
+    expect(document.querySelector('[data-settings-destination-panel="app"]').hidden).toBe(false);
+    expect(document.querySelector('[data-settings-section-panel="appearance"]').hidden).toBe(false);
+    expect(document.querySelector('[data-settings-section-panel="account"]').hidden).toBe(true);
+
+    result.destroy();
+  });
+
   it("connects the Spotify companion scaffold from app settings without showing top-level controls", () => {
     const state = createDefaultState();
     loadAccountIntoState(state, "user-demo-free");
