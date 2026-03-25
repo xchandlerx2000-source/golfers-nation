@@ -2794,6 +2794,90 @@ function renderCoursePicker(state) {
         : []
     );
 
+  const renderSearchResultsSection = (queryOverride = roundSetup.courseQuery) => {
+    const effectiveRoundSetup = {
+      ...roundSetup,
+      courseQuery: String(queryOverride || ""),
+    };
+    const effectiveDiscovery = getRoundSetupDiscoveryState(effectiveRoundSetup, state.session?.nearby || {});
+    const effectiveSelectedCourse = effectiveDiscovery.selectedCourse;
+    const effectiveSelectedTeeBox = effectiveDiscovery.selectedTeeBox;
+    const effectiveHoleCountOptions = [9, 18]
+      .filter((count) => count <= Number(effectiveSelectedCourse?.holesCount || 18))
+      .concat(
+        Number(effectiveSelectedCourse?.holesCount || 18) > 0 && ![9, 18].includes(Number(effectiveSelectedCourse?.holesCount || 18))
+          ? [Number(effectiveSelectedCourse.holesCount)]
+          : []
+      );
+
+    return `
+      <div class="course-results-list course-results-list--compact">
+        ${effectiveDiscovery.searchResults.length
+          ? effectiveDiscovery.searchResults.slice(0, 6).map((course) => {
+              const featuredTee = getDefaultCourseTeeBox(course);
+              const isSelected = course.id === effectiveSelectedCourse?.id;
+              return `
+                <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
+                  <div class="course-result-copy">
+                    <strong>${escapeHtml(course.displayName || course.name)}</strong>
+                    <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
+                  </div>
+                  <div class="course-result-meta">
+                    <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
+                    <span>${featuredTee?.totalYardage || "--"} yds</span>
+                  </div>
+                </button>
+              `;
+            }).join("")
+          : `
+            <div class="empty-state compact-empty-state">
+              <strong>No course match</strong>
+            </div>
+          `}
+      </div>
+      ${effectiveSelectedCourse && effectiveSelectedTeeBox
+        ? `
+          <article class="course-selected-card" data-selected-course="true">
+            <div class="course-selected-copy">
+              <span class="mini-label">Selected</span>
+              <strong>${escapeHtml(effectiveSelectedCourse.displayName || effectiveSelectedCourse.name)}</strong>
+              <p>${escapeHtml(effectiveSelectedTeeBox.name)} / ${effectiveSelectedTeeBox.totalYardage} yds / Par ${effectiveSelectedTeeBox.totalPar}</p>
+            </div>
+            <div class="split-inputs course-selected-actions">
+              <label>
+                Tee
+                <select name="selectedTeeBoxId" form="create-round-form" data-course-tee-select="true">
+                  ${effectiveSelectedCourse.teeBoxes.map((teeBox) => `
+                    <option value="${teeBox.id}" ${teeBox.id === effectiveSelectedTeeBox.id ? "selected" : ""}>
+                      ${escapeHtml(teeBox.name)} / ${teeBox.totalYardage} yds
+                    </option>
+                  `).join("")}
+                </select>
+              </label>
+              <label>
+                Holes
+                <select name="selectedHoleCount" form="create-round-form" data-course-hole-count-select="true">
+                  ${effectiveHoleCountOptions.map((count) => `
+                    <option value="${count}" ${count === effectiveRoundSetup.selectedHoleCount ? "selected" : ""}>${count}</option>
+                  `).join("")}
+                </select>
+              </label>
+            </div>
+          </article>
+        `
+        : ""}
+      <div class="row-actions compact-actions">
+        <button class="button subtle" type="button" data-action="back-course-methods">Back</button>
+      </div>
+      ${renderRoundSetupFooter({
+        canGoBack: true,
+        nextLabel: "Next",
+        nextDirection: 1,
+        nextDisabled: !effectiveSelectedCourse,
+      })}
+    `;
+  };
+
   if (!courseMethod) {
     if (state.session?.nearby?.locationPermission === "granted" && suggestedCourse && suggestedTeeBox) {
       return `
@@ -2935,71 +3019,96 @@ function renderCoursePicker(state) {
           <input data-course-search-input="true" type="search" value="${escapeHtml(roundSetup.courseQuery)}" placeholder="Course or city" />
         </label>
       </div>
-      <div class="course-results-list course-results-list--compact">
-        ${searchResults.length
-          ? searchResults.slice(0, 6).map((course) => {
-              const featuredTee = getDefaultCourseTeeBox(course);
-              const isSelected = course.id === selectedCourse?.id;
-              return `
-                <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
-                  <div class="course-result-copy">
-                    <strong>${escapeHtml(course.displayName || course.name)}</strong>
-                    <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
-                  </div>
-                  <div class="course-result-meta">
-                    <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
-                    <span>${featuredTee?.totalYardage || "--"} yds</span>
-                  </div>
-                </button>
-              `;
-            }).join("")
-          : `
-            <div class="empty-state compact-empty-state">
-              <strong>No course match</strong>
-            </div>
-          `}
+      <div data-course-search-results="true">
+        ${renderSearchResultsSection()}
       </div>
-      ${selectedCourse && selectedTeeBox
-        ? `
-          <article class="course-selected-card" data-selected-course="true">
-            <div class="course-selected-copy">
-              <span class="mini-label">Selected</span>
-              <strong>${escapeHtml(selectedCourse.displayName || selectedCourse.name)}</strong>
-              <p>${escapeHtml(selectedTeeBox.name)} / ${selectedTeeBox.totalYardage} yds / Par ${selectedTeeBox.totalPar}</p>
-            </div>
-            <div class="split-inputs course-selected-actions">
-              <label>
-                Tee
-                <select name="selectedTeeBoxId" form="create-round-form" data-course-tee-select="true">
-                  ${selectedCourse.teeBoxes.map((teeBox) => `
-                    <option value="${teeBox.id}" ${teeBox.id === selectedTeeBox.id ? "selected" : ""}>
-                      ${escapeHtml(teeBox.name)} / ${teeBox.totalYardage} yds
-                    </option>
-                  `).join("")}
-                </select>
-              </label>
-              <label>
-                Holes
-                <select name="selectedHoleCount" form="create-round-form" data-course-hole-count-select="true">
-                  ${holeCountOptions.map((count) => `
-                    <option value="${count}" ${count === roundSetup.selectedHoleCount ? "selected" : ""}>${count}</option>
-                  `).join("")}
-                </select>
-              </label>
-            </div>
-          </article>
-        `
-        : ""}
-      <div class="row-actions compact-actions">
-        <button class="button subtle" type="button" data-action="back-course-methods">Back</button>
-      </div>
-      ${renderRoundSetupFooter({
-        canGoBack: true,
-        nextLabel: "Next",
-        nextDirection: 1,
-        nextDisabled: !selectedCourse,
-      })}
     </div>
+  `;
+}
+
+export function renderCourseSearchResults(state, queryOverride = "") {
+  const roundSetup = getRoundSetup(state);
+  const effectiveRoundSetup = {
+    ...roundSetup,
+    courseMethod: "search",
+    courseQuery: String(queryOverride || ""),
+  };
+  const discovery = getRoundSetupDiscoveryState(effectiveRoundSetup, state.session?.nearby || {});
+  const selectedCourse = discovery.selectedCourse;
+  const selectedTeeBox = discovery.selectedTeeBox;
+  const holeCountOptions = [9, 18]
+    .filter((count) => count <= Number(selectedCourse?.holesCount || 18))
+    .concat(
+      Number(selectedCourse?.holesCount || 18) > 0 && ![9, 18].includes(Number(selectedCourse?.holesCount || 18))
+        ? [Number(selectedCourse.holesCount)]
+        : []
+    );
+
+  return `
+    <div class="course-results-list course-results-list--compact">
+      ${discovery.searchResults.length
+        ? discovery.searchResults.slice(0, 6).map((course) => {
+            const featuredTee = getDefaultCourseTeeBox(course);
+            const isSelected = course.id === selectedCourse?.id;
+            return `
+              <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
+                <div class="course-result-copy">
+                  <strong>${escapeHtml(course.displayName || course.name)}</strong>
+                  <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
+                </div>
+                <div class="course-result-meta">
+                  <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
+                  <span>${featuredTee?.totalYardage || "--"} yds</span>
+                </div>
+              </button>
+            `;
+          }).join("")
+        : `
+          <div class="empty-state compact-empty-state">
+            <strong>No course match</strong>
+          </div>
+        `}
+    </div>
+    ${selectedCourse && selectedTeeBox
+      ? `
+        <article class="course-selected-card" data-selected-course="true">
+          <div class="course-selected-copy">
+            <span class="mini-label">Selected</span>
+            <strong>${escapeHtml(selectedCourse.displayName || selectedCourse.name)}</strong>
+            <p>${escapeHtml(selectedTeeBox.name)} / ${selectedTeeBox.totalYardage} yds / Par ${selectedTeeBox.totalPar}</p>
+          </div>
+          <div class="split-inputs course-selected-actions">
+            <label>
+              Tee
+              <select name="selectedTeeBoxId" form="create-round-form" data-course-tee-select="true">
+                ${selectedCourse.teeBoxes.map((teeBox) => `
+                  <option value="${teeBox.id}" ${teeBox.id === selectedTeeBox.id ? "selected" : ""}>
+                    ${escapeHtml(teeBox.name)} / ${teeBox.totalYardage} yds
+                  </option>
+                `).join("")}
+              </select>
+            </label>
+            <label>
+              Holes
+              <select name="selectedHoleCount" form="create-round-form" data-course-hole-count-select="true">
+                ${holeCountOptions.map((count) => `
+                  <option value="${count}" ${count === effectiveRoundSetup.selectedHoleCount ? "selected" : ""}>${count}</option>
+                `).join("")}
+              </select>
+            </label>
+          </div>
+        </article>
+      `
+      : ""}
+    <div class="row-actions compact-actions">
+      <button class="button subtle" type="button" data-action="back-course-methods">Back</button>
+    </div>
+    ${renderRoundSetupFooter({
+      canGoBack: true,
+      nextLabel: "Next",
+      nextDirection: 1,
+      nextDisabled: !selectedCourse,
+    })}
   `;
 }
 

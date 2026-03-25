@@ -13448,6 +13448,90 @@ function renderCoursePicker(state) {
         : []
     );
 
+  const renderSearchResultsSection = (queryOverride = roundSetup.courseQuery) => {
+    const effectiveRoundSetup = {
+      ...roundSetup,
+      courseQuery: String(queryOverride || ""),
+    };
+    const effectiveDiscovery = getRoundSetupDiscoveryState(effectiveRoundSetup, state.session?.nearby || {});
+    const effectiveSelectedCourse = effectiveDiscovery.selectedCourse;
+    const effectiveSelectedTeeBox = effectiveDiscovery.selectedTeeBox;
+    const effectiveHoleCountOptions = [9, 18]
+      .filter((count) => count <= Number(effectiveSelectedCourse?.holesCount || 18))
+      .concat(
+        Number(effectiveSelectedCourse?.holesCount || 18) > 0 && ![9, 18].includes(Number(effectiveSelectedCourse?.holesCount || 18))
+          ? [Number(effectiveSelectedCourse.holesCount)]
+          : []
+      );
+
+    return `
+      <div class="course-results-list course-results-list--compact">
+        ${effectiveDiscovery.searchResults.length
+          ? effectiveDiscovery.searchResults.slice(0, 6).map((course) => {
+              const featuredTee = getDefaultCourseTeeBox(course);
+              const isSelected = course.id === effectiveSelectedCourse?.id;
+              return `
+                <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
+                  <div class="course-result-copy">
+                    <strong>${escapeHtml(course.displayName || course.name)}</strong>
+                    <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
+                  </div>
+                  <div class="course-result-meta">
+                    <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
+                    <span>${featuredTee?.totalYardage || "--"} yds</span>
+                  </div>
+                </button>
+              `;
+            }).join("")
+          : `
+            <div class="empty-state compact-empty-state">
+              <strong>No course match</strong>
+            </div>
+          `}
+      </div>
+      ${effectiveSelectedCourse && effectiveSelectedTeeBox
+        ? `
+          <article class="course-selected-card" data-selected-course="true">
+            <div class="course-selected-copy">
+              <span class="mini-label">Selected</span>
+              <strong>${escapeHtml(effectiveSelectedCourse.displayName || effectiveSelectedCourse.name)}</strong>
+              <p>${escapeHtml(effectiveSelectedTeeBox.name)} / ${effectiveSelectedTeeBox.totalYardage} yds / Par ${effectiveSelectedTeeBox.totalPar}</p>
+            </div>
+            <div class="split-inputs course-selected-actions">
+              <label>
+                Tee
+                <select name="selectedTeeBoxId" form="create-round-form" data-course-tee-select="true">
+                  ${effectiveSelectedCourse.teeBoxes.map((teeBox) => `
+                    <option value="${teeBox.id}" ${teeBox.id === effectiveSelectedTeeBox.id ? "selected" : ""}>
+                      ${escapeHtml(teeBox.name)} / ${teeBox.totalYardage} yds
+                    </option>
+                  `).join("")}
+                </select>
+              </label>
+              <label>
+                Holes
+                <select name="selectedHoleCount" form="create-round-form" data-course-hole-count-select="true">
+                  ${effectiveHoleCountOptions.map((count) => `
+                    <option value="${count}" ${count === effectiveRoundSetup.selectedHoleCount ? "selected" : ""}>${count}</option>
+                  `).join("")}
+                </select>
+              </label>
+            </div>
+          </article>
+        `
+        : ""}
+      <div class="row-actions compact-actions">
+        <button class="button subtle" type="button" data-action="back-course-methods">Back</button>
+      </div>
+      ${renderRoundSetupFooter({
+        canGoBack: true,
+        nextLabel: "Next",
+        nextDirection: 1,
+        nextDisabled: !effectiveSelectedCourse,
+      })}
+    `;
+  };
+
   if (!courseMethod) {
     if (state.session?.nearby?.locationPermission === "granted" && suggestedCourse && suggestedTeeBox) {
       return `
@@ -13589,71 +13673,95 @@ function renderCoursePicker(state) {
           <input data-course-search-input="true" type="search" value="${escapeHtml(roundSetup.courseQuery)}" placeholder="Course or city" />
         </label>
       </div>
-      <div class="course-results-list course-results-list--compact">
-        ${searchResults.length
-          ? searchResults.slice(0, 6).map((course) => {
-              const featuredTee = getDefaultCourseTeeBox(course);
-              const isSelected = course.id === selectedCourse?.id;
-              return `
-                <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
-                  <div class="course-result-copy">
-                    <strong>${escapeHtml(course.displayName || course.name)}</strong>
-                    <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
-                  </div>
-                  <div class="course-result-meta">
-                    <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
-                    <span>${featuredTee?.totalYardage || "--"} yds</span>
-                  </div>
-                </button>
-              `;
-            }).join("")
-          : `
-            <div class="empty-state compact-empty-state">
-              <strong>No course match</strong>
-            </div>
-          `}
+      <div data-course-search-results="true">
+        ${renderSearchResultsSection()}
       </div>
-      ${selectedCourse && selectedTeeBox
-        ? `
-          <article class="course-selected-card" data-selected-course="true">
-            <div class="course-selected-copy">
-              <span class="mini-label">Selected</span>
-              <strong>${escapeHtml(selectedCourse.displayName || selectedCourse.name)}</strong>
-              <p>${escapeHtml(selectedTeeBox.name)} / ${selectedTeeBox.totalYardage} yds / Par ${selectedTeeBox.totalPar}</p>
-            </div>
-            <div class="split-inputs course-selected-actions">
-              <label>
-                Tee
-                <select name="selectedTeeBoxId" form="create-round-form" data-course-tee-select="true">
-                  ${selectedCourse.teeBoxes.map((teeBox) => `
-                    <option value="${teeBox.id}" ${teeBox.id === selectedTeeBox.id ? "selected" : ""}>
-                      ${escapeHtml(teeBox.name)} / ${teeBox.totalYardage} yds
-                    </option>
-                  `).join("")}
-                </select>
-              </label>
-              <label>
-                Holes
-                <select name="selectedHoleCount" form="create-round-form" data-course-hole-count-select="true">
-                  ${holeCountOptions.map((count) => `
-                    <option value="${count}" ${count === roundSetup.selectedHoleCount ? "selected" : ""}>${count}</option>
-                  `).join("")}
-                </select>
-              </label>
-            </div>
-          </article>
-        `
-        : ""}
-      <div class="row-actions compact-actions">
-        <button class="button subtle" type="button" data-action="back-course-methods">Back</button>
-      </div>
-      ${renderRoundSetupFooter({
-        canGoBack: true,
-        nextLabel: "Next",
-        nextDirection: 1,
-        nextDisabled: !selectedCourse,
-      })}
     </div>
+  `;
+}
+function renderCourseSearchResults(state, queryOverride = "") {
+  const roundSetup = getRoundSetup(state);
+  const effectiveRoundSetup = {
+    ...roundSetup,
+    courseMethod: "search",
+    courseQuery: String(queryOverride || ""),
+  };
+  const discovery = getRoundSetupDiscoveryState(effectiveRoundSetup, state.session?.nearby || {});
+  const selectedCourse = discovery.selectedCourse;
+  const selectedTeeBox = discovery.selectedTeeBox;
+  const holeCountOptions = [9, 18]
+    .filter((count) => count <= Number(selectedCourse?.holesCount || 18))
+    .concat(
+      Number(selectedCourse?.holesCount || 18) > 0 && ![9, 18].includes(Number(selectedCourse?.holesCount || 18))
+        ? [Number(selectedCourse.holesCount)]
+        : []
+    );
+
+  return `
+    <div class="course-results-list course-results-list--compact">
+      ${discovery.searchResults.length
+        ? discovery.searchResults.slice(0, 6).map((course) => {
+            const featuredTee = getDefaultCourseTeeBox(course);
+            const isSelected = course.id === selectedCourse?.id;
+            return `
+              <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
+                <div class="course-result-copy">
+                  <strong>${escapeHtml(course.displayName || course.name)}</strong>
+                  <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
+                </div>
+                <div class="course-result-meta">
+                  <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
+                  <span>${featuredTee?.totalYardage || "--"} yds</span>
+                </div>
+              </button>
+            `;
+          }).join("")
+        : `
+          <div class="empty-state compact-empty-state">
+            <strong>No course match</strong>
+          </div>
+        `}
+    </div>
+    ${selectedCourse && selectedTeeBox
+      ? `
+        <article class="course-selected-card" data-selected-course="true">
+          <div class="course-selected-copy">
+            <span class="mini-label">Selected</span>
+            <strong>${escapeHtml(selectedCourse.displayName || selectedCourse.name)}</strong>
+            <p>${escapeHtml(selectedTeeBox.name)} / ${selectedTeeBox.totalYardage} yds / Par ${selectedTeeBox.totalPar}</p>
+          </div>
+          <div class="split-inputs course-selected-actions">
+            <label>
+              Tee
+              <select name="selectedTeeBoxId" form="create-round-form" data-course-tee-select="true">
+                ${selectedCourse.teeBoxes.map((teeBox) => `
+                  <option value="${teeBox.id}" ${teeBox.id === selectedTeeBox.id ? "selected" : ""}>
+                    ${escapeHtml(teeBox.name)} / ${teeBox.totalYardage} yds
+                  </option>
+                `).join("")}
+              </select>
+            </label>
+            <label>
+              Holes
+              <select name="selectedHoleCount" form="create-round-form" data-course-hole-count-select="true">
+                ${holeCountOptions.map((count) => `
+                  <option value="${count}" ${count === effectiveRoundSetup.selectedHoleCount ? "selected" : ""}>${count}</option>
+                `).join("")}
+              </select>
+            </label>
+          </div>
+        </article>
+      `
+      : ""}
+    <div class="row-actions compact-actions">
+      <button class="button subtle" type="button" data-action="back-course-methods">Back</button>
+    </div>
+    ${renderRoundSetupFooter({
+      canGoBack: true,
+      nextLabel: "Next",
+      nextDirection: 1,
+      nextDisabled: !selectedCourse,
+    })}
   `;
 }
 
@@ -15656,6 +15764,13 @@ function applyLocalUiOverrides(state = {}, localUiState = {}) {
     nextState.session.appMenuOpen = localUiState.appMenuOpen;
   }
 
+  if (localUiState.roundSetupFieldDrafts && Object.keys(localUiState.roundSetupFieldDrafts).length) {
+    nextState.session.roundSetup = {
+      ...(nextState.session?.roundSetup || {}),
+      ...localUiState.roundSetupFieldDrafts,
+    };
+  }
+
   if (nextState.session.activeView === "settings") {
     const settingsState = normalizeLocalSettingsState(localUiState, nextState);
     nextState.session.settingsDestination = settingsState.destination;
@@ -15663,6 +15778,51 @@ function applyLocalUiOverrides(state = {}, localUiState = {}) {
   }
 
   return nextState;
+}
+
+function captureActiveInputSnapshot(root) {
+  const doc = root?.ownerDocument || document;
+  const activeElement = doc?.activeElement;
+  if (!activeElement || typeof activeElement.matches !== "function") {
+    return null;
+  }
+
+  let selector = "";
+  if (activeElement.matches("[data-course-search-input]")) {
+    selector = '[data-course-search-input="true"]';
+  } else if (activeElement.matches("[data-round-setup-field]")) {
+    selector = `[data-round-setup-field="${String(activeElement.dataset.roundSetupField || "").trim()}"]`;
+  } else {
+    return null;
+  }
+
+  return {
+    selector,
+    start: typeof activeElement.selectionStart === "number" ? activeElement.selectionStart : null,
+    end: typeof activeElement.selectionEnd === "number" ? activeElement.selectionEnd : null,
+    direction: activeElement.selectionDirection || "none",
+  };
+}
+
+function restoreActiveInputSnapshot(root, snapshot) {
+  if (!root || !snapshot?.selector) {
+    return;
+  }
+
+  const input = root.querySelector(snapshot.selector);
+  if (!input || typeof input.focus !== "function") {
+    return;
+  }
+
+  input.focus({ preventScroll: true });
+
+  if (
+    typeof input.setSelectionRange === "function"
+    && typeof snapshot.start === "number"
+    && typeof snapshot.end === "number"
+  ) {
+    input.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction || "none");
+  }
 }
 
 function applyLocalAppMenuUi(root, isOpen) {
@@ -15738,6 +15898,7 @@ function createRenderer(root) {
     appMenuOpen: false,
     settingsDestination: null,
     settingsSection: null,
+    roundSetupFieldDrafts: {},
   };
 
   function updateLocalUi(patch = {}) {
@@ -15763,6 +15924,12 @@ function createRenderer(root) {
 
       applyLocalSettingsUi(root, localUiState);
     }
+
+    if (Object.prototype.hasOwnProperty.call(patch, "roundSetupFieldDrafts")) {
+      localUiState.roundSetupFieldDrafts = {
+        ...(patch.roundSetupFieldDrafts || {}),
+      };
+    }
   }
 
   function closeTransientUi() {
@@ -15772,7 +15939,12 @@ function createRenderer(root) {
   }
 
   function getLocalUiState() {
-    return { ...localUiState };
+    return {
+      ...localUiState,
+      roundSetupFieldDrafts: {
+        ...(localUiState.roundSetupFieldDrafts || {}),
+      },
+    };
   }
 
   function render(state, meta = {}) {
@@ -15781,6 +15953,7 @@ function createRenderer(root) {
     const sameView = lastRenderedView === nextView;
     const currentScrollHost = getScrollHost(root);
     const persistedDetailKeys = sameView ? capturePersistedDetailKeys(root) : [];
+    const activeInputSnapshot = sameView ? captureActiveInputSnapshot(root) : null;
 
     if (nextView === "settings" && (
       localUiState.settingsDestination === null
@@ -15836,10 +16009,13 @@ function createRenderer(root) {
       if (typeof requestAnimationFrame === "function") {
         pendingScrollRestore = requestAnimationFrame(() => {
           applyScrollPosition();
+          restoreActiveInputSnapshot(root, activeInputSnapshot);
           pendingScrollRestore = 0;
         });
       }
     }
+
+    restoreActiveInputSnapshot(root, activeInputSnapshot);
 
     lastRenderedView = nextView;
   }
@@ -16490,6 +16666,7 @@ function bootstrapApp({
   let roundSyncRetryTimer = null;
   let roundSyncHeartbeatTimer = null;
   let roundSyncRequest = null;
+  const roundSetupInputTimers = new Map();
   let realtimeSession = createNoopRealtimeSession();
   let removeBeforeUnload = () => {};
   let removeAppearanceListener = () => {};
@@ -16539,6 +16716,13 @@ function bootstrapApp({
     if (roundSyncHeartbeatTimer) {
       clearInterval(roundSyncHeartbeatTimer);
       roundSyncHeartbeatTimer = null;
+    }
+
+    if (roundSetupInputTimers.size) {
+      roundSetupInputTimers.forEach((timerId) => {
+        clearTimeout(timerId);
+      });
+      roundSetupInputTimers.clear();
     }
 
     while (removeRuntimeListeners.length) {
@@ -16751,6 +16935,59 @@ function bootstrapApp({
       ? render.getLocalUiState()
       : {}
   );
+
+  const setRoundSetupFieldDraft = (field, value) => {
+    const currentDrafts = {
+      ...(getLocalUiState().roundSetupFieldDrafts || {}),
+    };
+
+    if (typeof value === "undefined") {
+      delete currentDrafts[field];
+    } else {
+      currentDrafts[field] = value;
+    }
+
+    updateLocalUi({ roundSetupFieldDrafts: currentDrafts });
+  };
+
+  const updateCourseSearchResultsPanel = (query) => {
+    const resultsHost = root.querySelector("[data-course-search-results]");
+    if (!resultsHost) {
+      return;
+    }
+
+    resultsHost.innerHTML = renderCourseSearchResults(store.getState(), query);
+  };
+
+  const queueRoundSetupFieldCommit = (field, value, reason) => {
+    const timerKey = String(field || "").trim();
+    if (!timerKey) {
+      return;
+    }
+
+    const existingTimer = roundSetupInputTimers.get(timerKey);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timerId = window.setTimeout(() => {
+      roundSetupInputTimers.delete(timerKey);
+      store.setState((draft) => {
+        setRoundSetupField(draft, timerKey, value);
+        if (timerKey === "manualCourseName" || timerKey === "manualTeeBoxName") {
+          setRoundSetupField(draft, "selectedCourseId", "");
+          setRoundSetupField(draft, "selectedTeeBoxId", "");
+        }
+        if (timerKey === "courseQuery") {
+          setRoundSetupField(draft, "courseMethod", "search");
+        }
+        return draft;
+      }, { reason });
+      setRoundSetupFieldDraft(timerKey, undefined);
+    }, timerKey === "courseQuery" ? 350 : 400);
+
+    roundSetupInputTimers.set(timerKey, timerId);
+  };
 
   const renderTab = (tab) => {
     const nextView = mapTabToView(tab);
@@ -17939,7 +18176,7 @@ function bootstrapApp({
     if (action === "apply-course-search") {
       const searchShell = actionElement.closest("[data-course-search-shell]");
       const searchInput = searchShell?.querySelector('[data-course-search-input]');
-      const nextQuery = String(searchInput?.value || "").trim();
+      const nextQuery = String(searchInput?.value || "");
 
       store.setState((draft) => {
         draft.session.roundSetup = {
@@ -17952,10 +18189,17 @@ function bootstrapApp({
     }
 
     if (action === "clear-course-search") {
+      const existingTimer = roundSetupInputTimers.get("courseQuery");
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+        roundSetupInputTimers.delete("courseQuery");
+      }
+      setRoundSetupFieldDraft("courseQuery", undefined);
       store.setState((draft) => {
         setRoundSetupField(draft, "courseQuery", "");
         return draft;
       }, { reason: "clear-course-search" });
+      updateCourseSearchResultsPanel("");
       return;
     }
 
@@ -19070,16 +19314,10 @@ function bootstrapApp({
   root.addEventListener("input", (event) => {
     const roundSetupInput = getClosestEventElement(event.target, "[data-round-setup-field]");
     if (roundSetupInput) {
-      store.setState((draft) => {
-        const field = String(roundSetupInput.dataset.roundSetupField || "").trim();
-        const value = String(roundSetupInput.value || "");
-        setRoundSetupField(draft, field, value);
-        if (field === "manualCourseName" || field === "manualTeeBoxName") {
-          setRoundSetupField(draft, "selectedCourseId", "");
-          setRoundSetupField(draft, "selectedTeeBoxId", "");
-        }
-        return draft;
-      }, { reason: "round-setup-field-input" });
+      const field = String(roundSetupInput.dataset.roundSetupField || "").trim();
+      const value = String(roundSetupInput.value || "");
+      setRoundSetupFieldDraft(field, value);
+      queueRoundSetupFieldCommit(field, value, "round-setup-field-debounced");
       return;
     }
 
@@ -19088,14 +19326,10 @@ function bootstrapApp({
       return;
     }
 
-    store.setState((draft) => {
-      draft.session.roundSetup = {
-        ...getRoundSetupState(draft),
-        courseMethod: "search",
-        courseQuery: String(courseSearchInput.value || "").trim(),
-      };
-      return draft;
-    }, { reason: "course-search-input" });
+    const nextQuery = String(courseSearchInput.value || "");
+    setRoundSetupFieldDraft("courseQuery", nextQuery);
+    updateCourseSearchResultsPanel(nextQuery);
+    queueRoundSetupFieldCommit("courseQuery", nextQuery, "course-search-debounced");
   });
 
   root.addEventListener("toggle", (event) => {

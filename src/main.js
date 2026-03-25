@@ -95,6 +95,7 @@ import {
 } from "./state/session-state.js";
 import { createStore } from "./state/store.js";
 import { createRenderer } from "./ui/render.js";
+import { renderCourseSearchResults } from "./ui/templates.js";
 import {
   applyJoinedRoundState,
   closeHelpView,
@@ -188,6 +189,7 @@ export function bootstrapApp({
   let roundSyncRetryTimer = null;
   let roundSyncHeartbeatTimer = null;
   let roundSyncRequest = null;
+  const roundSetupInputTimers = new Map();
   let realtimeSession = createNoopRealtimeSession();
   let removeBeforeUnload = () => {};
   let removeAppearanceListener = () => {};
@@ -237,6 +239,13 @@ export function bootstrapApp({
     if (roundSyncHeartbeatTimer) {
       clearInterval(roundSyncHeartbeatTimer);
       roundSyncHeartbeatTimer = null;
+    }
+
+    if (roundSetupInputTimers.size) {
+      roundSetupInputTimers.forEach((timerId) => {
+        clearTimeout(timerId);
+      });
+      roundSetupInputTimers.clear();
     }
 
     while (removeRuntimeListeners.length) {
@@ -449,6 +458,59 @@ export function bootstrapApp({
       ? render.getLocalUiState()
       : {}
   );
+
+  const setRoundSetupFieldDraft = (field, value) => {
+    const currentDrafts = {
+      ...(getLocalUiState().roundSetupFieldDrafts || {}),
+    };
+
+    if (typeof value === "undefined") {
+      delete currentDrafts[field];
+    } else {
+      currentDrafts[field] = value;
+    }
+
+    updateLocalUi({ roundSetupFieldDrafts: currentDrafts });
+  };
+
+  const updateCourseSearchResultsPanel = (query) => {
+    const resultsHost = root.querySelector("[data-course-search-results]");
+    if (!resultsHost) {
+      return;
+    }
+
+    resultsHost.innerHTML = renderCourseSearchResults(store.getState(), query);
+  };
+
+  const queueRoundSetupFieldCommit = (field, value, reason) => {
+    const timerKey = String(field || "").trim();
+    if (!timerKey) {
+      return;
+    }
+
+    const existingTimer = roundSetupInputTimers.get(timerKey);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timerId = window.setTimeout(() => {
+      roundSetupInputTimers.delete(timerKey);
+      store.setState((draft) => {
+        setRoundSetupField(draft, timerKey, value);
+        if (timerKey === "manualCourseName" || timerKey === "manualTeeBoxName") {
+          setRoundSetupField(draft, "selectedCourseId", "");
+          setRoundSetupField(draft, "selectedTeeBoxId", "");
+        }
+        if (timerKey === "courseQuery") {
+          setRoundSetupField(draft, "courseMethod", "search");
+        }
+        return draft;
+      }, { reason });
+      setRoundSetupFieldDraft(timerKey, undefined);
+    }, timerKey === "courseQuery" ? 350 : 400);
+
+    roundSetupInputTimers.set(timerKey, timerId);
+  };
 
   const renderTab = (tab) => {
     const nextView = mapTabToView(tab);
@@ -1637,7 +1699,7 @@ export function bootstrapApp({
     if (action === "apply-course-search") {
       const searchShell = actionElement.closest("[data-course-search-shell]");
       const searchInput = searchShell?.querySelector('[data-course-search-input]');
-      const nextQuery = String(searchInput?.value || "").trim();
+      const nextQuery = String(searchInput?.value || "");
 
       store.setState((draft) => {
         draft.session.roundSetup = {
@@ -1650,10 +1712,17 @@ export function bootstrapApp({
     }
 
     if (action === "clear-course-search") {
+      const existingTimer = roundSetupInputTimers.get("courseQuery");
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+        roundSetupInputTimers.delete("courseQuery");
+      }
+      setRoundSetupFieldDraft("courseQuery", undefined);
       store.setState((draft) => {
         setRoundSetupField(draft, "courseQuery", "");
         return draft;
       }, { reason: "clear-course-search" });
+      updateCourseSearchResultsPanel("");
       return;
     }
 
@@ -2768,16 +2837,10 @@ export function bootstrapApp({
   root.addEventListener("input", (event) => {
     const roundSetupInput = getClosestEventElement(event.target, "[data-round-setup-field]");
     if (roundSetupInput) {
-      store.setState((draft) => {
-        const field = String(roundSetupInput.dataset.roundSetupField || "").trim();
-        const value = String(roundSetupInput.value || "");
-        setRoundSetupField(draft, field, value);
-        if (field === "manualCourseName" || field === "manualTeeBoxName") {
-          setRoundSetupField(draft, "selectedCourseId", "");
-          setRoundSetupField(draft, "selectedTeeBoxId", "");
-        }
-        return draft;
-      }, { reason: "round-setup-field-input" });
+      const field = String(roundSetupInput.dataset.roundSetupField || "").trim();
+      const value = String(roundSetupInput.value || "");
+      setRoundSetupFieldDraft(field, value);
+      queueRoundSetupFieldCommit(field, value, "round-setup-field-debounced");
       return;
     }
 
@@ -2786,14 +2849,10 @@ export function bootstrapApp({
       return;
     }
 
-    store.setState((draft) => {
-      draft.session.roundSetup = {
-        ...getRoundSetupState(draft),
-        courseMethod: "search",
-        courseQuery: String(courseSearchInput.value || "").trim(),
-      };
-      return draft;
-    }, { reason: "course-search-input" });
+    const nextQuery = String(courseSearchInput.value || "");
+    setRoundSetupFieldDraft("courseQuery", nextQuery);
+    updateCourseSearchResultsPanel(nextQuery);
+    queueRoundSetupFieldCommit("courseQuery", nextQuery, "course-search-debounced");
   });
 
   root.addEventListener("toggle", (event) => {

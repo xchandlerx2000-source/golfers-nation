@@ -416,6 +416,102 @@ describe("bootstrap app", () => {
     result.destroy();
   });
 
+  it("keeps course search typing local until debounce so typing does not rerender the full screen", () => {
+    vi.useFakeTimers();
+
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Search Tester",
+      email: "searchtester@example.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    state.session.activeView = "round";
+    state.session.activeRoundId = null;
+    state.rounds = [];
+    state.groups = [];
+    state.session.roundSetup = {
+      ...state.session.roundSetup,
+      step: "course",
+      courseMethod: "search",
+      courseQuery: "",
+      selectedCourseId: "",
+      selectedTeeBoxId: "",
+    };
+
+    let renderCount = 0;
+    const rendererFactory = (root) => {
+      const baseRenderer = createRenderer(root);
+      const wrappedRenderer = (nextState, meta) => {
+        renderCount += 1;
+        return baseRenderer(nextState, meta);
+      };
+      wrappedRenderer.updateLocalUi = baseRenderer.updateLocalUi;
+      wrappedRenderer.closeTransientUi = baseRenderer.closeTransientUi;
+      wrappedRenderer.getLocalUiState = baseRenderer.getLocalUiState;
+      return wrappedRenderer;
+    };
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      rendererFactory,
+      timeoutMs: 50,
+      platformFactory() {
+        return {
+          auth: {
+            restoreSession(nextState) {
+              return nextState;
+            },
+          },
+          data: {
+            loadInitialState() {
+              return state;
+            },
+            prepareForPersistence(nextState) {
+              return nextState;
+            },
+            persist() {},
+            saveWorkspace() {},
+          },
+          realtime: {
+            createSession() {
+              return {
+                connect() {},
+                disconnect() {},
+                publishRoundUpdate() {},
+                enableNearbySync() {},
+                enableBluetoothSync() {
+                  return Promise.resolve();
+                },
+                updateTransport() {},
+              };
+            },
+          },
+        };
+      },
+    });
+
+    const initialRenderCount = renderCount;
+    const initialResultsMarkup = document.querySelector("[data-course-search-results]").innerHTML;
+    const input = document.querySelector('[data-course-search-input="true"]');
+    input.focus();
+    input.value = "Pebble";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+
+    expect(renderCount).toBe(initialRenderCount);
+    expect(result.store.getState().session.roundSetup.courseQuery).toBe("");
+    expect(document.querySelector("[data-course-search-results]").innerHTML).not.toBe(initialResultsMarkup);
+
+    vi.advanceTimersByTime(360);
+
+    expect(result.store.getState().session.roundSetup.courseQuery).toBe("Pebble");
+    expect(renderCount).toBe(initialRenderCount + 1);
+    expect(document.activeElement).toBe(document.querySelector('[data-course-search-input="true"]'));
+
+    result.destroy();
+    vi.useRealTimers();
+  });
+
   it("creates a round from a seeded real course and tee selection", () => {
     const state = createDefaultState();
     const created = createEmailAccount(state, {

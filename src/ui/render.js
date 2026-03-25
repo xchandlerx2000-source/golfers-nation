@@ -308,6 +308,13 @@ function applyLocalUiOverrides(state = {}, localUiState = {}) {
     nextState.session.appMenuOpen = localUiState.appMenuOpen;
   }
 
+  if (localUiState.roundSetupFieldDrafts && Object.keys(localUiState.roundSetupFieldDrafts).length) {
+    nextState.session.roundSetup = {
+      ...(nextState.session?.roundSetup || {}),
+      ...localUiState.roundSetupFieldDrafts,
+    };
+  }
+
   if (nextState.session.activeView === "settings") {
     const settingsState = normalizeLocalSettingsState(localUiState, nextState);
     nextState.session.settingsDestination = settingsState.destination;
@@ -315,6 +322,51 @@ function applyLocalUiOverrides(state = {}, localUiState = {}) {
   }
 
   return nextState;
+}
+
+function captureActiveInputSnapshot(root) {
+  const doc = root?.ownerDocument || document;
+  const activeElement = doc?.activeElement;
+  if (!activeElement || typeof activeElement.matches !== "function") {
+    return null;
+  }
+
+  let selector = "";
+  if (activeElement.matches("[data-course-search-input]")) {
+    selector = '[data-course-search-input="true"]';
+  } else if (activeElement.matches("[data-round-setup-field]")) {
+    selector = `[data-round-setup-field="${String(activeElement.dataset.roundSetupField || "").trim()}"]`;
+  } else {
+    return null;
+  }
+
+  return {
+    selector,
+    start: typeof activeElement.selectionStart === "number" ? activeElement.selectionStart : null,
+    end: typeof activeElement.selectionEnd === "number" ? activeElement.selectionEnd : null,
+    direction: activeElement.selectionDirection || "none",
+  };
+}
+
+function restoreActiveInputSnapshot(root, snapshot) {
+  if (!root || !snapshot?.selector) {
+    return;
+  }
+
+  const input = root.querySelector(snapshot.selector);
+  if (!input || typeof input.focus !== "function") {
+    return;
+  }
+
+  input.focus({ preventScroll: true });
+
+  if (
+    typeof input.setSelectionRange === "function"
+    && typeof snapshot.start === "number"
+    && typeof snapshot.end === "number"
+  ) {
+    input.setSelectionRange(snapshot.start, snapshot.end, snapshot.direction || "none");
+  }
 }
 
 function applyLocalAppMenuUi(root, isOpen) {
@@ -391,6 +443,7 @@ export function createRenderer(root) {
     appMenuOpen: false,
     settingsDestination: null,
     settingsSection: null,
+    roundSetupFieldDrafts: {},
   };
 
   function updateLocalUi(patch = {}) {
@@ -416,6 +469,12 @@ export function createRenderer(root) {
 
       applyLocalSettingsUi(root, localUiState);
     }
+
+    if (Object.prototype.hasOwnProperty.call(patch, "roundSetupFieldDrafts")) {
+      localUiState.roundSetupFieldDrafts = {
+        ...(patch.roundSetupFieldDrafts || {}),
+      };
+    }
   }
 
   function closeTransientUi() {
@@ -425,7 +484,12 @@ export function createRenderer(root) {
   }
 
   function getLocalUiState() {
-    return { ...localUiState };
+    return {
+      ...localUiState,
+      roundSetupFieldDrafts: {
+        ...(localUiState.roundSetupFieldDrafts || {}),
+      },
+    };
   }
 
   function render(state, meta = {}) {
@@ -434,6 +498,7 @@ export function createRenderer(root) {
     const sameView = lastRenderedView === nextView;
     const currentScrollHost = getScrollHost(root);
     const persistedDetailKeys = sameView ? capturePersistedDetailKeys(root) : [];
+    const activeInputSnapshot = sameView ? captureActiveInputSnapshot(root) : null;
 
     if (nextView === "settings" && (
       localUiState.settingsDestination === null
@@ -489,10 +554,13 @@ export function createRenderer(root) {
       if (typeof requestAnimationFrame === "function") {
         pendingScrollRestore = requestAnimationFrame(() => {
           applyScrollPosition();
+          restoreActiveInputSnapshot(root, activeInputSnapshot);
           pendingScrollRestore = 0;
         });
       }
     }
+
+    restoreActiveInputSnapshot(root, activeInputSnapshot);
 
     lastRenderedView = nextView;
   }
