@@ -53,7 +53,7 @@ describe("ui helpers", () => {
     const presentation = getSyncPresentation(round, group);
 
     expect(presentation.tone).toBe("warning");
-    expect(presentation.title).toBe("Reconnect check");
+    expect(presentation.title).toBe("Reconnecting");
     expect(presentation.message).toContain("ABC123");
 
     vi.useRealTimers();
@@ -118,9 +118,9 @@ describe("ui helpers", () => {
     const presentation = getSyncPresentation(round, null);
 
     expect(presentation.tone).toBe("warning");
-    expect(presentation.title).toBe("Saved locally / retry needed");
-    expect(presentation.message).toContain("safe on this phone");
-    expect(presentation.message).toContain("original host leaves");
+    expect(presentation.title).toBe("Saved on this phone");
+    expect(presentation.message).toContain("safe here");
+    expect(presentation.message).toContain("Retry");
   });
 
   it("locks premium scoring modes for free accounts", () => {
@@ -162,6 +162,7 @@ describe("ui helpers", () => {
     expect(markup).toContain("No live round yet");
     expect(markup).toContain("Start Round");
     expect(markup).toContain("Join Game");
+    expect(markup).toContain('data-action="open-community-join"');
     expect(markup).toContain("Active Game");
     expect(markup).toContain("Course Assist");
     expect(markup).toContain("Choose course");
@@ -476,7 +477,7 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Saved locally / retry needed");
+    expect(markup).toContain("Saved on this phone");
     expect(markup).toContain("Retry save");
   });
 

@@ -1428,6 +1428,16 @@ export function bootstrapApp({
         return;
       }
 
+    if (action === "open-community-join") {
+      closeTransientUi();
+      store.setState((draft) => {
+        setActiveView(draft, "community", "tab");
+        setFeedback(draft, "info", "Join a round", "Enter a code or pick a nearby game.");
+        return draft;
+      }, { reason: "open-community-join" });
+      return;
+    }
+
     if (action === "open-help-section") {
       closeTransientUi();
       store.setState((draft) => {
@@ -2106,7 +2116,7 @@ export function bootstrapApp({
           draft,
           joined,
           "Round joined",
-          `${joined.round.courseName} is now open and ready for scoring.`
+          `${joined.round.courseName} is open in Score. Enter the next hole when you're ready.`
         );
         return draft;
       }, { reason: "quick-join" });
@@ -3095,7 +3105,7 @@ export function bootstrapApp({
           draft,
           joined,
           "Joined round",
-          `${joined.round.courseName} is ready. Your own score entry is open first, and the rest of the group stays visible underneath.`
+          `${joined.round.courseName} is open in Score. Enter the next hole when you're ready.`
         );
         return draft;
       }, { reason: "join-code" });

@@ -583,57 +583,57 @@ export function getSyncPresentation(round, group) {
   if (saveState === "retry-needed") {
     return {
       tone: "warning",
-      title: "Saved locally / retry needed",
-      message: `${pendingCount === 1 ? "1 change is" : `${pendingCount} changes are`} still safe on this phone. Golfers Nation will retry cloud backup when service returns, and any joined golfer can keep scoring locally even if the original host leaves.`,
+      title: "Saved on this phone",
+      message: `${pendingCount === 1 ? "1 change is" : `${pendingCount} changes are`} safe here. Retry when the connection settles.`,
     };
   }
 
   if (saveState === "syncing") {
     return {
       tone: "success",
-      title: "Syncing live changes",
-      message: `${pendingCount === 1 ? "1 local update is" : `${pendingCount} local updates are`} already safe on this phone and are backing up now.`,
+      title: "Reconnecting",
+      message: "Your scores are safe here while the shared round catches up.",
     };
   }
 
   if (transport === "local") {
     return {
       tone: "quiet",
-      title: "Local score mode",
-      message: pendingCount
-        ? `${pendingCount === 1 ? "1 change is" : `${pendingCount} changes are`} saved locally already. Host with an invite code when the rest of the group is ready.`
-        : "Scores are safe on this phone. Host with an invite code when the rest of the group is ready.",
+      title: "Not connected",
+      message: inviteCode
+        ? `Code ${inviteCode} is ready when players are ready to join.`
+        : "Start hosting when you want to share this round.",
     };
   }
 
   if (stale) {
     return {
       tone: "warning",
-      title: "Reconnect check",
-      message: `No live update since ${formatRelativeSync(lastEventAt)}. Re-host with ${inviteCode || "your invite code"} or fall back to nearby sync if the room feels stuck.`,
+      title: "Reconnecting",
+      message: `Trying to reconnect${inviteCode ? ` with code ${inviteCode}` : ""}.`,
     };
   }
 
   if (stateLabel === "hosting") {
     return {
       tone: "success",
-      title: "Live room open",
-      message: `Invite code ${inviteCode || "pending"} is ready. The original host can leave later because every joined golfer keeps a safe local card.`,
+      title: "Waiting for players",
+      message: `Share code ${inviteCode || "pending"} to bring golfers in.`,
     };
   }
 
   if (stateLabel === "connected") {
     return {
       tone: "success",
-      title: "Sync healthy",
-      message: `Shared updates are flowing through ${escapeHtml(round.sync.label)}. Last activity: ${formatRelativeSync(lastEventAt)}. Every joined device still saves locally first.`,
+      title: "Connected",
+      message: "Shared scoring is live right now.",
     };
   }
 
   return {
     tone: "quiet",
-    title: "Sync standing by",
-    message: "This round is ready to reconnect whenever you enable hosting, nearby, or future cloud-backed sync.",
+    title: "Not connected",
+    message: "This round is ready when you want to share it.",
   };
 }
 
@@ -1365,43 +1365,6 @@ function renderNearbyStrategyPanel(strategy, {
   `;
 }
 
-function renderPlayNearbyGamesCard(state) {
-  const nearbyGames = getNearbyDiscoveryState(state).games.slice(0, 3);
-
-  return `
-    <article class="card play-screen-card play-compact-card">
-      <div class="section-heading section-heading--compact">
-        <div>
-          <p class="eyebrow">Nearby Games</p>
-          <h3>${nearbyGames.length ? `${nearbyGames.length} active now` : "Join fast"}</h3>
-        </div>
-      </div>
-      ${nearbyGames.length
-        ? `
-          <div class="play-nearby-row" aria-label="Nearby games">
-            ${nearbyGames.map((game) => `
-              <article class="play-nearby-card play-nearby-card--game">
-                <div class="play-nearby-card-copy">
-                  <strong>${escapeHtml(game.title)}</strong>
-                  <p>${escapeHtml(game.statusLabel)} / ${escapeHtml(game.distance)} / ${escapeHtml(game.inviteCode)}</p>
-                </div>
-                <div class="play-nearby-card-actions">
-                  <button class="button secondary" type="button" data-action="quick-join-code" data-code="${game.inviteCode}">${escapeHtml(game.joinActionLabel || "Join")}</button>
-                </div>
-              </article>
-            `).join("")}
-          </div>
-        `
-        : `
-          <div class="empty-state compact-empty-state">
-            <strong>No nearby games yet.</strong>
-            <p>Live rounds show up here automatically.</p>
-          </div>
-        `}
-    </article>
-  `;
-}
-
 function renderPlayCourseAssistCard(state, activeRound) {
   const roundSetup = getRoundSetup(state);
   const discovery = getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {});
@@ -1494,7 +1457,7 @@ function renderPrimaryActions(state, activeRound) {
   return `
       <div class="play-screen-actions">
         <button class="button primary primary-btn ${shouldShowFirstRoundGuide(state) && !hasActiveRound ? "guided-action" : ""}" type="button" data-action="nav-view" data-view="round">Start Round</button>
-        <button class="button secondary secondary-btn" type="button" data-action="nav-view" data-view="community">Join Game</button>
+        <button class="button secondary secondary-btn" type="button" data-action="open-community-join">Join Game</button>
       </div>
     `;
 }
@@ -1518,10 +1481,12 @@ function renderPlayActiveGameCard(state, activeRound) {
           </div>
           <span class="status-pill">Ready</span>
         </div>
-        <p class="play-active-copy">Start or join to see a live room here.</p>
+        <p class="play-active-copy">Start a round or join one to see it here.</p>
       </article>
     `;
   }
+
+  const sync = getSyncPresentation(activeRound, activeGroup);
 
   return `
       <article class="card play-screen-card play-compact-card play-active-card">
@@ -1530,13 +1495,13 @@ function renderPlayActiveGameCard(state, activeRound) {
             <p class="eyebrow">Active Game</p>
             <h3>${escapeHtml(activeRound.courseName)}</h3>
           </div>
-          <span class="status-pill ${activeRound.connectionState === "live" ? "is-live" : ""}">${escapeHtml(activeRound.sync.label)}</span>
+          <span class="status-pill ${sync.tone === "success" ? "is-live" : ""}">${escapeHtml(sync.title)}</span>
         </div>
         <div class="play-active-strip-meta">
           <span><strong>Code</strong> ${escapeHtml(inviteCode || "---")}</span>
           <span><strong>Hole</strong> ${activeRound.currentHole}</span>
           <span><strong>Tee</strong> ${escapeHtml(activeRound.teeBox || "Default")}</span>
-          <span><strong>Status</strong> ${escapeHtml(activeRound.connectionState === "live" ? "Live room" : "Saved locally")}</span>
+          <span><strong>Status</strong> ${escapeHtml(sync.title)}</span>
         </div>
         <div class="play-active-players" aria-label="Players in active game">
           ${visiblePlayers.length
@@ -1550,127 +1515,6 @@ function renderPlayActiveGameCard(state, activeRound) {
         </div>
       </article>
     `;
-}
-
-function renderPlayNearbyPlayersCard(state) {
-  const nearbyPlayers = getNearbyDiscoveryState(state).players.slice(0, 3);
-
-  return `
-      <article class="card play-screen-card play-compact-card">
-        <div class="section-heading section-heading--compact">
-          <div>
-            <p class="eyebrow">Nearby Players</p>
-            <h3>${nearbyPlayers.length ? `${nearbyPlayers.length} golfers active` : "Active now"}</h3>
-          </div>
-        </div>
-        ${nearbyPlayers.length
-          ? `
-            <div class="play-nearby-row" aria-label="Nearby players">
-              ${nearbyPlayers.map((player) => `
-                <article class="play-nearby-card play-nearby-card--player">
-                  <div class="play-nearby-card-copy">
-                    <strong>${escapeHtml(player.displayName)}</strong>
-                    <p>${escapeHtml(player.statusLabel)} / ${escapeHtml(player.relationshipLabel)}</p>
-                  </div>
-                  <div class="play-nearby-card-actions">
-                    ${player.inviteCode ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${player.inviteCode}">Join</button>` : `<button class="button subtle" type="button" data-action="toggle-follow-profile" data-profile-id="${escapeHtml(player.profileId)}">${player.isFollowed ? "Following" : "Follow"}</button>`}
-                  </div>
-                </article>
-              `).join("")}
-            </div>
-          `
-          : `
-            <div class="empty-state compact-empty-state play-screen-empty">
-              <strong>No nearby golfers yet.</strong>
-              <p>Active golfers appear here automatically.</p>
-            </div>
-          `}
-      </article>
-    `;
-}
-
-function renderPlayFriendsCard(state) {
-  const friendRows = getNearbyDiscoveryState(state).friends;
-
-  return `
-    <details class="card play-screen-card play-compact-card play-collapsible-card" data-persist-key="play-friends">
-      <summary class="play-collapsible-summary">
-        <div>
-          <p class="eyebrow">Friends Activity</p>
-          <strong>${friendRows.length ? `${friendRows.length} golfer${friendRows.length === 1 ? "" : "s"} active` : "Build your golf circle"}</strong>
-        </div>
-        <span>${friendRows.length ? "Open" : "Invite"}</span>
-      </summary>
-      <div class="play-collapsible-body">
-        ${friendRows.length
-          ? `
-            <div class="stack-list compact-stack play-list">
-              ${friendRows.map((friend) => `
-                <article class="list-row play-list-row">
-                  <div>
-                    <strong>${escapeHtml(friend.displayName)}</strong>
-                    <p>${escapeHtml(friend.statusLabel)}</p>
-                  </div>
-                  <div class="list-metrics">
-                    ${friend.canJoin ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${friend.inviteCode}">Join</button>` : ""}
-                    <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(friend.profileId)}">Open</button>
-                  </div>
-                </article>
-              `).join("")}
-            </div>
-          `
-          : `
-            <div class="empty-state compact-empty-state">
-              <strong>No friends added yet.</strong>
-              <p>Add golfers from Community for faster repeat rounds.</p>
-            </div>
-          `}
-      </div>
-    </details>
-  `;
-}
-
-function renderJoinRoundQuickCard(state, options = {}) {
-  const {
-    compact = false,
-    showNearby = false,
-    activeRound = null,
-  } = options;
-  const activeGroup = getActiveGroup(state, activeRound);
-  const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "";
-  const nearbyGames = showNearby ? getNearbyDiscoveryState(state).games.slice(0, 3) : [];
-
-  return `
-    <article class="card ${compact ? "join-round-card--compact" : "join-round-card"}">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">Join round</p>
-          <h3>Enter a code and get into scoring fast</h3>
-        </div>
-        ${inviteCode ? `<span class="status-pill">Active code ${escapeHtml(inviteCode)}</span>` : ""}
-      </div>
-      <p class="body-copy compact-copy">Ask the host for the round code, type it once, and Golfers Nation will open your local score view for that shared round.</p>
-      <form class="inline-form round-join-form" data-form="join-code">
-        <label class="inline-grow">
-          Invite code
-          <input name="inviteCode" type="text" placeholder="Enter code" />
-        </label>
-        <button class="button primary" type="submit">Join by code</button>
-      </form>
-      <div class="row-actions join-round-actions">
-        <button class="button secondary" type="button" data-action="nav-view" data-view="round">Start a new round</button>
-        ${renderHelpLink("How invite codes work", "playing-round", true)}
-      </div>
-      ${nearbyGames.length
-        ? `
-          <div class="stack-list compact-stack nearby-preview-list">
-            <p class="mini-label">Nearby and discoverable right now</p>
-            ${renderNearbyRoundRows(nearbyGames, { compact: true })}
-          </div>
-        `
-        : ""}
-    </article>
-  `;
 }
 
 function renderInstallCard(state) {
@@ -1758,8 +1602,8 @@ function renderGlobalFeedback(state) {
       ${cloudSyncVisible && cloudSync.status === "failed" ? `
         <article class="global-feedback is-warning">
           <div>
-            <strong>Saved locally / retry needed</strong>
-            <p>${escapeHtml(cloudSync.errorMessage || "Your latest round changes are still safe on this device, but the cloud copy has not completed yet.")}</p>
+            <strong>Saved on this phone</strong>
+            <p>${escapeHtml(cloudSync.errorMessage || "The latest changes are safe on this phone. Retry when the connection is ready.")}</p>
           </div>
           <button class="button subtle compact-feedback-button" type="button" data-action="retry-cloud-save">Retry save</button>
         </article>
@@ -4546,7 +4390,7 @@ function renderCommunityView(state) {
           </div>
         </div>
       </details>
-      <details class="card discovery-card community-section-card" data-persist-key="community-nearby-players" open>
+      <details class="card discovery-card community-section-card" data-persist-key="community-nearby-players">
         <summary class="community-section-summary">
           <div>
             <p class="eyebrow">Nearby players</p>
@@ -4558,7 +4402,7 @@ function renderCommunityView(state) {
           ${renderNearbyPlayerRows(nearbyPlayers)}
         </div>
       </details>
-      <details class="card discovery-card community-section-card" data-persist-key="community-nearby-games" open>
+      <details class="card discovery-card community-section-card" data-persist-key="community-nearby-games">
         <summary class="community-section-summary">
           <div>
             <p class="eyebrow">Nearby games</p>
