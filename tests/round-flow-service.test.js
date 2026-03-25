@@ -11,7 +11,7 @@ import {
 import { createDefaultState } from "../src/state/default-state.js";
 
 describe("round flow service", () => {
-  it("keeps the current user first, adds a second golfer when needed, and caps live rounds at four players", () => {
+  it("keeps the current user first and caps live rounds at four players", () => {
     const result = parsePlayers("Jordan Wells, jordan wells, Theo Grant, Maya Chen, Reese Hall", "Avery Brooks");
 
     expect(result.names).toEqual([
@@ -23,8 +23,8 @@ describe("round flow service", () => {
     expect(result.note).toContain("first four names");
 
     const minimal = parsePlayers("", "Avery Brooks");
-    expect(minimal.names).toEqual(["Avery Brooks", "Maya Chen"]);
-    expect(minimal.note).toContain("A second golfer was added");
+    expect(minimal.names).toEqual(["Avery Brooks"]);
+    expect(minimal.note).toBe("");
   });
 
   it("falls back safely when the current user name is missing", () => {

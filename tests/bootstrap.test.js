@@ -47,7 +47,6 @@ function createSuccessPlatform() {
 
 function openRoundWizardForLocalRound() {
   document.querySelector('[data-action="nav-view"][data-view="round"]').click();
-  document.querySelector('[data-action="choose-round-intent"][data-intent="local"]').click();
 }
 
 function clickRoundWizardNext() {
@@ -384,7 +383,7 @@ describe("bootstrap app", () => {
     result.destroy();
   });
 
-  it("recovers a one-player round setup into a playable card", () => {
+  it("keeps a one-player round setup as a fast solo card", () => {
     const state = createDefaultState();
     const created = createEmailAccount(state, {
       displayName: "Field Tester",
@@ -402,18 +401,13 @@ describe("bootstrap app", () => {
     openRoundWizardForLocalRound();
     document.querySelector('[data-action="choose-course-method"][data-method="detected"]').click();
     clickRoundWizardNext();
-    clickRoundWizardNext();
-    const playerInput = document.querySelector('[data-round-setup-field="players"]');
-    playerInput.value = "Field Tester";
-    playerInput.dispatchEvent(new Event("input", { bubbles: true }));
-    clickRoundWizardNext();
     const form = document.querySelector('[data-form="create-round"]');
     form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));
 
     const currentState = result.store.getState();
     expect(currentState.session.activeRoundId).toBeTruthy();
-    expect(currentState.rounds[0].players).toHaveLength(2);
-    expect(currentState.session.feedback.message).toContain("A second golfer was added");
+    expect(currentState.rounds[0].players).toHaveLength(1);
+    expect(currentState.session.feedback.title).toBe("Round ready");
 
     result.destroy();
   });
@@ -446,8 +440,6 @@ describe("bootstrap app", () => {
     teeSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
     clickRoundWizardNext();
-    clickRoundWizardNext();
-    clickRoundWizardNext();
 
     const form = document.querySelector('[data-form="create-round"]');
     form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));
@@ -478,8 +470,6 @@ describe("bootstrap app", () => {
 
     openRoundWizardForLocalRound();
     document.querySelector('[data-action="choose-course-method"][data-method="detected"]').click();
-    clickRoundWizardNext();
-    clickRoundWizardNext();
     clickRoundWizardNext();
 
     const form = document.querySelector('[data-form="create-round"]');
@@ -512,8 +502,6 @@ describe("bootstrap app", () => {
 
     openRoundWizardForLocalRound();
     document.querySelector('[data-action="choose-course-method"][data-method="detected"]').click();
-    clickRoundWizardNext();
-    clickRoundWizardNext();
     clickRoundWizardNext();
 
     const form = document.querySelector('[data-form="create-round"]');

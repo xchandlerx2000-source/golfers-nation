@@ -168,7 +168,7 @@ export function getCourseDefaultRoundSetup() {
   const featuredTeeBox = getDefaultCourseTeeBox(featuredCourse);
 
   return {
-    step: "type",
+    step: "course",
     intent: "local",
     courseMethod: "",
     courseQuery: "",

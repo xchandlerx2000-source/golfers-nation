@@ -187,7 +187,7 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Step 2");
+    expect(markup).toContain("Step 1");
     expect(markup).toContain("Search course");
     expect(markup).toContain("Pebble Beach Golf Links");
     expect(markup).toContain("Selected");
@@ -210,10 +210,10 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Start in five quick steps");
-    expect(markup).toContain("Choose round type");
+    expect(markup).toContain("Start a live round fast");
+    expect(markup).toContain("Choose course");
     expect(markup).toContain('name="selectedCourseId" value="golden-nugget-lake-charles"');
-    expect(markup).toContain("Step 1 / 5");
+    expect(markup).toContain("Step 1 / 2");
   });
 
   it("shows the help center entry in the stats account area", () => {

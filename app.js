@@ -4684,7 +4684,7 @@ function getCourseDefaultRoundSetup() {
   const featuredTeeBox = getDefaultCourseTeeBox(featuredCourse);
 
   return {
-    step: "type",
+    step: "course",
     intent: "local",
     courseMethod: "",
     courseQuery: "",
@@ -7871,7 +7871,7 @@ function createSyncService({ store }) {
 // ---- src/services/round-flow-service.js ----
 const HOSTED_ROUND_NOTE = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
 const JOINED_ROUND_NOTE = "This device now carries its own safe copy of the live round, even if the original host leaves.";
-const ROUND_SETUP_STEPS = ["type", "course", "format", "players", "review"];
+const ROUND_SETUP_STEPS = ["course", "review"];
 function parsePlayers(value, currentUserName) {
   const safeCurrentUserName = String(currentUserName || "").trim() || "Golfer";
   const names = String(value || "")
@@ -7903,10 +7903,6 @@ function parsePlayers(value, currentUserName) {
   }
 
   const adjustments = [];
-  if (deduped.length < 2) {
-    deduped.push("Maya Chen");
-    adjustments.push("A second golfer was added so the round is ready for a real scorecard.");
-  }
 
   if (deduped.length > 4) {
     deduped.length = 4;
@@ -13168,10 +13164,7 @@ function renderModeNotes(state, mode) {
 }
 
 const ROUND_SETUP_STEP_COPY = [
-  { id: "type", label: "Type" },
   { id: "course", label: "Course" },
-  { id: "format", label: "Format" },
-  { id: "players", label: "Players" },
   { id: "review", label: "Start" },
 ];
 
@@ -13221,43 +13214,6 @@ function renderRoundSetupFooter({
   `;
 }
 
-function renderRoundSetupTypeStep(roundSetup) {
-  const options = [
-    {
-      id: "local",
-      title: "Solo Round",
-      detail: "Just score your card.",
-    },
-    {
-      id: "host",
-      title: "Live Round",
-      detail: "Share a code after start.",
-    },
-  ];
-
-  return `
-    <div class="round-setup-step-card">
-      <div class="round-setup-step-head">
-        <p class="eyebrow">Step 1</p>
-        <h4>Choose round type</h4>
-      </div>
-      <div class="round-choice-grid">
-        ${options.map((option) => `
-          <button
-            class="round-choice-button ${roundSetup.intent === option.id ? "is-active" : ""}"
-            type="button"
-            data-action="choose-round-intent"
-            data-intent="${option.id}"
-          >
-            <strong>${escapeHtml(option.title)}</strong>
-            <span>${escapeHtml(option.detail)}</span>
-          </button>
-        `).join("")}
-      </div>
-    </div>
-  `;
-}
-
 function renderCoursePicker(state) {
   const roundSetup = getRoundSetup(state);
   const discovery = getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {});
@@ -13287,7 +13243,7 @@ function renderCoursePicker(state) {
     return `
       <div class="stack-list course-picker-block round-setup-step-card">
         <div class="round-setup-step-head">
-          <p class="eyebrow">Step 2</p>
+          <p class="eyebrow">Step 1</p>
           <h4>Choose course</h4>
         </div>
         <div class="round-choice-grid round-choice-grid--tight">
@@ -13316,7 +13272,7 @@ function renderCoursePicker(state) {
     return `
       <div class="stack-list course-picker-block round-setup-step-card">
         <div class="round-setup-step-head">
-          <p class="eyebrow">Step 2</p>
+          <p class="eyebrow">Step 1</p>
           <h4>Custom course</h4>
         </div>
         <div class="split-inputs">
@@ -13358,7 +13314,7 @@ function renderCoursePicker(state) {
     return `
       <div class="stack-list course-picker-block round-setup-step-card">
         <div class="round-setup-step-head">
-          <p class="eyebrow">Step 2</p>
+          <p class="eyebrow">Step 1</p>
           <h4>Search course</h4>
         </div>
         <div class="course-search-shell" data-course-search-shell="true">
@@ -13438,7 +13394,7 @@ function renderCoursePicker(state) {
   return `
     <div class="stack-list course-picker-block round-setup-step-card">
       <div class="round-setup-step-head">
-        <p class="eyebrow">Step 2</p>
+        <p class="eyebrow">Step 1</p>
         <h4>Choose course</h4>
       </div>
       <article class="course-detection-card">
@@ -13530,7 +13486,6 @@ function renderCoursePicker(state) {
 }
 
 function renderCreateRoundCard(state, activeRound) {
-  const subscription = getSubscription(state);
   const roundSetup = getRoundSetup(state);
   const playerValue = activeRound
     ? activeRound.players.map((player) => player.name).join(", ")
@@ -13546,107 +13501,19 @@ function renderCreateRoundCard(state, activeRound) {
   const selectedCourseTemplate = selectedCourse || manualCourse;
   const selectedTeeName = selectedTeeBox?.name || manualCourse.teeBoxName || "Blue";
   const selectedHoleCount = roundSetup.selectedHoleCount || 18;
-  const nearbyPlayers = getNearbyDiscoveryState(state).players.slice(0, 4);
-  const playerNames = playerValue
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const visiblePlayers = playerNames.length ? playerNames : [state.currentUser.name];
-  const availableModes = Object.values(GAME_MODES);
-  const currentStep = roundSetup.step || "type";
-
-  function renderFormatStep() {
-    return `
-      <div class="round-setup-step-card">
-        <div class="round-setup-step-head">
-          <p class="eyebrow">Step 3</p>
-          <h4>Choose format</h4>
-        </div>
-        <div class="round-choice-grid round-choice-grid--tight">
-          ${availableModes.map((gameMode) => {
-            const locked = isModeLocked(gameMode.id, subscription);
-            return `
-              <button
-                class="round-choice-button ${roundSetup.mode === gameMode.id ? "is-active" : ""}"
-                type="button"
-                data-action="${locked ? "locked-mode" : "choose-round-format"}"
-                data-mode="${gameMode.id}"
-                ${locked ? "disabled" : ""}
-              >
-                <strong>${escapeHtml(gameMode.label)}</strong>
-                <span>${locked ? "Premium" : gameMode.id === "stroke" ? "Classic scoring" : gameMode.id === "match" ? "Head-to-head" : "Team play"}</span>
-              </button>
-            `;
-          }).join("")}
-        </div>
-        ${renderRoundSetupFooter({ canGoBack: true, nextLabel: "Next", nextDirection: 1 })}
-      </div>
-    `;
-  }
-
-  function renderPlayersStep() {
-    return `
-      <div class="round-setup-step-card">
-        <div class="round-setup-step-head">
-          <p class="eyebrow">Step 4</p>
-          <h4>Players</h4>
-        </div>
-        <div class="round-setup-player-list">
-          ${visiblePlayers.map((name) => `<span class="round-setup-player-pill">${escapeHtml(name)}</span>`).join("")}
-        </div>
-        <label>
-          Add Player
-          <input
-            name="players"
-            type="text"
-            value="${escapeHtml(playerValue)}"
-            data-round-setup-field="players"
-            placeholder="You, Maya Chen"
-          />
-        </label>
-        ${roundSetup.intent === "host" && nearbyPlayers.length
-          ? `
-            <div class="round-setup-inline-list">
-              ${nearbyPlayers.map((player) => `
-                <button
-                  class="button subtle"
-                  type="button"
-                  data-action="round-setup-add-player"
-                  data-player-name="${escapeHtml(player.displayName)}"
-                >
-                  ${escapeHtml(player.displayName)}
-                </button>
-              `).join("")}
-            </div>
-          `
-          : ""}
-        <div class="round-setup-mini-note">
-          <span class="status-pill">${roundSetup.intent === "host" ? "Live players can join by code after start" : "Score only your card by default"}</span>
-        </div>
-        ${renderRoundSetupFooter({ canGoBack: true, nextLabel: "Review", nextDirection: 1 })}
-      </div>
-    `;
-  }
+  const currentStep = roundSetup.step || "course";
 
   function renderReviewStep() {
     return `
       <div class="round-setup-step-card">
         <div class="round-setup-step-head">
-          <p class="eyebrow">Step 5</p>
-          <h4>Review and start</h4>
+          <p class="eyebrow">Step 2</p>
+          <h4>Start round</h4>
         </div>
         <div class="round-setup-summary-grid">
           <article>
-            <span>Type</span>
-            <strong>${escapeHtml(roundSetup.intent === "host" ? "Live Round" : "Solo Round")}</strong>
-          </article>
-          <article>
             <span>Course</span>
             <strong>${escapeHtml(selectedCourseTemplate.courseName || selectedCourseTemplate.name || "Custom course")}</strong>
-          </article>
-          <article>
-            <span>Format</span>
-            <strong>${escapeHtml(getGameModeLabel(roundSetup.mode || "stroke"))}</strong>
           </article>
           <article>
             <span>Tee</span>
@@ -13657,24 +13524,20 @@ function renderCreateRoundCard(state, activeRound) {
             <strong>${selectedHoleCount}</strong>
           </article>
           <article>
-            <span>Players</span>
-            <strong>${visiblePlayers.length}</strong>
+            <span>You</span>
+            <strong>${escapeHtml(state.currentUser.name)}</strong>
           </article>
         </div>
-        <div class="round-setup-player-list">
-          ${visiblePlayers.map((name) => `<span class="round-setup-player-pill">${escapeHtml(name)}</span>`).join("")}
+        <div class="round-setup-mini-note">
+          <span class="status-pill">Solo starts now</span>
+          <span class="status-pill">Live gives you a code right away</span>
         </div>
-        <div class="row-actions round-setup-submit-row">
-          <button class="button primary" type="submit" name="intent" value="${escapeHtml(roundSetup.intent || "local")}">
-            ${escapeHtml(roundSetup.intent === "host" ? "Start Live Round" : "Start Round")}
+        <div class="stack-list round-setup-start-actions">
+          <button class="button primary" type="submit" name="intent" value="host">
+            Start Live Round
           </button>
-          <button
-            class="button subtle"
-            type="button"
-            data-action="choose-round-intent"
-            data-intent="${roundSetup.intent === "host" ? "local" : "host"}"
-          >
-            ${escapeHtml(roundSetup.intent === "host" ? "Switch to Solo" : "Switch to Live")}
+          <button class="button secondary" type="submit" name="intent" value="local">
+            Start Solo Round
           </button>
         </div>
         <div class="round-setup-footer">
@@ -13685,20 +13548,8 @@ function renderCreateRoundCard(state, activeRound) {
   }
 
   function renderStepBody() {
-    if (currentStep === "type") {
-      return renderRoundSetupTypeStep(roundSetup);
-    }
-
     if (currentStep === "course") {
       return renderCoursePicker(state);
-    }
-
-    if (currentStep === "format") {
-      return renderFormatStep();
-    }
-
-    if (currentStep === "players") {
-      return renderPlayersStep();
     }
 
     return renderReviewStep();
@@ -13711,7 +13562,7 @@ function renderCreateRoundCard(state, activeRound) {
           <div class="round-setup-wizard-head">
             <div>
               <p class="eyebrow">Round setup</p>
-              <h3>Start in five quick steps</h3>
+              <h3>Start a live round fast</h3>
             </div>
             ${renderRoundSetupProgress(currentStep)}
           </div>
@@ -16783,9 +16634,6 @@ function bootstrapApp({
         return false;
       }
 
-      if (currentStep === "players" && !String(roundSetup.players || draft.currentUser?.name || "").trim()) {
-        setRoundSetupField(draft, "players", draft.currentUser?.name || "Golfer");
-      }
     }
 
     moveRoundSetupStep(draft, direction);
@@ -17682,7 +17530,7 @@ function bootstrapApp({
       closeTransientUi();
       store.setState((draft) => {
         setActiveView(draft, "community", "tab");
-        setFeedback(draft, "info", "Join a round", "Enter a code or pick a nearby game.");
+        setFeedback(draft, "info", "Join live round", "Enter the code. Score opens right after you join.");
         return draft;
       }, { reason: "open-community-join" });
       return;
@@ -17889,7 +17737,7 @@ function bootstrapApp({
     if (action === "choose-round-intent") {
       store.setState((draft) => {
         setRoundSetupField(draft, "intent", String(actionElement.dataset.intent || "local"));
-        setRoundSetupStep(draft, "course");
+        setRoundSetupStep(draft, "review");
         return draft;
       }, { reason: "choose-round-intent" });
       return;
@@ -18290,10 +18138,10 @@ function bootstrapApp({
         setFeedback(
           draft,
           hosted.created ? "success" : "info",
-          hosted.created ? "Round hosted" : "Invite code ready",
+          hosted.created ? "Your round is live" : "Round already live",
           hosted.created
-            ? `Invite code ${hosted.group.inviteCode} is ready to share.`
-            : `This round is already hosted. Share code ${hosted.group.inviteCode} with the group.`
+            ? `Code ${hosted.group.inviteCode} is ready. Share it now.`
+            : `Code ${hosted.group.inviteCode} is still live.`
         );
         hostedRoundId = round.id;
         return draft;
@@ -19367,10 +19215,10 @@ function bootstrapApp({
         setFeedback(
           draft,
           "success",
-          intent === "host" ? "Round hosted" : "Round started",
+          intent === "host" ? "Your round is live" : "Round ready",
           intent === "host"
-            ? `${round.courseName} is ready. Share the invite code from the round screen when the group is ready.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
-            : `${round.courseName} is ready for live scoring, and only this golfer's score entry opens by default.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
+            ? `Code will appear next. Share it as soon as the round opens.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
+            : `${round.courseName} is ready. Score starts on the next screen.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
         );
 
         if (intent === "host") {
@@ -19379,8 +19227,8 @@ function bootstrapApp({
           setFeedback(
             draft,
             "success",
-            "Round hosted",
-            `Invite code ${hosted.group.inviteCode} is ready to share from the round screen.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
+            "Your round is live",
+            `Code ${hosted.group.inviteCode} is ready. Share it now.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
           );
           hostedRoundId = round.id;
         }
@@ -19430,8 +19278,8 @@ function bootstrapApp({
         applyJoinedRoundState(
           draft,
           joined,
-          "Joined round",
-          `${joined.round.courseName} is open in Score. Enter the next hole when you're ready.`
+          "Joined live round",
+          `${joined.round.courseName} is open in Score. Enter Hole ${joined.round.currentHole || 1} when you're ready.`
         );
         return draft;
       }, { reason: "join-code" });

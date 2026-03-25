@@ -553,9 +553,6 @@ export function bootstrapApp({
         return false;
       }
 
-      if (currentStep === "players" && !String(roundSetup.players || draft.currentUser?.name || "").trim()) {
-        setRoundSetupField(draft, "players", draft.currentUser?.name || "Golfer");
-      }
     }
 
     moveRoundSetupStep(draft, direction);
@@ -1452,7 +1449,7 @@ export function bootstrapApp({
       closeTransientUi();
       store.setState((draft) => {
         setActiveView(draft, "community", "tab");
-        setFeedback(draft, "info", "Join a round", "Enter a code or pick a nearby game.");
+        setFeedback(draft, "info", "Join live round", "Enter the code. Score opens right after you join.");
         return draft;
       }, { reason: "open-community-join" });
       return;
@@ -1659,7 +1656,7 @@ export function bootstrapApp({
     if (action === "choose-round-intent") {
       store.setState((draft) => {
         setRoundSetupField(draft, "intent", String(actionElement.dataset.intent || "local"));
-        setRoundSetupStep(draft, "course");
+        setRoundSetupStep(draft, "review");
         return draft;
       }, { reason: "choose-round-intent" });
       return;
@@ -2060,10 +2057,10 @@ export function bootstrapApp({
         setFeedback(
           draft,
           hosted.created ? "success" : "info",
-          hosted.created ? "Round hosted" : "Invite code ready",
+          hosted.created ? "Your round is live" : "Round already live",
           hosted.created
-            ? `Invite code ${hosted.group.inviteCode} is ready to share.`
-            : `This round is already hosted. Share code ${hosted.group.inviteCode} with the group.`
+            ? `Code ${hosted.group.inviteCode} is ready. Share it now.`
+            : `Code ${hosted.group.inviteCode} is still live.`
         );
         hostedRoundId = round.id;
         return draft;
@@ -3137,10 +3134,10 @@ export function bootstrapApp({
         setFeedback(
           draft,
           "success",
-          intent === "host" ? "Round hosted" : "Round started",
+          intent === "host" ? "Your round is live" : "Round ready",
           intent === "host"
-            ? `${round.courseName} is ready. Share the invite code from the round screen when the group is ready.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
-            : `${round.courseName} is ready for live scoring, and only this golfer's score entry opens by default.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
+            ? `Code will appear next. Share it as soon as the round opens.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
+            : `${round.courseName} is ready. Score starts on the next screen.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
         );
 
         if (intent === "host") {
@@ -3149,8 +3146,8 @@ export function bootstrapApp({
           setFeedback(
             draft,
             "success",
-            "Round hosted",
-            `Invite code ${hosted.group.inviteCode} is ready to share from the round screen.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
+            "Your round is live",
+            `Code ${hosted.group.inviteCode} is ready. Share it now.${playerSetup.note ? ` ${playerSetup.note}` : ""}`
           );
           hostedRoundId = round.id;
         }
@@ -3200,8 +3197,8 @@ export function bootstrapApp({
         applyJoinedRoundState(
           draft,
           joined,
-          "Joined round",
-          `${joined.round.courseName} is open in Score. Enter the next hole when you're ready.`
+          "Joined live round",
+          `${joined.round.courseName} is open in Score. Enter Hole ${joined.round.currentHole || 1} when you're ready.`
         );
         return draft;
       }, { reason: "join-code" });
