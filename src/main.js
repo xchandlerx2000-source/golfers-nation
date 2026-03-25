@@ -2243,8 +2243,8 @@ export function bootstrapApp({
         applyJoinedRoundState(
           draft,
           joined,
-          "Round joined",
-          `${joined.round.courseName} is open in Score. Enter the next hole when you're ready.`
+          "Go to Score",
+          `${joined.round.courseName} is open in Score. Enter Hole ${joined.round.currentHole || 1}.`
         );
         return draft;
       }, { reason: "quick-join" });
@@ -3266,7 +3266,7 @@ export function bootstrapApp({
         applyJoinedRoundState(
           draft,
           joined,
-          "Joined live round",
+          "Go to Score",
           `${joined.round.courseName} is open in Score. Start on Hole ${joined.round.currentHole || 1}.`
         );
         return draft;

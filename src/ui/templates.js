@@ -868,14 +868,14 @@ function renderLiveSessionStrip(activeRound, activeGroup) {
         <summary class="live-strip-summary">
           <div class="live-strip-main">
             <span class="live-strip-badge">${liveBadge}</span>
-            <span class="live-strip-code"><b id="liveCode">${escapeHtml(inviteCode)}</b></span>
+            <span class="live-strip-status">${escapeHtml(sync?.title || "Not connected")}</span>
+            <span aria-hidden="true">&bull;</span>
             <span id="livePlayers" class="live-strip-players">${playerCount} ${playerCount === 1 ? "golfer" : "golfers"}</span>
-            <span class="live-strip-status">${escapeHtml(liveStatus)}</span>
           </div>
           <span class="live-strip-toggle">Open</span>
         </summary>
         <div class="live-strip-detail-row">
-          <span>${escapeHtml(`${activeRound?.currentHole ? `Hole ${activeRound.currentHole} / ` : ""}${detailSummary}`)}</span>
+          <span>Code <b id="liveCode">${escapeHtml(inviteCode)}</b>${escapeHtml(`${activeRound?.currentHole ? ` / Hole ${activeRound.currentHole}` : ""} / ${detailSummary}`)}</span>
           <span>${escapeHtml(players.join(", ") || "You")}</span>
         </div>
     </details>
@@ -3466,12 +3466,6 @@ function renderHoleEditor(state, round) {
                 <button class="button primary next-btn" type="button" data-action="jump-next-open" data-hole="${nextOpenHole}">
                   Next Hole
                 </button>
-                <div class="competitive-note competitive-note--tight">
-                  ${context.scorePulseVisible ? `<span class="score-feedback-pill is-saved">Saved</span>` : ""}
-                  ${context.leaderboardEntry?.rankTrend && context.leaderboardEntry.rankTrend !== "steady"
-                    ? `<span class="score-feedback-pill">${escapeHtml(context.leaderboardEntry.rankTrendLabel || "Moved")}</span>`
-                    : ""}
-                </div>
               </div>
             `}
         </div>
