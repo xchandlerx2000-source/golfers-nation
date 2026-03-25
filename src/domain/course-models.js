@@ -66,6 +66,20 @@ export function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-da
   const aliases = cloneData(rawCourse?.aliases || []);
   const keywords = cloneData(rawCourse?.keywords || []);
   const slug = rawCourse?.slug || slugifyCourseValue(rawCourse?.id || `${displayName}-${rawCourse?.city || ""}-${rawCourse?.state || ""}`);
+  const postalCode = rawCourse?.postalCode || rawCourse?.zip || "";
+  const hasAddress = Boolean(rawCourse?.address || rawCourse?.addressLine1 || postalCode);
+  const hasCoordinates = rawCourse?.latitude !== null
+    && rawCourse?.latitude !== undefined
+    && rawCourse?.longitude !== null
+    && rawCourse?.longitude !== undefined;
+  const hasTeeData = teeBoxes.length > 0;
+  const hasRatings = teeBoxes.some((teeBox) => teeBox?.rating !== null || teeBox?.slope !== null);
+  const completenessScore = (
+    (hasAddress ? 1 : 0)
+    + (hasCoordinates ? 1 : 0)
+    + (hasTeeData ? 1 : 0)
+    + (hasRatings ? 1 : 0)
+  ) / 4;
   const metadata = {
     providerId,
     providerLabel: rawCourse?.providerLabel || "",
@@ -81,9 +95,19 @@ export function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-da
     seeded: Boolean(rawCourse?.seeded),
     source: rawCourse?.source || providerId,
     sourceType: rawCourse?.sourceType || rawCourse?.metadata?.sourceType || "seeded-us-database",
-    gpsReady: rawCourse?.latitude !== null && rawCourse?.latitude !== undefined && rawCourse?.longitude !== null && rawCourse?.longitude !== undefined,
+    gpsReady: hasCoordinates,
     routingReady: Boolean(rawCourse?.metadata?.routingReady),
     holeDetailReady: holes.length > 0,
+    completenessScore,
+    qualityFlags: {
+      hasAddress,
+      hasCoordinates,
+      hasTeeData,
+      hasRatings,
+      hasHoleDetail: holes.length > 0,
+    },
+    externalIds: cloneData(rawCourse?.externalIds || rawCourse?.metadata?.externalIds || {}),
+    providerCourseId: rawCourse?.providerCourseId || rawCourse?.metadata?.providerCourseId || rawCourse?.id || "",
     clubhousePhone: rawCourse?.metadata?.clubhousePhone || "",
     notes: rawCourse?.metadata?.notes || "",
   };
@@ -100,6 +124,7 @@ export function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-da
     city: rawCourse?.city || "",
     state: rawCourse?.state || "",
     stateName: rawCourse?.stateName || rawCourse?.state || "",
+    postalCode,
     country: rawCourse?.country || "USA",
     region: rawCourse?.region || "",
     aliases,

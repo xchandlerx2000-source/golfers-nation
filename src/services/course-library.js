@@ -9,6 +9,12 @@ const STATE_FULL_NAMES = {
   CA: "California",
 };
 
+const COURSE_ADDRESS_LOOKUP = {
+  "golden-nugget-lake-charles": "2550 Golden Nugget Blvd",
+  "torrey-pines-south": "11480 N Torrey Pines Rd",
+  "pebble-beach-california": "1700 17 Mile Dr",
+};
+
 function slugifyCourseValue(value = "") {
   return String(value || "")
     .trim()
@@ -615,6 +621,41 @@ function compareCourses(left, right) {
 
 export function listSeededCourses() {
   return cloneData(SEEDED_COURSES);
+}
+
+export function listSeededCourseImportRows() {
+  return SEEDED_COURSES.map((course) => ({
+    id: course.id,
+    slug: course.slug || "",
+    clubName: course.clubName || course.name || "",
+    courseName: course.courseName || course.name || "",
+    displayName: course.displayName || course.name || "",
+    address: COURSE_ADDRESS_LOOKUP[course.id] || "",
+    city: course.city || "",
+    state: course.state || "",
+    stateName: course.stateName || "",
+    postalCode: "",
+    country: "USA",
+    region: course.region || "",
+    latitude: course.latitude ?? null,
+    longitude: course.longitude ?? null,
+    holesCount: course.teeBoxes?.[0]?.holes?.length || 18,
+    teeBoxes: cloneData(course.teeBoxes || []),
+    aliases: cloneData(course.aliases || []),
+    searchTerms: cloneData(course.keywords || []),
+    featured: Boolean(course.featured),
+    featuredNote: course.featuredNote || "",
+    priority: course.priority ?? 100,
+    architect: course.architect || "",
+    opened: course.opened ?? null,
+    courseType: course.courseType || "course",
+    source: course.source || "us-seeded-course-database",
+    sourceType: course.sourceType || "seeded-us-database",
+    metadata: {
+      seeded: Boolean(course.seeded),
+      sourceHistory: [course.source || "us-seeded-course-database"],
+    },
+  }));
 }
 
 export function findCourseById(courseId) {

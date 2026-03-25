@@ -1894,6 +1894,20 @@ function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-database"
   const aliases = cloneData(rawCourse?.aliases || []);
   const keywords = cloneData(rawCourse?.keywords || []);
   const slug = rawCourse?.slug || slugifyCourseValue(rawCourse?.id || `${displayName}-${rawCourse?.city || ""}-${rawCourse?.state || ""}`);
+  const postalCode = rawCourse?.postalCode || rawCourse?.zip || "";
+  const hasAddress = Boolean(rawCourse?.address || rawCourse?.addressLine1 || postalCode);
+  const hasCoordinates = rawCourse?.latitude !== null
+    && rawCourse?.latitude !== undefined
+    && rawCourse?.longitude !== null
+    && rawCourse?.longitude !== undefined;
+  const hasTeeData = teeBoxes.length > 0;
+  const hasRatings = teeBoxes.some((teeBox) => teeBox?.rating !== null || teeBox?.slope !== null);
+  const completenessScore = (
+    (hasAddress ? 1 : 0)
+    + (hasCoordinates ? 1 : 0)
+    + (hasTeeData ? 1 : 0)
+    + (hasRatings ? 1 : 0)
+  ) / 4;
   const metadata = {
     providerId,
     providerLabel: rawCourse?.providerLabel || "",
@@ -1909,9 +1923,19 @@ function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-database"
     seeded: Boolean(rawCourse?.seeded),
     source: rawCourse?.source || providerId,
     sourceType: rawCourse?.sourceType || rawCourse?.metadata?.sourceType || "seeded-us-database",
-    gpsReady: rawCourse?.latitude !== null && rawCourse?.latitude !== undefined && rawCourse?.longitude !== null && rawCourse?.longitude !== undefined,
+    gpsReady: hasCoordinates,
     routingReady: Boolean(rawCourse?.metadata?.routingReady),
     holeDetailReady: holes.length > 0,
+    completenessScore,
+    qualityFlags: {
+      hasAddress,
+      hasCoordinates,
+      hasTeeData,
+      hasRatings,
+      hasHoleDetail: holes.length > 0,
+    },
+    externalIds: cloneData(rawCourse?.externalIds || rawCourse?.metadata?.externalIds || {}),
+    providerCourseId: rawCourse?.providerCourseId || rawCourse?.metadata?.providerCourseId || rawCourse?.id || "",
     clubhousePhone: rawCourse?.metadata?.clubhousePhone || "",
     notes: rawCourse?.metadata?.notes || "",
   };
@@ -1928,6 +1952,7 @@ function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-database"
     city: rawCourse?.city || "",
     state: rawCourse?.state || "",
     stateName: rawCourse?.stateName || rawCourse?.state || "",
+    postalCode,
     country: rawCourse?.country || "USA",
     region: rawCourse?.region || "",
     aliases,
@@ -2056,6 +2081,178 @@ function createManualRoundTemplateRecord({
       holeDetailReady: true,
     },
   };
+}
+
+// ---- src/services/course-normalization.js ----
+function normalizeImportedCourseHoleRows(rawHoles = []) {
+  if (!Array.isArray(rawHoles)) {
+    return [];
+  }
+
+  return rawHoles.map((hole, index) => ({
+    number: Number(hole?.number || index + 1),
+    par: Number(hole?.par || 4),
+    yards: Number(hole?.yards || 0),
+    handicapIndex: hole?.handicapIndex ?? null,
+    notes: hole?.notes || "",
+    gps: cloneData(hole?.gps || null),
+  }));
+}
+
+function normalizeImportedCourseTeeRows(rawTees = []) {
+  if (!Array.isArray(rawTees)) {
+    return [];
+  }
+
+  return rawTees.map((tee, index) => ({
+    id: tee?.id || tee?.teeId || `tee-${index + 1}`,
+    name: tee?.name || tee?.teeName || `Tee ${index + 1}`,
+    color: tee?.color || "",
+    gender: tee?.gender || "",
+    slope: tee?.slope ?? null,
+    rating: tee?.rating ?? null,
+    holes: normalizeImportedCourseHoleRows(tee?.holes || tee?.perHole || []),
+  }));
+}
+
+function buildImportedCourseSourceMeta(rawCourse = {}, options = {}) {
+  const sourceLabel = options.providerLabel || rawCourse?.providerLabel || "";
+  const sourceType = options.sourceType || rawCourse?.sourceType || "bulk-import";
+  const importedAt = options.importedAt || rawCourse?.importedAt || null;
+
+  return {
+    providerLabel: sourceLabel,
+    sourceType,
+    sourceImportedAt: importedAt,
+    providerCourseId: rawCourse?.providerCourseId || rawCourse?.externalIds?.providerCourseId || rawCourse?.id || "",
+    externalIds: cloneData(rawCourse?.externalIds || {}),
+  };
+}
+function normalizeImportedCourseSourceRecord(rawCourse = {}, options = {}) {
+  const providerId = options.providerId || rawCourse?.providerId || "imported-us-course-database";
+  const normalized = normalizeCourseRecord({
+    id: rawCourse?.id || rawCourse?.courseId || "",
+    slug: rawCourse?.slug || "",
+    clubName: rawCourse?.clubName || rawCourse?.club || rawCourse?.name || "",
+    courseName: rawCourse?.courseName || rawCourse?.name || rawCourse?.clubName || "",
+    displayName: rawCourse?.displayName || "",
+    address: rawCourse?.address || rawCourse?.addressLine1 || "",
+    city: rawCourse?.city || "",
+    state: rawCourse?.state || "",
+    stateName: rawCourse?.stateName || "",
+    postalCode: rawCourse?.postalCode || rawCourse?.zip || "",
+    country: rawCourse?.country || "USA",
+    region: rawCourse?.region || "",
+    latitude: rawCourse?.latitude ?? rawCourse?.lat ?? null,
+    longitude: rawCourse?.longitude ?? rawCourse?.lng ?? null,
+    holesCount: rawCourse?.holesCount || rawCourse?.holeCount || 18,
+    teeBoxes: normalizeImportedCourseTeeRows(rawCourse?.tees || rawCourse?.teeBoxes || []),
+    aliases: cloneData(rawCourse?.aliases || []),
+    keywords: cloneData(rawCourse?.searchTerms || rawCourse?.keywords || []),
+    featured: Boolean(rawCourse?.featured),
+    featuredNote: rawCourse?.featuredNote || "",
+    priority: rawCourse?.priority ?? 100,
+    architect: rawCourse?.architect || "",
+    opened: rawCourse?.opened ?? null,
+    courseType: rawCourse?.courseType || "course",
+    source: options.source || rawCourse?.source || providerId,
+    sourceType: options.sourceType || rawCourse?.sourceType || "bulk-import",
+    providerLabel: options.providerLabel || rawCourse?.providerLabel || "",
+    providerCourseId: rawCourse?.providerCourseId || rawCourse?.externalIds?.providerCourseId || rawCourse?.id || "",
+    externalIds: cloneData(rawCourse?.externalIds || {}),
+    metadata: {
+      ...cloneData(rawCourse?.metadata || {}),
+      ...buildImportedCourseSourceMeta(rawCourse, options),
+    },
+  }, providerId);
+
+  return normalized;
+}
+function normalizeImportedCourseSourceRecords(rawCourses = [], options = {}) {
+  if (!Array.isArray(rawCourses)) {
+    return [];
+  }
+
+  return rawCourses.map((rawCourse) => normalizeImportedCourseSourceRecord(rawCourse, options));
+}
+
+// ---- src/services/course-deduplication.js ----
+function mergeUniqueCourseValues(...valueLists) {
+  const seen = new Set();
+  const merged = [];
+
+  valueLists.flat().forEach((value) => {
+    const normalized = String(value || "").trim();
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    merged.push(normalized);
+  });
+
+  return merged;
+}
+
+function getCourseRecordCompletenessScore(course = {}) {
+  return Number(course?.metadata?.completenessScore || 0);
+}
+
+function getCanonicalCourseDedupeKey(course = {}) {
+  const providerCourseId = String(course?.metadata?.providerCourseId || "").trim();
+  if (providerCourseId) {
+    return `${course?.providerId || ""}:${providerCourseId}`;
+  }
+
+  const slug = String(course?.slug || course?.id || "").trim().toLowerCase();
+  const city = String(course?.city || "").trim().toLowerCase();
+  const state = String(course?.state || "").trim().toLowerCase();
+  return `${slug}:${city}:${state}`;
+}
+function mergeCanonicalCourseRecords(primary = {}, secondary = {}) {
+  const primaryScore = getCourseRecordCompletenessScore(primary);
+  const secondaryScore = getCourseRecordCompletenessScore(secondary);
+  const preferred = primaryScore >= secondaryScore ? primary : secondary;
+  const fallback = preferred === primary ? secondary : primary;
+
+  return {
+    ...fallback,
+    ...preferred,
+    aliases: mergeUniqueCourseValues(primary?.aliases || [], secondary?.aliases || []),
+    searchKeywords: mergeUniqueCourseValues(primary?.searchKeywords || [], secondary?.searchKeywords || []),
+    teeBoxes: Array.isArray(preferred?.teeBoxes) && preferred.teeBoxes.length
+      ? preferred.teeBoxes
+      : (Array.isArray(fallback?.teeBoxes) ? fallback.teeBoxes : []),
+    metadata: {
+      ...(fallback?.metadata || {}),
+      ...(preferred?.metadata || {}),
+      aliases: mergeUniqueCourseValues(primary?.metadata?.aliases || [], secondary?.metadata?.aliases || []),
+      keywords: mergeUniqueCourseValues(primary?.metadata?.keywords || [], secondary?.metadata?.keywords || []),
+      sourceHistory: mergeUniqueCourseValues(
+        primary?.metadata?.sourceHistory || [],
+        secondary?.metadata?.sourceHistory || [],
+        [primary?.metadata?.source || ""],
+        [secondary?.metadata?.source || ""]
+      ),
+      completenessScore: Math.max(primaryScore, secondaryScore),
+    },
+  };
+}
+function dedupeCanonicalCourseRecords(records = []) {
+  const deduped = new Map();
+
+  records.forEach((record) => {
+    const key = getCanonicalCourseDedupeKey(record);
+    const existing = deduped.get(key);
+    deduped.set(key, existing ? mergeCanonicalCourseRecords(existing, record) : record);
+  });
+
+  return [...deduped.values()];
 }
 
 // ---- src/state/persistence.js ----
@@ -2231,6 +2428,27 @@ function createStore(initialState) {
     getState,
     setState,
     subscribe,
+  };
+}
+
+// ---- src/state/course-state.js ----
+function getDefaultCourseState() {
+  return {
+    catalogProviderId: "us-course-database",
+    catalogStatus: "ready",
+    lastImportSource: "us-seeded-course-database",
+    lastImportAt: null,
+    recordsCount: 0,
+    nearbyStatus: "idle",
+    lastNearbySearch: null,
+    lastQuery: "",
+  };
+}
+function mergeCourseState(courseState = {}, updates = {}) {
+  return {
+    ...getDefaultCourseState(),
+    ...(courseState || {}),
+    ...(updates || {}),
   };
 }
 
@@ -3209,6 +3427,12 @@ const STATE_FULL_NAMES = {
   CA: "California",
 };
 
+const COURSE_ADDRESS_LOOKUP = {
+  "golden-nugget-lake-charles": "2550 Golden Nugget Blvd",
+  "torrey-pines-south": "11480 N Torrey Pines Rd",
+  "pebble-beach-california": "1700 17 Mile Dr",
+};
+
 function slugifyCourseValue(value = "") {
   return String(value || "")
     .trim()
@@ -3815,6 +4039,40 @@ function compareCourses(left, right) {
 function listSeededCourses() {
   return cloneData(SEEDED_COURSES);
 }
+function listSeededCourseImportRows() {
+  return SEEDED_COURSES.map((course) => ({
+    id: course.id,
+    slug: course.slug || "",
+    clubName: course.clubName || course.name || "",
+    courseName: course.courseName || course.name || "",
+    displayName: course.displayName || course.name || "",
+    address: COURSE_ADDRESS_LOOKUP[course.id] || "",
+    city: course.city || "",
+    state: course.state || "",
+    stateName: course.stateName || "",
+    postalCode: "",
+    country: "USA",
+    region: course.region || "",
+    latitude: course.latitude ?? null,
+    longitude: course.longitude ?? null,
+    holesCount: course.teeBoxes?.[0]?.holes?.length || 18,
+    teeBoxes: cloneData(course.teeBoxes || []),
+    aliases: cloneData(course.aliases || []),
+    searchTerms: cloneData(course.keywords || []),
+    featured: Boolean(course.featured),
+    featuredNote: course.featuredNote || "",
+    priority: course.priority ?? 100,
+    architect: course.architect || "",
+    opened: course.opened ?? null,
+    courseType: course.courseType || "course",
+    source: course.source || "us-seeded-course-database",
+    sourceType: course.sourceType || "seeded-us-database",
+    metadata: {
+      seeded: Boolean(course.seeded),
+      sourceHistory: [course.source || "us-seeded-course-database"],
+    },
+  }));
+}
 function findCourseById(courseId) {
   const found = SEEDED_COURSES.find((course) => course.id === courseId);
   return found ? cloneData(found) : null;
@@ -3925,57 +4183,157 @@ function createRoundCourseSelection(courseId, teeBoxId = "") {
   };
 }
 
-// ---- src/services/course-providers/local-course-provider.js ----
-const LOCAL_PROVIDER_ID = "us-course-database";
+// ---- src/services/course-import/us-course-import-service.js ----
+function normalizeImportedCourseQuery(value = "") {
+  return String(value || "").trim().toLowerCase();
+}
 
-const COURSE_ADDRESS_OVERRIDES = {
-  "golden-nugget-lake-charles": "2550 Golden Nugget Blvd",
-  "torrey-pines-south": "11480 N Torrey Pines Rd",
-  "pebble-beach-california": "1700 17 Mile Dr",
-};
-
-function toRadians(value) {
+function toImportedCourseRadians(value) {
   return (value * Math.PI) / 180;
 }
 
-function formatDistanceLabel(distanceMiles) {
-  if (!Number.isFinite(distanceMiles)) {
-    return "Discoverable now";
-  }
-
-  if (distanceMiles < 1) {
-    return `${distanceMiles.toFixed(1)} mi`;
-  }
-
-  return `${distanceMiles.toFixed(1)} mi`;
-}
-
-function calculateDistanceMiles(latA, lngA, latB, lngB) {
+function calculateImportedCourseDistanceMiles(latA, lngA, latB, lngB) {
   const earthRadiusMiles = 3958.8;
-  const deltaLat = toRadians(latB - latA);
-  const deltaLng = toRadians(lngB - lngA);
+  const deltaLat = toImportedCourseRadians(latB - latA);
+  const deltaLng = toImportedCourseRadians(lngB - lngA);
   const valueA = Math.sin(deltaLat / 2) ** 2
-    + Math.cos(toRadians(latA)) * Math.cos(toRadians(latB)) * Math.sin(deltaLng / 2) ** 2;
+    + Math.cos(toImportedCourseRadians(latA))
+    * Math.cos(toImportedCourseRadians(latB))
+    * Math.sin(deltaLng / 2) ** 2;
   const valueC = 2 * Math.atan2(Math.sqrt(valueA), Math.sqrt(1 - valueA));
   return earthRadiusMiles * valueC;
 }
 
-function normalizeLocalCourse(rawCourse) {
-  const normalized = normalizeCourseRecord({
-    ...rawCourse,
-    address: rawCourse?.address || COURSE_ADDRESS_OVERRIDES[rawCourse?.id] || "",
-    country: rawCourse?.country || "USA",
-    providerLabel: "Local manual provider",
-  }, LOCAL_PROVIDER_ID);
+function buildImportedCourseSearchText(course = {}) {
+  return normalizeImportedCourseQuery([
+    course?.displayName,
+    course?.clubName,
+    course?.courseName,
+    course?.city,
+    course?.state,
+    course?.stateName,
+    course?.postalCode,
+    ...(course?.aliases || []),
+    ...(course?.searchKeywords || []),
+  ].join(" "));
+}
 
-  return {
-    ...normalized,
-    source: rawCourse?.source || LOCAL_PROVIDER_ID,
-    featured: Boolean(rawCourse?.featured),
-    featuredNote: rawCourse?.featuredNote || "",
-    architect: rawCourse?.architect || "",
-    courseType: rawCourse?.courseType || normalized.metadata?.courseType || "course",
-  };
+function getImportedCourseMatchScore(course = {}, normalizedQuery = "") {
+  if (!normalizedQuery) {
+    return 0;
+  }
+
+  const exactTargets = [
+    course?.displayName,
+    course?.clubName,
+    course?.courseName,
+    course?.city,
+    course?.state,
+    course?.stateName,
+    ...(course?.aliases || []),
+  ].map(normalizeImportedCourseQuery);
+
+  if (exactTargets.includes(normalizedQuery)) {
+    return 300;
+  }
+
+  const prefixTargets = [
+    course?.displayName,
+    course?.clubName,
+    course?.courseName,
+    course?.city,
+    ...(course?.aliases || []),
+  ].map(normalizeImportedCourseQuery);
+
+  if (prefixTargets.some((value) => value.startsWith(normalizedQuery))) {
+    return 220;
+  }
+
+  const keywordTargets = (course?.searchKeywords || []).map(normalizeImportedCourseQuery);
+  if (keywordTargets.some((value) => value.includes(normalizedQuery))) {
+    return 170;
+  }
+
+  return buildImportedCourseSearchText(course).includes(normalizedQuery) ? 120 : -1;
+}
+
+function sortImportedCourseCatalog(left = {}, right = {}) {
+  const leftPriority = left?.metadata?.priority ?? 100;
+  const rightPriority = right?.metadata?.priority ?? 100;
+  if (leftPriority !== rightPriority) {
+    return leftPriority - rightPriority;
+  }
+
+  const leftFeatured = Number(Boolean(left?.metadata?.featured));
+  const rightFeatured = Number(Boolean(right?.metadata?.featured));
+  if (leftFeatured !== rightFeatured) {
+    return rightFeatured - leftFeatured;
+  }
+
+  const leftDistance = Number.isFinite(left?.nearbyDistanceMiles) ? left.nearbyDistanceMiles : Number.POSITIVE_INFINITY;
+  const rightDistance = Number.isFinite(right?.nearbyDistanceMiles) ? right.nearbyDistanceMiles : Number.POSITIVE_INFINITY;
+  if (leftDistance !== rightDistance) {
+    return leftDistance - rightDistance;
+  }
+
+  return String(left?.displayName || left?.name || "").localeCompare(String(right?.displayName || right?.name || ""));
+}
+function buildUsCourseImportCatalog(rawRows = [], options = {}) {
+  const normalized = normalizeImportedCourseSourceRecords(rawRows, options);
+  return dedupeCanonicalCourseRecords(normalized).sort(sortImportedCourseCatalog);
+}
+function searchUsCourseImportCatalog(catalog = [], query = "", { limit = 10 } = {}) {
+  const normalizedQuery = normalizeImportedCourseQuery(query);
+  const results = catalog
+    .map((course) => ({
+      ...course,
+      matchScore: getImportedCourseMatchScore(course, normalizedQuery),
+    }))
+    .filter((course) => !normalizedQuery || course.matchScore >= 0)
+    .sort((left, right) => {
+      if (normalizedQuery && left.matchScore !== right.matchScore) {
+        return right.matchScore - left.matchScore;
+      }
+
+      return sortImportedCourseCatalog(left, right);
+    })
+    .slice(0, limit)
+    .map(({ matchScore, ...course }) => cloneData(course));
+
+  return results;
+}
+function findNearbyUsCourseImportCatalog(catalog = [], lat, lng, { limit = 6, radiusMiles = 50 } = {}) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return [];
+  }
+
+  return catalog
+    .filter((course) => Number.isFinite(course?.latitude) && Number.isFinite(course?.longitude))
+    .map((course) => {
+      const nearbyDistanceMiles = calculateImportedCourseDistanceMiles(lat, lng, course.latitude, course.longitude);
+      return {
+        ...cloneData(course),
+        nearbyDistanceMiles,
+        nearbyDistanceLabel: `${nearbyDistanceMiles.toFixed(1)} mi`,
+      };
+    })
+    .filter((course) => course.nearbyDistanceMiles <= radiusMiles)
+    .sort(sortImportedCourseCatalog)
+    .slice(0, limit);
+}
+
+// ---- src/services/course-providers/local-course-provider.js ----
+const LOCAL_PROVIDER_ID = "us-course-database";
+
+const localCourseProviderCatalog = buildUsCourseImportCatalog(listSeededCourseImportRows(), {
+  providerId: LOCAL_PROVIDER_ID,
+  providerLabel: "U.S. course database",
+  source: "us-seeded-course-database",
+  sourceType: "seeded-us-database",
+});
+
+function getLocalCourseProviderCatalog() {
+  return localCourseProviderCatalog;
 }
 const localCourseProvider = {
   id: LOCAL_PROVIDER_ID,
@@ -3986,42 +4344,22 @@ const localCourseProvider = {
     supportsSearch: true,
     supportsNearby: true,
     supportsRoundTemplates: true,
-    description: "Built-in U.S. course records for search, nearby course assist, and round templates.",
+    description: "Built-in normalized U.S. course records for search, nearby course assist, and round templates.",
   },
   searchCourses(query = "", { limit = 10 } = {}) {
-    return searchCourseLibrary(query)
-      .slice(0, limit)
-      .map((course) => normalizeLocalCourse(course));
+    return searchUsCourseImportCatalog(getLocalCourseProviderCatalog(), query, { limit });
   },
   getCourseQuickPicks(limit = 4) {
-    return getCourseQuickPicks(limit).map((course) => normalizeLocalCourse(course));
+    return searchUsCourseImportCatalog(getLocalCourseProviderCatalog(), "", { limit });
   },
   getRoundSetupCourses(query = "", limit = 10) {
-    return getRoundSetupCourses(query, limit).map((course) => normalizeLocalCourse(course));
+    return searchUsCourseImportCatalog(getLocalCourseProviderCatalog(), query, { limit });
   },
   getCourseById(courseId) {
-    const course = findCourseById(courseId);
-    return course ? normalizeLocalCourse(course) : null;
+    return getLocalCourseProviderCatalog().find((course) => course.id === courseId) || null;
   },
   findNearbyCourses(lat, lng, { limit = 6, radiusMiles = 50 } = {}) {
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return [];
-    }
-
-    return listSeededCourses()
-      .map((course) => normalizeLocalCourse(course))
-      .filter((course) => Number.isFinite(course.latitude) && Number.isFinite(course.longitude))
-      .map((course) => {
-        const distanceMiles = calculateDistanceMiles(lat, lng, course.latitude, course.longitude);
-        return {
-          ...course,
-          nearbyDistanceMiles: distanceMiles,
-          nearbyDistanceLabel: formatDistanceLabel(distanceMiles),
-        };
-      })
-      .filter((course) => course.nearbyDistanceMiles <= radiusMiles)
-      .sort((left, right) => left.nearbyDistanceMiles - right.nearbyDistanceMiles)
-      .slice(0, limit);
+    return findNearbyUsCourseImportCatalog(getLocalCourseProviderCatalog(), lat, lng, { limit, radiusMiles });
   },
   buildRoundTemplate(courseId, teeId = "", { holeCount = 18 } = {}) {
     const course = this.getCourseById(courseId);
@@ -10017,6 +10355,7 @@ function createDefaultState() {
     tournaments: cloneData(activeWorkspace.tournaments),
     gear: cloneData(activeWorkspace.gear),
     social: cloneData(activeWorkspace.social),
+    course: getDefaultCourseState(),
     session: {
       activeView: "home",
       previousView: "home",
