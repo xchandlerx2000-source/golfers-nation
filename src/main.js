@@ -1704,6 +1704,14 @@ export function bootstrapApp({
       return;
     }
 
+    if (action === "use-suggested-course") {
+      store.setState((draft) => {
+        setRoundSetupField(draft, "courseMethod", "detected");
+        return draft;
+      }, { reason: "use-suggested-course" });
+      return;
+    }
+
     if (action === "skip-course-for-now") {
       store.setState((draft) => {
         setRoundSetupField(draft, "courseMethod", "manual");
@@ -3241,7 +3249,7 @@ export function bootstrapApp({
           draft,
           joined,
           "Joined live round",
-          `${joined.round.courseName} is open in Score. Enter Hole ${joined.round.currentHole || 1} when you're ready.`
+          `${joined.round.courseName} is open in Score. Start on Hole ${joined.round.currentHole || 1}.`
         );
         return draft;
       }, { reason: "join-code" });

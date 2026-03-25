@@ -11343,7 +11343,6 @@ function renderLiveSessionStrip(activeRound, activeGroup) {
     : activeRound?.players?.map((player) => player.name).filter(Boolean) || [];
   const playerCount = players.length || 1;
   const liveStatus = sync?.title || "Not connected";
-  const holeLabel = activeRound?.currentHole ? `Hole ${activeRound.currentHole}` : "Hole 1";
   const liveBadge = activeRound?.sync?.transport && activeRound.sync.transport !== "local"
     ? "LIVE"
     : "LOCAL";
@@ -11360,12 +11359,12 @@ function renderLiveSessionStrip(activeRound, activeGroup) {
             <span class="live-strip-badge">${liveBadge}</span>
             <span class="live-strip-code"><b id="liveCode">${escapeHtml(inviteCode)}</b></span>
             <span id="livePlayers" class="live-strip-players">${playerCount} ${playerCount === 1 ? "golfer" : "golfers"}</span>
-            <span class="live-strip-status">${escapeHtml(`${holeLabel} / ${liveStatus}`)}</span>
+            <span class="live-strip-status">${escapeHtml(liveStatus)}</span>
           </div>
           <span class="live-strip-toggle">Open</span>
         </summary>
         <div class="live-strip-detail-row">
-          <span>${escapeHtml(detailSummary)}</span>
+          <span>${escapeHtml(`${activeRound?.currentHole ? `Hole ${activeRound.currentHole} / ` : ""}${detailSummary}`)}</span>
           <span>${escapeHtml(players.join(", ") || "You")}</span>
         </div>
     </details>
@@ -13244,19 +13243,18 @@ function renderCoursePicker(state) {
             <p class="eyebrow">Step 1</p>
             <h4>Choose course</h4>
           </div>
-          <article class="course-selected-card" data-selected-course="true">
+          <article class="course-selected-card">
             <div class="course-selected-copy">
-              <span class="mini-label">Suggested course</span>
+              <span class="mini-label">Suggested</span>
               <strong>${escapeHtml(suggestedCourse.displayName || suggestedCourse.name)}</strong>
-              <p>${escapeHtml(suggestedTeeBox.name)} / ${suggestedTeeBox.totalYardage} yds / Par ${suggestedTeeBox.totalPar}</p>
             </div>
           </article>
           <div class="stack-list round-setup-start-actions">
-            <button class="button primary" type="button" data-action="confirm-course-choice" data-course-id="${suggestedCourse.id}" data-tee-box-id="${suggestedTeeBox.id}">
-              Confirm Course
+            <button class="button primary" type="button" data-action="use-suggested-course">
+              Use Suggested Course
             </button>
             <button class="button secondary" type="button" data-action="search-another-course">
-              Search Another Course
+              Search Course
             </button>
             <button class="button subtle" type="button" data-action="skip-course-for-now">
               Skip for now
@@ -13292,8 +13290,8 @@ function renderCoursePicker(state) {
       return `
         <div class="stack-list course-picker-block round-setup-step-card">
           <div class="round-setup-step-head">
-            <p class="eyebrow">Step 1</p>
-            <h4>Choose course</h4>
+            <p class="eyebrow">Step 2</p>
+            <h4>Confirm course</h4>
           </div>
           <article class="course-selected-card" data-selected-course="true">
             <div class="course-selected-copy">
@@ -13320,8 +13318,8 @@ function renderCoursePicker(state) {
     return `
       <div class="stack-list course-picker-block round-setup-step-card">
         <div class="round-setup-step-head">
-          <p class="eyebrow">Step 1</p>
-          <h4>Choose course</h4>
+          <p class="eyebrow">Step 2</p>
+          <h4>Confirm course</h4>
         </div>
         <article class="course-detection-card">
           <div class="course-detection-copy">
@@ -13369,7 +13367,7 @@ function renderCoursePicker(state) {
   return `
     <div class="stack-list course-picker-block round-setup-step-card">
       <div class="round-setup-step-head">
-        <p class="eyebrow">Step 1</p>
+        <p class="eyebrow">Step 2</p>
         <h4>Search course</h4>
       </div>
       <div class="course-search-shell" data-course-search-shell="true">
@@ -13541,15 +13539,13 @@ function renderCreateRoundCard(state, activeRound) {
 }
 
 function renderHoleNavigator(round, selectedHole) {
-  const progress = getRoundProgress(round);
-  const completion = getHoleCompletionStats(round, selectedHole);
   const selected = round.holes.find((hole) => hole.number === selectedHole) || round.holes[0];
   return `
     <div class="hole-nav">
       <button class="button subtle hole-stepper" type="button" data-action="step-hole" data-direction="-1" aria-label="Previous hole">Prev</button>
       <div class="hole-nav-meta">
         <strong>Hole ${selected.number}</strong>
-        <span>Par ${selected.par} / ${selected.yards} yds / ${completion.scored}/${completion.total} scored / ${progress.completedHoles}/${round.holes.length} played</span>
+        <span>Par ${selected.par} / ${selected.yards} yds</span>
       </div>
       <button class="button subtle hole-stepper" type="button" data-action="step-hole" data-direction="1" aria-label="Next hole">Next</button>
     </div>
@@ -13772,32 +13768,31 @@ function renderHoleEditor(state, round) {
 
     return `
       <article class="${cardClasses}">
-        <div class="participant-heading participant-heading--score">
-          <div class="participant-heading-main">
-            ${renderAvatarChip(context.previewProfile?.publicProfile.avatarLabel || participant.avatarLabel)}
-            <div>
-              <span>${secondary ? "Extra card entry" : context.isLocal ? "Your score entry" : context.label}</span>
-              <strong>${escapeHtml(participant.name)}</strong>
-              <p class="participant-subcopy">${escapeHtml(participant.playerNames ? participant.playerNames.join(", ") : "Individual scorecard")}</p>
-            </div>
-          </div>
-          <div class="participant-heading-tools">
-            ${context.isLocal ? `<span class="player-badge is-local">You</span>` : ""}
-            ${context.isLeader ? `<span class="player-badge is-leader">Leader</span>` : ""}
-            ${context.previewProfileId
-              ? `<button class="button subtle profile-preview-button profile-preview-button--inline" type="button" data-action="select-profile-preview" data-profile-id="${context.previewProfileId}" data-preview-view="community">View card</button>`
-              : ""}
-          </div>
-        </div>
-        <div class="competitive-note competitive-note--tight">
-          ${secondary ? `<span class="competitive-pill ${context.isLeader ? "is-leading" : ""}">${escapeHtml(context.feedback.headline)}</span>` : ""}
-          ${context.scorePulseVisible ? `<span class="score-feedback-pill is-saved">Saved</span>` : ""}
-          ${context.leaderboardEntry?.rankTrend && context.leaderboardEntry.rankTrend !== "steady"
-            ? `<span class="score-feedback-pill">${escapeHtml(context.leaderboardEntry.rankTrendLabel || "Moved")}</span>`
-            : ""}
-        </div>
         ${secondary
           ? `
+            <div class="participant-heading participant-heading--score">
+              <div class="participant-heading-main">
+                ${renderAvatarChip(context.previewProfile?.publicProfile.avatarLabel || participant.avatarLabel)}
+                <div>
+                  <span>Extra card entry</span>
+                  <strong>${escapeHtml(participant.name)}</strong>
+                  <p class="participant-subcopy">${escapeHtml(participant.playerNames ? participant.playerNames.join(", ") : "Individual scorecard")}</p>
+                </div>
+              </div>
+              <div class="participant-heading-tools">
+                ${context.isLeader ? `<span class="player-badge is-leader">Leader</span>` : ""}
+                ${context.previewProfileId
+                  ? `<button class="button subtle profile-preview-button profile-preview-button--inline" type="button" data-action="select-profile-preview" data-profile-id="${context.previewProfileId}" data-preview-view="community">View card</button>`
+                  : ""}
+              </div>
+            </div>
+            <div class="competitive-note competitive-note--tight">
+              <span class="competitive-pill ${context.isLeader ? "is-leading" : ""}">${escapeHtml(context.feedback.headline)}</span>
+              ${context.scorePulseVisible ? `<span class="score-feedback-pill is-saved">Saved</span>` : ""}
+              ${context.leaderboardEntry?.rankTrend && context.leaderboardEntry.rankTrend !== "steady"
+                ? `<span class="score-feedback-pill">${escapeHtml(context.leaderboardEntry.rankTrendLabel || "Moved")}</span>`
+                : ""}
+            </div>
             <div class="participant-compact-stats">
               <span>Status ${escapeHtml(context.leaderboardEntry?.displayStatus || "--")}</span>
               <span>${escapeHtml(context.leaderboardEntry?.rankTrendLabel || "Opening stretch")}</span>
@@ -13875,13 +13870,9 @@ function renderHoleEditor(state, round) {
                 </label>
               </div>
             `
-            : `
-              <div class="score-screen">
-                <h2>Hole ${hole.number}</h2>
-                <div class="score-screen-meta">
-                  <span>Par ${hole.par}</span>
-                  <span>${hole.yards} yds</span>
-                </div>
+          : `
+            <div class="score-screen">
+                ${renderHoleNavigator(round, selectedHole)}
                 <div class="score-control">
                   <button
                     type="button"
@@ -13908,12 +13899,18 @@ function renderHoleEditor(state, round) {
                 <button class="button primary next-btn" type="button" data-action="jump-next-open" data-hole="${nextOpenHole}">
                   Next Hole
                 </button>
+                <div class="competitive-note competitive-note--tight">
+                  ${context.scorePulseVisible ? `<span class="score-feedback-pill is-saved">Saved</span>` : ""}
+                  ${context.leaderboardEntry?.rankTrend && context.leaderboardEntry.rankTrend !== "steady"
+                    ? `<span class="score-feedback-pill">${escapeHtml(context.leaderboardEntry.rankTrendLabel || "Moved")}</span>`
+                    : ""}
+                </div>
               </div>
             `}
         </div>
         <details class="advanced-hole-stats" data-persist-key="advanced-hole-${hole.number}-${participant.id}">
           <summary>
-            <span>More stats</span>
+            <span>Stats</span>
             <strong>Putts, penalties, flags</strong>
           </summary>
           <div class="advanced-hole-stats-body">
@@ -14034,17 +14031,6 @@ function renderHoleEditor(state, round) {
 
   return `
     <article class="card round-card round-score-shell">
-      <div class="round-score-heading">
-        <div>
-          <p class="eyebrow">Score</p>
-          <h3>Hole ${hole.number}</h3>
-          <p class="body-copy compact-copy round-score-subcopy">Par ${hole.par} / ${hole.yards} yds</p>
-        </div>
-        <div class="round-score-status">
-          <span class="status-pill">${escapeHtml(summary.localParticipant?.displayStatus || "Ready")}</span>
-        </div>
-      </div>
-      ${renderHoleNavigator(round, selectedHole)}
       <div class="participant-grid participant-grid--single">
         ${primaryParticipant ? renderEditableParticipant(primaryParticipant) : ""}
       </div>
@@ -14159,6 +14145,7 @@ function renderLiveRoundLobby(state, round, group) {
     ? group.members.map((member) => member.displayName).filter(Boolean)
     : round.players.map((player) => player.name).filter(Boolean);
   const statusLine = sync.title || "Waiting for players";
+  const liveBadge = round?.sync?.transport && round.sync.transport !== "local" ? "LIVE" : "LOCAL";
 
   return `
     <section class="view-grid round-grid round-grid-live round-grid-live--score">
@@ -14177,13 +14164,13 @@ function renderLiveRoundLobby(state, round, group) {
               <strong>${escapeHtml(inviteCode)}</strong>
             </article>
             <article>
-              <span>Players</span>
-              <strong>${players.length || 1}</strong>
+              <span>Tee</span>
+              <strong>${escapeHtml(round.teeBox || "Default tee")}</strong>
             </article>
-            <article>
-              <span>Status</span>
-              <strong>${escapeHtml(statusLine)}</strong>
-            </article>
+          </div>
+          <div class="round-subtle-strip">
+            <span class="mini-label">${liveBadge}</span>
+            <strong>${escapeHtml(`${statusLine} • ${players.length || 1} ${players.length === 1 ? "player" : "players"}`)}</strong>
           </div>
           <div class="participant-preview-row round-session-players">
             ${players.length
@@ -14212,7 +14199,7 @@ function renderRoundLeaderboardDrawer(state, round) {
   return `
     <details class="round-secondary-entry" data-persist-key="round-leaderboard-${round.id}">
       <summary>
-        <span>Live board</span>
+        <span>Leaderboard</span>
         <strong>${localEntry ? `You #${localEntry.rank}` : leader ? `Leader ${leader.name}` : "Waiting"}</strong>
       </summary>
       <div class="stack-list round-secondary-entry-list">
@@ -14233,7 +14220,7 @@ function renderRoundFinishDrawer(state, round) {
   return `
     <details class="round-secondary-entry" data-persist-key="round-finish-${round.id}">
       <summary>
-        <span>Finish</span>
+        <span>Finish Round</span>
         <strong>${progress.completedHoles}/${round.holes.length} played</strong>
       </summary>
       <div class="stack-list round-secondary-entry-list">
@@ -17800,6 +17787,14 @@ function bootstrapApp({
       return;
     }
 
+    if (action === "use-suggested-course") {
+      store.setState((draft) => {
+        setRoundSetupField(draft, "courseMethod", "detected");
+        return draft;
+      }, { reason: "use-suggested-course" });
+      return;
+    }
+
     if (action === "skip-course-for-now") {
       store.setState((draft) => {
         setRoundSetupField(draft, "courseMethod", "manual");
@@ -19337,7 +19332,7 @@ function bootstrapApp({
           draft,
           joined,
           "Joined live round",
-          `${joined.round.courseName} is open in Score. Enter Hole ${joined.round.currentHole || 1} when you're ready.`
+          `${joined.round.courseName} is open in Score. Start on Hole ${joined.round.currentHole || 1}.`
         );
         return draft;
       }, { reason: "join-code" });

@@ -212,7 +212,8 @@ describe("ui helpers", () => {
 
     expect(markup).toContain("Start a live round fast");
     expect(markup).toContain("Choose course");
-    expect(markup).toContain('name="selectedCourseId" value="golden-nugget-lake-charles"');
+    expect(markup).toContain("Use My Location");
+    expect(markup).toContain("Search Course");
     expect(markup).toContain("Step 1 / 2");
   });
 
@@ -402,10 +403,10 @@ describe("ui helpers", () => {
     expect(markup).toContain("Hole 1");
     expect(markup).toContain('data-action="adjust-score"');
     expect(markup).toContain("Next Hole");
-    expect(markup).toContain("More stats");
+    expect(markup).toContain("Stats");
     expect(markup).toContain("Players");
-    expect(markup).toContain("Live board");
-    expect(markup).toContain("Finish");
+    expect(markup).toContain("Leaderboard");
+    expect(markup).toContain("Finish Round");
     expect(markup).not.toContain('class="hole-pill');
   });
 
