@@ -38,18 +38,48 @@ export const VIEW_ORDER = [
 export const GAME_MODES = {
   stroke: {
     id: "stroke",
+    name: "Stroke Play",
     label: "Stroke Play",
+    type: "individual",
+    scoringLogicType: "stroke-total",
+    shortDescription: "Lowest total wins.",
     description: "Track every player by total strokes and to-par standing.",
   },
   match: {
     id: "match",
+    name: "Match Play",
     label: "Match Play",
+    type: "side",
+    scoringLogicType: "match-holes",
+    shortDescription: "Win holes head to head.",
     description: "Track side-vs-side holes won with a head-to-head scoreboard.",
   },
   scramble: {
     id: "scramble",
+    name: "Scramble",
     label: "Scramble",
+    type: "team",
+    scoringLogicType: "team-stroke-total",
+    shortDescription: "One team card per side.",
     description: "Score teams with one combined card and faster social play.",
+  },
+  skins: {
+    id: "skins",
+    name: "Skins",
+    label: "Skins",
+    type: "individual",
+    scoringLogicType: "skins",
+    shortDescription: "Win a hole outright.",
+    description: "Track hole wins with carry-ready skins-style pressure.",
+  },
+  stableford: {
+    id: "stableford",
+    name: "Stableford",
+    label: "Stableford",
+    type: "individual",
+    scoringLogicType: "stableford-points",
+    shortDescription: "Points beat raw strokes.",
+    description: "Turn each hole into points so fast scoring still feels competitive.",
   },
 };
 
@@ -85,6 +115,15 @@ export const CONNECTION_COPY = {
 export const TOURNAMENT_STATUSES = ["planning", "open", "live", "completed"];
 export const GEAR_CATEGORIES = ["club", "apparel", "accessory"];
 export const PREMIUM_MODE_IDS = ["match", "scramble"];
+
+export function getGameMode(modeId = "stroke") {
+  return GAME_MODES[modeId] || GAME_MODES.stroke;
+}
+
+export function isSideBasedMode(modeId = "stroke") {
+  const type = getGameMode(modeId).type;
+  return type === "side" || type === "team";
+}
 export const SUBSCRIPTION_PLANS = [
   {
     id: "free",

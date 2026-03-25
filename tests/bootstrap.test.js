@@ -53,6 +53,10 @@ function clickRoundWizardNext() {
   document.querySelector('.round-setup-wizard-card [data-action="round-setup-step"][data-direction="1"]').click();
 }
 
+function chooseRoundMode(mode = "stroke") {
+  document.querySelector(`[data-action="select-round-mode"][data-mode="${mode}"]`).click();
+}
+
 describe("bootstrap app", () => {
   beforeEach(() => {
     document.body.innerHTML = `
@@ -400,6 +404,7 @@ describe("bootstrap app", () => {
 
     openRoundWizardForLocalRound();
     document.querySelector('[data-action="skip-course-for-now"]').click();
+    chooseRoundMode("stroke");
     const form = document.querySelector('[data-form="create-round"]');
     form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));
 
@@ -439,6 +444,7 @@ describe("bootstrap app", () => {
     teeSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
     clickRoundWizardNext();
+    chooseRoundMode("stroke");
 
     const form = document.querySelector('[data-form="create-round"]');
     form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));
@@ -469,6 +475,7 @@ describe("bootstrap app", () => {
 
     openRoundWizardForLocalRound();
     document.querySelector('[data-action="skip-course-for-now"]').click();
+    chooseRoundMode("stroke");
 
     const form = document.querySelector('[data-form="create-round"]');
     form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="host"]'));
@@ -499,6 +506,7 @@ describe("bootstrap app", () => {
 
     openRoundWizardForLocalRound();
     document.querySelector('[data-action="skip-course-for-now"]').click();
+    chooseRoundMode("stroke");
 
     const form = document.querySelector('[data-form="create-round"]');
     form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));
@@ -530,6 +538,7 @@ describe("bootstrap app", () => {
 
     openRoundWizardForLocalRound();
     document.querySelector('[data-action="skip-course-for-now"]').click();
+    chooseRoundMode("stroke");
 
     const form = document.querySelector('[data-form="create-round"]');
     form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));

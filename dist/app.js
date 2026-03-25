@@ -149,18 +149,48 @@ const VIEW_ORDER = [
 const GAME_MODES = {
   stroke: {
     id: "stroke",
+    name: "Stroke Play",
     label: "Stroke Play",
+    type: "individual",
+    scoringLogicType: "stroke-total",
+    shortDescription: "Lowest total wins.",
     description: "Track every player by total strokes and to-par standing.",
   },
   match: {
     id: "match",
+    name: "Match Play",
     label: "Match Play",
+    type: "side",
+    scoringLogicType: "match-holes",
+    shortDescription: "Win holes head to head.",
     description: "Track side-vs-side holes won with a head-to-head scoreboard.",
   },
   scramble: {
     id: "scramble",
+    name: "Scramble",
     label: "Scramble",
+    type: "team",
+    scoringLogicType: "team-stroke-total",
+    shortDescription: "One team card per side.",
     description: "Score teams with one combined card and faster social play.",
+  },
+  skins: {
+    id: "skins",
+    name: "Skins",
+    label: "Skins",
+    type: "individual",
+    scoringLogicType: "skins",
+    shortDescription: "Win a hole outright.",
+    description: "Track hole wins with carry-ready skins-style pressure.",
+  },
+  stableford: {
+    id: "stableford",
+    name: "Stableford",
+    label: "Stableford",
+    type: "individual",
+    scoringLogicType: "stableford-points",
+    shortDescription: "Points beat raw strokes.",
+    description: "Turn each hole into points so fast scoring still feels competitive.",
   },
 };
 const COURSE_TEMPLATE = [
@@ -193,6 +223,13 @@ const CONNECTION_COPY = {
 const TOURNAMENT_STATUSES = ["planning", "open", "live", "completed"];
 const GEAR_CATEGORIES = ["club", "apparel", "accessory"];
 const PREMIUM_MODE_IDS = ["match", "scramble"];
+function getGameMode(modeId = "stroke") {
+  return GAME_MODES[modeId] || GAME_MODES.stroke;
+}
+function isSideBasedMode(modeId = "stroke") {
+  const type = getGameMode(modeId).type;
+  return type === "side" || type === "team";
+}
 const SUBSCRIPTION_PLANS = [
   {
     id: "free",
@@ -357,7 +394,7 @@ function createPlayer(player, index, currentUserId, currentUserName) {
 }
 
 function createSides(mode, players) {
-  if (mode === "stroke") {
+  if (!isSideBasedMode(mode)) {
     return [];
   }
 
@@ -381,7 +418,7 @@ function createSides(mode, players) {
 }
 
 function createHoleEntries(mode, players, sides) {
-  const participants = mode === "stroke" ? players : sides;
+  const participants = isSideBasedMode(mode) ? sides : players;
   return participants.map((participant) => ({
     participantId: participant.id,
     strokes: null,
@@ -977,10 +1014,10 @@ function buildPerformanceInsights(metrics) {
   return insights.slice(0, 3);
 }
 function getScoringParticipants(round) {
-  return round.mode === "stroke" ? round.players : round.sides;
+  return isSideBasedMode(round.mode) ? round.sides : round.players;
 }
 function getLocalParticipantIds(round, currentUserId) {
-  if (round.mode === "stroke") {
+  if (!isSideBasedMode(round.mode)) {
     return round.players.filter((player) => player.userId === currentUserId).map((player) => player.id);
   }
 
@@ -1132,6 +1169,123 @@ function buildStrokeLeaderboard(round, currentUserId, holeLimit = null) {
     }));
 }
 
+function calculateStablefordPoints(strokes, par) {
+  const delta = Number(strokes) - Number(par);
+  if (!Number.isFinite(delta)) {
+    return 0;
+  }
+  if (delta <= -3) {
+    return 5;
+  }
+  if (delta === -2) {
+    return 4;
+  }
+  if (delta === -1) {
+    return 3;
+  }
+  if (delta === 0) {
+    return 2;
+  }
+  if (delta === 1) {
+    return 1;
+  }
+  return 0;
+}
+
+function buildStablefordLeaderboard(round, currentUserId, holeLimit = null) {
+  return getScoringParticipants(round)
+    .map((participant) => {
+      const totals = getParticipantTotals(round, participant.id, { holeLimit });
+      const localIds = getLocalParticipantIds(round, currentUserId);
+      const points = totals.holeDetails.reduce((sum, detail) => sum + calculateStablefordPoints(detail.strokes, detail.par), 0);
+      return {
+        id: participant.id,
+        name: participant.name,
+        subtitle: "Player card",
+        isLocal: localIds.includes(participant.id),
+        thru: totals.holesPlayed,
+        total: points,
+        stablefordPoints: points,
+        toPar: totals.toPar,
+        fairwayRate: totals.fairwayRate,
+        girRate: totals.girRate,
+        totalPutts: totals.totalPutts,
+        totalPenalties: totals.totalPenalties,
+        displayStatus: totals.holesPlayed ? `${points} pts` : "NS",
+      };
+    })
+    .sort((left, right) => {
+      if (left.thru === 0 && right.thru > 0) {
+        return 1;
+      }
+      if (right.thru === 0 && left.thru > 0) {
+        return -1;
+      }
+      return right.total - left.total || left.toPar - right.toPar || right.thru - left.thru;
+    })
+    .map((entry, index) => ({
+      ...entry,
+      rank: index + 1,
+    }));
+}
+
+function buildSkinsLeaderboard(round, currentUserId, holeLimit = null) {
+  const participants = getScoringParticipants(round);
+  const localIds = getLocalParticipantIds(round, currentUserId);
+  const skinsByParticipant = new Map(participants.map((participant) => [participant.id, 0]));
+  const totalsByParticipant = new Map(participants.map((participant) => [participant.id, getParticipantTotals(round, participant.id, { holeLimit })]));
+
+  getRoundHoles(round, holeLimit).forEach((hole) => {
+    const playedEntries = hole.entries.filter((entry) => isPlayedEntry(entry));
+    if (playedEntries.length < 2) {
+      return;
+    }
+
+    const winningScore = Math.min(...playedEntries.map((entry) => entry.strokes));
+    const winners = playedEntries.filter((entry) => entry.strokes === winningScore);
+    if (winners.length !== 1) {
+      return;
+    }
+
+    const currentCount = skinsByParticipant.get(winners[0].participantId) || 0;
+    skinsByParticipant.set(winners[0].participantId, currentCount + 1);
+  });
+
+  return participants
+    .map((participant) => {
+      const totals = totalsByParticipant.get(participant.id);
+      const skinsWon = skinsByParticipant.get(participant.id) || 0;
+      return {
+        id: participant.id,
+        name: participant.name,
+        subtitle: "Player card",
+        isLocal: localIds.includes(participant.id),
+        thru: totals.holesPlayed,
+        total: skinsWon,
+        skinsWon,
+        toPar: totals.toPar,
+        fairwayRate: totals.fairwayRate,
+        girRate: totals.girRate,
+        totalPutts: totals.totalPutts,
+        totalPenalties: totals.totalPenalties,
+        displayStatus: totals.holesPlayed ? `${skinsWon} ${skinsWon === 1 ? "skin" : "skins"}` : "NS",
+      };
+    })
+    .sort((left, right) => {
+      if (left.thru === 0 && right.thru > 0) {
+        return 1;
+      }
+      if (right.thru === 0 && left.thru > 0) {
+        return -1;
+      }
+      return right.total - left.total || left.toPar - right.toPar || right.thru - left.thru;
+    })
+    .map((entry, index) => ({
+      ...entry,
+      rank: index + 1,
+    }));
+}
+
 function buildMatchLeaderboard(round, currentUserId, holeLimit = null) {
   const sides = getScoringParticipants(round);
   const [left, right] = sides;
@@ -1211,9 +1365,19 @@ function buildMatchLeaderboard(round, currentUserId, holeLimit = null) {
   ].sort((leftEntry, rightEntry) => leftEntry.rank - rightEntry.rank);
 }
 function buildLeaderboard(round, currentUserId, holeLimit = null) {
-  return round.mode === "match"
-    ? buildMatchLeaderboard(round, currentUserId, holeLimit)
-    : buildStrokeLeaderboard(round, currentUserId, holeLimit);
+  if (round.mode === "match") {
+    return buildMatchLeaderboard(round, currentUserId, holeLimit);
+  }
+
+  if (round.mode === "stableford") {
+    return buildStablefordLeaderboard(round, currentUserId, holeLimit);
+  }
+
+  if (round.mode === "skins") {
+    return buildSkinsLeaderboard(round, currentUserId, holeLimit);
+  }
+
+  return buildStrokeLeaderboard(round, currentUserId, holeLimit);
 }
 
 function getLastScoredHoleNumber(round) {
@@ -2730,7 +2894,7 @@ function ensureMemberOnRound(round, member) {
     round.players.push(participant);
     added = true;
 
-    if (round.mode === "stroke") {
+    if (!isSideBasedMode(round.mode)) {
       round.holes.forEach((hole) => {
         hole.entries = Array.isArray(hole.entries) ? hole.entries : [];
         hole.entries.push(createStrokeEntry(participant.id));
@@ -5035,7 +5199,7 @@ function createCompletedSeedRound({ currentUser, courseName, weather, mode, play
     status: "completed",
   });
 
-  const participants = round.mode === "stroke" ? round.players : round.sides;
+  const participants = isSideBasedMode(round.mode) ? round.sides : round.players;
   participants.forEach((participant, index) => {
     const adjustments = index === 0 ? localAdjustments : remotePatterns[(index - 1) % remotePatterns.length];
     seedRoundPerformance(round, participant.id, adjustments);
@@ -6518,7 +6682,7 @@ function getScoringParticipantId(round, profileId) {
     return null;
   }
 
-  if (round.mode === "stroke") {
+  if (!isSideBasedMode(round.mode)) {
     return player.id;
   }
 
@@ -7871,7 +8035,7 @@ function createSyncService({ store }) {
 // ---- src/services/round-flow-service.js ----
 const HOSTED_ROUND_NOTE = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
 const JOINED_ROUND_NOTE = "This device now carries its own safe copy of the live round, even if the original host leaves.";
-const ROUND_SETUP_STEPS = ["course", "review"];
+const ROUND_SETUP_STEPS = ["course", "mode", "review"];
 function parsePlayers(value, currentUserName) {
   const safeCurrentUserName = String(currentUserName || "").trim() || "Golfer";
   const names = String(value || "")
@@ -8935,7 +9099,7 @@ function ensureMemberOnRound(round, member) {
     round.players.push(participant);
     added = true;
 
-    if (round.mode === "stroke") {
+    if (!isSideBasedMode(round.mode)) {
       round.holes.forEach((hole) => {
         hole.entries = Array.isArray(hole.entries) ? hole.entries : [];
         hole.entries.push(createStrokeEntry(participant.id));
@@ -9002,7 +9166,7 @@ function ensureCurrentUserOnRound(round, group, currentUser) {
     round.players.push(participant);
     added = true;
 
-    if (round.mode === "stroke") {
+    if (!isSideBasedMode(round.mode)) {
       round.holes.forEach((hole) => {
         hole.entries = Array.isArray(hole.entries) ? hole.entries : [];
         hole.entries.push(createStrokeEntry(participant.id));
@@ -11342,12 +11506,13 @@ function renderLiveSessionStrip(activeRound, activeGroup) {
     ? activeGroup.members.map((member) => member.displayName).filter(Boolean)
     : activeRound?.players?.map((player) => player.name).filter(Boolean) || [];
   const playerCount = players.length || 1;
-  const liveStatus = sync?.title || "Not connected";
+  const liveStatus = `${getGameModeLabel(activeRound?.mode || "stroke")} • ${sync?.title || "Not connected"}`;
   const liveBadge = activeRound?.sync?.transport && activeRound.sync.transport !== "local"
     ? "LIVE"
     : "LOCAL";
   const detailSummary = [
     activeRound?.courseName || "Active round",
+    getGameModeLabel(activeRound?.mode || "stroke"),
     activeRound?.teeBox ? `${activeRound.teeBox} tees` : null,
     `${activeRound?.holes?.length || activeRound?.selectedHoleCount || 18} holes`,
   ].filter(Boolean).join(" / ");
@@ -12061,7 +12226,7 @@ function getSocialSettings(state) {
 function getRoundSetup(state) {
   const setup = state.session?.roundSetup || {};
   return {
-    step: setup.step || "type",
+    step: setup.step || "course",
     intent: setup.intent || "local",
     courseMethod: setup.courseMethod || "",
     courseQuery: setup.courseQuery || "",
@@ -13166,10 +13331,11 @@ function renderModeNotes(state, mode) {
 
 const ROUND_SETUP_STEP_COPY = [
   { id: "course", label: "Course" },
+  { id: "mode", label: "Game Mode" },
   { id: "review", label: "Round Type" },
 ];
 
-function renderRoundSetupProgress(step = "type") {
+function renderRoundSetupProgress(step = "course") {
   const activeIndex = Math.max(0, ROUND_SETUP_STEP_COPY.findIndex((item) => item.id === step));
 
   return `
@@ -13211,6 +13377,53 @@ function renderRoundSetupFooter({
       >
         ${escapeHtml(nextLabel)}
       </button>
+    </div>
+  `;
+}
+
+function renderGameModePicker(state) {
+  const subscription = getSubscription(state);
+  const selectedMode = getRoundSetup(state).mode || "stroke";
+  const modeCards = ["stroke", "match", "scramble", "skins", "stableford"]
+    .map((modeId) => {
+      const mode = GAME_MODES[modeId];
+      if (!mode) {
+        return "";
+      }
+
+      const locked = isModeLocked(modeId, subscription);
+      const active = selectedMode === modeId;
+      return `
+        <button
+          class="round-mode-card ${active ? "is-selected" : ""}"
+          type="button"
+          data-action="select-round-mode"
+          data-mode="${modeId}"
+          ${locked ? "disabled" : ""}
+        >
+          <div>
+            <strong>${escapeHtml(mode.label)}</strong>
+            <span>${escapeHtml(mode.shortDescription || mode.description || "")}</span>
+          </div>
+          ${locked ? `<span class="status-pill">Premium</span>` : active ? `<span class="status-pill">Selected</span>` : ""}
+        </button>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="round-setup-step-card">
+      <div class="round-setup-step-head">
+        <p class="eyebrow">Step 2</p>
+        <h4>Choose game mode</h4>
+      </div>
+      <div class="stack-list round-mode-grid">
+        ${modeCards}
+      </div>
+      <div class="row-actions compact-actions">
+        <button class="button subtle" type="button" data-action="round-setup-step" data-direction="-1">Back</button>
+        <button class="button subtle" type="button" data-action="more-round-modes">More Games</button>
+      </div>
     </div>
   `;
 }
@@ -13479,6 +13692,10 @@ function renderCreateRoundCard(state, activeRound) {
             <strong>${escapeHtml(selectedTeeName)}</strong>
           </article>
           <article>
+            <span>Mode</span>
+            <strong>${escapeHtml(getGameModeLabel(roundSetup.mode || "stroke"))}</strong>
+          </article>
+          <article>
             <span>Holes</span>
             <strong>${selectedHoleCount}</strong>
           </article>
@@ -13507,6 +13724,10 @@ function renderCreateRoundCard(state, activeRound) {
   function renderStepBody() {
     if (currentStep === "course") {
       return renderCoursePicker(state);
+    }
+
+    if (currentStep === "mode") {
+      return renderGameModePicker(state);
     }
 
     return renderReviewStep();
@@ -13719,7 +13940,7 @@ function renderHoleEditor(state, round) {
   function buildParticipantContext(participant) {
     const entry = hole.entries.find((item) => item.participantId === participant.id);
     const participantTotals = getParticipantTotals(round, participant.id);
-    const label = round.mode === "stroke" ? "Player" : "Side";
+    const label = isSideBasedMode(round.mode) ? "Side" : "Player";
     const previewProfileId = findParticipantProfileId(round, participant.id);
     const previewProfile = previewProfileId ? getProfileById(state, previewProfileId) : null;
     const feedback = getCompetitiveFeedback(round, summary, participant.id);
@@ -14116,7 +14337,7 @@ function renderRoundPlayersDrawer(state, round, group) {
       </summary>
       <div class="stack-list round-secondary-entry-list">
         <div class="round-subtle-strip">
-          <span class="mini-label">${escapeHtml(sync.title)}</span>
+          <span class="mini-label">${escapeHtml(getGameModeLabel(round.mode || "stroke"))}</span>
           <strong>${escapeHtml(safety.title)}</strong>
         </div>
         <div class="participant-preview-row round-session-players">
@@ -14162,6 +14383,10 @@ function renderLiveRoundLobby(state, round, group) {
             <article>
               <span>Invite Code</span>
               <strong>${escapeHtml(inviteCode)}</strong>
+            </article>
+            <article>
+              <span>Mode</span>
+              <strong>${escapeHtml(getGameModeLabel(round.mode || "stroke"))}</strong>
             </article>
             <article>
               <span>Tee</span>
@@ -17773,7 +17998,7 @@ function bootstrapApp({
         if (courseId) {
           setSelectedCourse(draft, courseId, teeBoxId);
         }
-        setRoundSetupStep(draft, "review");
+        setRoundSetupStep(draft, "mode");
         return draft;
       }, { reason: "confirm-course-choice" });
       return;
@@ -17802,9 +18027,27 @@ function bootstrapApp({
         setRoundSetupField(draft, "selectedTeeBoxId", "");
         setRoundSetupField(draft, "manualCourseName", "Course TBD");
         setRoundSetupField(draft, "manualTeeBoxName", "Default");
-        setRoundSetupStep(draft, "review");
+        setRoundSetupStep(draft, "mode");
         return draft;
       }, { reason: "skip-course-for-now" });
+      return;
+    }
+
+    if (action === "select-round-mode") {
+      const mode = String(actionElement.dataset.mode || "stroke").trim();
+      store.setState((draft) => {
+        setRoundSetupField(draft, "mode", mode || "stroke");
+        setRoundSetupStep(draft, "review");
+        return draft;
+      }, { reason: "select-round-mode" });
+      return;
+    }
+
+    if (action === "more-round-modes") {
+      store.setState((draft) => {
+        setFeedback(draft, "info", "More games later", "This build keeps the core golf formats fast. More variants can fit here later.");
+        return draft;
+      }, { reason: "more-round-modes" });
       return;
     }
 
@@ -19264,7 +19507,7 @@ function bootstrapApp({
         draft.rounds.unshift(round);
         focusRoundView(draft, round.id, draft.currentUser.profileId, setActiveView);
         draft.session.roundScreenMode = intent === "host" ? "lobby" : "score";
-        appendActivity(draft, `${round.courseName} started in ${round.mode} mode.`, "round");
+        appendActivity(draft, `${round.courseName} started in ${(GAME_MODES[round.mode]?.label || "Stroke Play").toLowerCase()}.`, "round");
         setFeedback(
           draft,
           "success",

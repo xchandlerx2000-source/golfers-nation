@@ -2,7 +2,7 @@ import { createActivity, createGearItem, createPlayerProfile, createRound, creat
 import { getPendingRoundEvents } from "../domain/round-sync.js";
 import { createIntegrationSettings, createSpotifySessionState } from "../integrations/spotify-service.js";
 import { applyHoleUpdate, getParticipantTotals } from "../domain/scoring.js";
-import { TESTER_DEFAULT_SUBSCRIPTION_TIER } from "../config.js";
+import { TESTER_DEFAULT_SUBSCRIPTION_TIER, isSideBasedMode } from "../config.js";
 import { getCourseDefaultRoundSetup } from "./course-service.js";
 import { average, cloneData } from "../utils/formatters.js";
 
@@ -264,7 +264,7 @@ function createCompletedSeedRound({ currentUser, courseName, weather, mode, play
     status: "completed",
   });
 
-  const participants = round.mode === "stroke" ? round.players : round.sides;
+  const participants = isSideBasedMode(round.mode) ? round.sides : round.players;
   participants.forEach((participant, index) => {
     const adjustments = index === 0 ? localAdjustments : remotePatterns[(index - 1) % remotePatterns.length];
     seedRoundPerformance(round, participant.id, adjustments);

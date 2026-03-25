@@ -25,7 +25,7 @@ import {
   showBootRecoveryScreen,
   showRuntimeRecoveryScreen,
 } from "./bootstrap/startup-recovery.js";
-import { APP_VERSION, STORAGE_KEY } from "./config.js";
+import { APP_VERSION, GAME_MODES, STORAGE_KEY } from "./config.js";
 import { joinByInviteCode } from "./services/mock-api.js";
 import { createDefaultNearbyState } from "./services/nearby-detection-service.js";
 import {
@@ -1690,7 +1690,7 @@ export function bootstrapApp({
         if (courseId) {
           setSelectedCourse(draft, courseId, teeBoxId);
         }
-        setRoundSetupStep(draft, "review");
+        setRoundSetupStep(draft, "mode");
         return draft;
       }, { reason: "confirm-course-choice" });
       return;
@@ -1719,9 +1719,27 @@ export function bootstrapApp({
         setRoundSetupField(draft, "selectedTeeBoxId", "");
         setRoundSetupField(draft, "manualCourseName", "Course TBD");
         setRoundSetupField(draft, "manualTeeBoxName", "Default");
-        setRoundSetupStep(draft, "review");
+        setRoundSetupStep(draft, "mode");
         return draft;
       }, { reason: "skip-course-for-now" });
+      return;
+    }
+
+    if (action === "select-round-mode") {
+      const mode = String(actionElement.dataset.mode || "stroke").trim();
+      store.setState((draft) => {
+        setRoundSetupField(draft, "mode", mode || "stroke");
+        setRoundSetupStep(draft, "review");
+        return draft;
+      }, { reason: "select-round-mode" });
+      return;
+    }
+
+    if (action === "more-round-modes") {
+      store.setState((draft) => {
+        setFeedback(draft, "info", "More games later", "This build keeps the core golf formats fast. More variants can fit here later.");
+        return draft;
+      }, { reason: "more-round-modes" });
       return;
     }
 
@@ -3181,7 +3199,7 @@ export function bootstrapApp({
         draft.rounds.unshift(round);
         focusRoundView(draft, round.id, draft.currentUser.profileId, setActiveView);
         draft.session.roundScreenMode = intent === "host" ? "lobby" : "score";
-        appendActivity(draft, `${round.courseName} started in ${round.mode} mode.`, "round");
+        appendActivity(draft, `${round.courseName} started in ${(GAME_MODES[round.mode]?.label || "Stroke Play").toLowerCase()}.`, "round");
         setFeedback(
           draft,
           "success",

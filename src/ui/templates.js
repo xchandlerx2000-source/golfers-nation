@@ -12,6 +12,7 @@ import {
   TESTER_FEEDBACK_AREAS,
   THEME_PRESET_OPTIONS,
   VIEW_ORDER,
+  isSideBasedMode,
 } from "../config.js";
 import {
   getFrequentPartners,
@@ -851,12 +852,13 @@ function renderLiveSessionStrip(activeRound, activeGroup) {
     ? activeGroup.members.map((member) => member.displayName).filter(Boolean)
     : activeRound?.players?.map((player) => player.name).filter(Boolean) || [];
   const playerCount = players.length || 1;
-  const liveStatus = sync?.title || "Not connected";
+  const liveStatus = `${getGameModeLabel(activeRound?.mode || "stroke")} • ${sync?.title || "Not connected"}`;
   const liveBadge = activeRound?.sync?.transport && activeRound.sync.transport !== "local"
     ? "LIVE"
     : "LOCAL";
   const detailSummary = [
     activeRound?.courseName || "Active round",
+    getGameModeLabel(activeRound?.mode || "stroke"),
     activeRound?.teeBox ? `${activeRound.teeBox} tees` : null,
     `${activeRound?.holes?.length || activeRound?.selectedHoleCount || 18} holes`,
   ].filter(Boolean).join(" / ");
@@ -1570,7 +1572,7 @@ function getSocialSettings(state) {
 function getRoundSetup(state) {
   const setup = state.session?.roundSetup || {};
   return {
-    step: setup.step || "type",
+    step: setup.step || "course",
     intent: setup.intent || "local",
     courseMethod: setup.courseMethod || "",
     courseQuery: setup.courseQuery || "",
@@ -2675,10 +2677,11 @@ function renderModeNotes(state, mode) {
 
 const ROUND_SETUP_STEP_COPY = [
   { id: "course", label: "Course" },
+  { id: "mode", label: "Game Mode" },
   { id: "review", label: "Round Type" },
 ];
 
-function renderRoundSetupProgress(step = "type") {
+function renderRoundSetupProgress(step = "course") {
   const activeIndex = Math.max(0, ROUND_SETUP_STEP_COPY.findIndex((item) => item.id === step));
 
   return `
@@ -2720,6 +2723,53 @@ function renderRoundSetupFooter({
       >
         ${escapeHtml(nextLabel)}
       </button>
+    </div>
+  `;
+}
+
+function renderGameModePicker(state) {
+  const subscription = getSubscription(state);
+  const selectedMode = getRoundSetup(state).mode || "stroke";
+  const modeCards = ["stroke", "match", "scramble", "skins", "stableford"]
+    .map((modeId) => {
+      const mode = GAME_MODES[modeId];
+      if (!mode) {
+        return "";
+      }
+
+      const locked = isModeLocked(modeId, subscription);
+      const active = selectedMode === modeId;
+      return `
+        <button
+          class="round-mode-card ${active ? "is-selected" : ""}"
+          type="button"
+          data-action="select-round-mode"
+          data-mode="${modeId}"
+          ${locked ? "disabled" : ""}
+        >
+          <div>
+            <strong>${escapeHtml(mode.label)}</strong>
+            <span>${escapeHtml(mode.shortDescription || mode.description || "")}</span>
+          </div>
+          ${locked ? `<span class="status-pill">Premium</span>` : active ? `<span class="status-pill">Selected</span>` : ""}
+        </button>
+      `;
+    })
+    .join("");
+
+  return `
+    <div class="round-setup-step-card">
+      <div class="round-setup-step-head">
+        <p class="eyebrow">Step 2</p>
+        <h4>Choose game mode</h4>
+      </div>
+      <div class="stack-list round-mode-grid">
+        ${modeCards}
+      </div>
+      <div class="row-actions compact-actions">
+        <button class="button subtle" type="button" data-action="round-setup-step" data-direction="-1">Back</button>
+        <button class="button subtle" type="button" data-action="more-round-modes">More Games</button>
+      </div>
     </div>
   `;
 }
@@ -2988,6 +3038,10 @@ function renderCreateRoundCard(state, activeRound) {
             <strong>${escapeHtml(selectedTeeName)}</strong>
           </article>
           <article>
+            <span>Mode</span>
+            <strong>${escapeHtml(getGameModeLabel(roundSetup.mode || "stroke"))}</strong>
+          </article>
+          <article>
             <span>Holes</span>
             <strong>${selectedHoleCount}</strong>
           </article>
@@ -3016,6 +3070,10 @@ function renderCreateRoundCard(state, activeRound) {
   function renderStepBody() {
     if (currentStep === "course") {
       return renderCoursePicker(state);
+    }
+
+    if (currentStep === "mode") {
+      return renderGameModePicker(state);
     }
 
     return renderReviewStep();
@@ -3228,7 +3286,7 @@ function renderHoleEditor(state, round) {
   function buildParticipantContext(participant) {
     const entry = hole.entries.find((item) => item.participantId === participant.id);
     const participantTotals = getParticipantTotals(round, participant.id);
-    const label = round.mode === "stroke" ? "Player" : "Side";
+    const label = isSideBasedMode(round.mode) ? "Side" : "Player";
     const previewProfileId = findParticipantProfileId(round, participant.id);
     const previewProfile = previewProfileId ? getProfileById(state, previewProfileId) : null;
     const feedback = getCompetitiveFeedback(round, summary, participant.id);
@@ -3625,7 +3683,7 @@ function renderRoundPlayersDrawer(state, round, group) {
       </summary>
       <div class="stack-list round-secondary-entry-list">
         <div class="round-subtle-strip">
-          <span class="mini-label">${escapeHtml(sync.title)}</span>
+          <span class="mini-label">${escapeHtml(getGameModeLabel(round.mode || "stroke"))}</span>
           <strong>${escapeHtml(safety.title)}</strong>
         </div>
         <div class="participant-preview-row round-session-players">
@@ -3671,6 +3729,10 @@ function renderLiveRoundLobby(state, round, group) {
             <article>
               <span>Invite Code</span>
               <strong>${escapeHtml(inviteCode)}</strong>
+            </article>
+            <article>
+              <span>Mode</span>
+              <strong>${escapeHtml(getGameModeLabel(round.mode || "stroke"))}</strong>
             </article>
             <article>
               <span>Tee</span>

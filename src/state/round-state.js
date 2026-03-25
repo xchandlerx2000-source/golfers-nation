@@ -1,3 +1,4 @@
+import { isSideBasedMode } from "../config.js";
 import {
   ensureRoundSyncScaffold,
   getPendingRoundEvents,
@@ -140,7 +141,7 @@ function ensureMemberOnRound(round, member) {
     round.players.push(participant);
     added = true;
 
-    if (round.mode === "stroke") {
+    if (!isSideBasedMode(round.mode)) {
       round.holes.forEach((hole) => {
         hole.entries = Array.isArray(hole.entries) ? hole.entries : [];
         hole.entries.push(createStrokeEntry(participant.id));

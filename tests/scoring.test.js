@@ -100,6 +100,52 @@ describe("scoring", () => {
     expect(leaderboard[1].displayStatus).toBe("1 Down");
   });
 
+  it("builds a stableford leaderboard from points", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "National Pines",
+      teeBox: "Blue",
+      weather: "Clear 72F",
+      mode: "stableford",
+      players: ["Avery Brooks", "Maya Chen"],
+    });
+    const [avery, maya] = round.players;
+
+    scoreHole(round, avery.id, 1, 3, 1, false, true);
+    scoreHole(round, avery.id, 2, 5, 2, true, true);
+    scoreHole(round, maya.id, 1, 5, 2, false, false);
+    scoreHole(round, maya.id, 2, 6, 3, false, false);
+
+    const leaderboard = buildLeaderboard(round, currentUser.id);
+
+    expect(leaderboard[0].name).toBe("Avery Brooks");
+    expect(leaderboard[0].displayStatus).toBe("5 pts");
+    expect(leaderboard[1].displayStatus).toBe("2 pts");
+  });
+
+  it("builds a skins leaderboard from hole wins", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "National Pines",
+      teeBox: "Blue",
+      weather: "Clear 72F",
+      mode: "skins",
+      players: ["Avery Brooks", "Maya Chen"],
+    });
+    const [avery, maya] = round.players;
+
+    scoreHole(round, avery.id, 1, 4, 2, true, true);
+    scoreHole(round, maya.id, 1, 5, 2, false, false);
+    scoreHole(round, avery.id, 2, 5, 2, true, true);
+    scoreHole(round, maya.id, 2, 5, 2, true, true);
+
+    const leaderboard = buildLeaderboard(round, currentUser.id);
+
+    expect(leaderboard[0].name).toBe("Avery Brooks");
+    expect(leaderboard[0].displayStatus).toBe("1 skin");
+    expect(leaderboard[1].displayStatus).toBe("0 skins");
+  });
+
   it("aggregates completed-round history metrics", () => {
     const firstRound = createRound({
       currentUser,

@@ -1,4 +1,4 @@
-import { GAME_MODES } from "../config.js";
+import { GAME_MODES, isSideBasedMode } from "../config.js";
 import { average, formatRelationToPar } from "../utils/formatters.js";
 
 const PAR_TYPES = [3, 4, 5];
@@ -340,11 +340,11 @@ export function buildPerformanceInsights(metrics) {
 }
 
 export function getScoringParticipants(round) {
-  return round.mode === "stroke" ? round.players : round.sides;
+  return isSideBasedMode(round.mode) ? round.sides : round.players;
 }
 
 export function getLocalParticipantIds(round, currentUserId) {
-  if (round.mode === "stroke") {
+  if (!isSideBasedMode(round.mode)) {
     return round.players.filter((player) => player.userId === currentUserId).map((player) => player.id);
   }
 
@@ -498,6 +498,123 @@ function buildStrokeLeaderboard(round, currentUserId, holeLimit = null) {
     }));
 }
 
+function calculateStablefordPoints(strokes, par) {
+  const delta = Number(strokes) - Number(par);
+  if (!Number.isFinite(delta)) {
+    return 0;
+  }
+  if (delta <= -3) {
+    return 5;
+  }
+  if (delta === -2) {
+    return 4;
+  }
+  if (delta === -1) {
+    return 3;
+  }
+  if (delta === 0) {
+    return 2;
+  }
+  if (delta === 1) {
+    return 1;
+  }
+  return 0;
+}
+
+function buildStablefordLeaderboard(round, currentUserId, holeLimit = null) {
+  return getScoringParticipants(round)
+    .map((participant) => {
+      const totals = getParticipantTotals(round, participant.id, { holeLimit });
+      const localIds = getLocalParticipantIds(round, currentUserId);
+      const points = totals.holeDetails.reduce((sum, detail) => sum + calculateStablefordPoints(detail.strokes, detail.par), 0);
+      return {
+        id: participant.id,
+        name: participant.name,
+        subtitle: "Player card",
+        isLocal: localIds.includes(participant.id),
+        thru: totals.holesPlayed,
+        total: points,
+        stablefordPoints: points,
+        toPar: totals.toPar,
+        fairwayRate: totals.fairwayRate,
+        girRate: totals.girRate,
+        totalPutts: totals.totalPutts,
+        totalPenalties: totals.totalPenalties,
+        displayStatus: totals.holesPlayed ? `${points} pts` : "NS",
+      };
+    })
+    .sort((left, right) => {
+      if (left.thru === 0 && right.thru > 0) {
+        return 1;
+      }
+      if (right.thru === 0 && left.thru > 0) {
+        return -1;
+      }
+      return right.total - left.total || left.toPar - right.toPar || right.thru - left.thru;
+    })
+    .map((entry, index) => ({
+      ...entry,
+      rank: index + 1,
+    }));
+}
+
+function buildSkinsLeaderboard(round, currentUserId, holeLimit = null) {
+  const participants = getScoringParticipants(round);
+  const localIds = getLocalParticipantIds(round, currentUserId);
+  const skinsByParticipant = new Map(participants.map((participant) => [participant.id, 0]));
+  const totalsByParticipant = new Map(participants.map((participant) => [participant.id, getParticipantTotals(round, participant.id, { holeLimit })]));
+
+  getRoundHoles(round, holeLimit).forEach((hole) => {
+    const playedEntries = hole.entries.filter((entry) => isPlayedEntry(entry));
+    if (playedEntries.length < 2) {
+      return;
+    }
+
+    const winningScore = Math.min(...playedEntries.map((entry) => entry.strokes));
+    const winners = playedEntries.filter((entry) => entry.strokes === winningScore);
+    if (winners.length !== 1) {
+      return;
+    }
+
+    const currentCount = skinsByParticipant.get(winners[0].participantId) || 0;
+    skinsByParticipant.set(winners[0].participantId, currentCount + 1);
+  });
+
+  return participants
+    .map((participant) => {
+      const totals = totalsByParticipant.get(participant.id);
+      const skinsWon = skinsByParticipant.get(participant.id) || 0;
+      return {
+        id: participant.id,
+        name: participant.name,
+        subtitle: "Player card",
+        isLocal: localIds.includes(participant.id),
+        thru: totals.holesPlayed,
+        total: skinsWon,
+        skinsWon,
+        toPar: totals.toPar,
+        fairwayRate: totals.fairwayRate,
+        girRate: totals.girRate,
+        totalPutts: totals.totalPutts,
+        totalPenalties: totals.totalPenalties,
+        displayStatus: totals.holesPlayed ? `${skinsWon} ${skinsWon === 1 ? "skin" : "skins"}` : "NS",
+      };
+    })
+    .sort((left, right) => {
+      if (left.thru === 0 && right.thru > 0) {
+        return 1;
+      }
+      if (right.thru === 0 && left.thru > 0) {
+        return -1;
+      }
+      return right.total - left.total || left.toPar - right.toPar || right.thru - left.thru;
+    })
+    .map((entry, index) => ({
+      ...entry,
+      rank: index + 1,
+    }));
+}
+
 function buildMatchLeaderboard(round, currentUserId, holeLimit = null) {
   const sides = getScoringParticipants(round);
   const [left, right] = sides;
@@ -578,9 +695,19 @@ function buildMatchLeaderboard(round, currentUserId, holeLimit = null) {
 }
 
 export function buildLeaderboard(round, currentUserId, holeLimit = null) {
-  return round.mode === "match"
-    ? buildMatchLeaderboard(round, currentUserId, holeLimit)
-    : buildStrokeLeaderboard(round, currentUserId, holeLimit);
+  if (round.mode === "match") {
+    return buildMatchLeaderboard(round, currentUserId, holeLimit);
+  }
+
+  if (round.mode === "stableford") {
+    return buildStablefordLeaderboard(round, currentUserId, holeLimit);
+  }
+
+  if (round.mode === "skins") {
+    return buildSkinsLeaderboard(round, currentUserId, holeLimit);
+  }
+
+  return buildStrokeLeaderboard(round, currentUserId, holeLimit);
 }
 
 function getLastScoredHoleNumber(round) {

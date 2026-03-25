@@ -1,3 +1,4 @@
+import { isSideBasedMode } from "../config.js";
 import { createPlayerProfile } from "../domain/factories.js";
 import {
   buildPerformanceInsights,
@@ -86,7 +87,7 @@ function getScoringParticipantId(round, profileId) {
     return null;
   }
 
-  if (round.mode === "stroke") {
+  if (!isSideBasedMode(round.mode)) {
     return player.id;
   }
 

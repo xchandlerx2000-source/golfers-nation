@@ -1,4 +1,4 @@
-import { CONNECTION_COPY } from "../config.js";
+import { CONNECTION_COPY, isSideBasedMode } from "../config.js";
 import {
   appendRoundAction,
   applyRoundActionEvent,
@@ -154,7 +154,7 @@ function ensureMemberOnRound(round, member) {
     round.players.push(participant);
     added = true;
 
-    if (round.mode === "stroke") {
+    if (!isSideBasedMode(round.mode)) {
       round.holes.forEach((hole) => {
         hole.entries = Array.isArray(hole.entries) ? hole.entries : [];
         hole.entries.push(createStrokeEntry(participant.id));
@@ -221,7 +221,7 @@ function ensureCurrentUserOnRound(round, group, currentUser) {
     round.players.push(participant);
     added = true;
 
-    if (round.mode === "stroke") {
+    if (!isSideBasedMode(round.mode)) {
       round.holes.forEach((hole) => {
         hole.entries = Array.isArray(hole.entries) ? hole.entries : [];
         hole.entries.push(createStrokeEntry(participant.id));

@@ -214,7 +214,31 @@ describe("ui helpers", () => {
     expect(markup).toContain("Choose course");
     expect(markup).toContain("Use My Location");
     expect(markup).toContain("Search Course");
-    expect(markup).toContain("Step 1 / 2");
+    expect(markup).toContain("Step 1 / 3");
+  });
+
+  it("renders the game mode step with the core golf formats", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "round";
+    state.rounds = [];
+    state.groups = [];
+    state.session.activeRoundId = null;
+    state.session.roundSetup = {
+      ...state.session.roundSetup,
+      step: "mode",
+      mode: "stroke",
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Choose game mode");
+    expect(markup).toContain("Stroke Play");
+    expect(markup).toContain("Match Play");
+    expect(markup).toContain("Scramble");
+    expect(markup).toContain("Skins");
+    expect(markup).toContain("Stableford");
   });
 
   it("renders the live round waiting room for a hosted round before scoring starts", () => {

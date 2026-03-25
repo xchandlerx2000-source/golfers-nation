@@ -8,7 +8,7 @@ import { hostRoundGroup } from "./mock-api.js";
 
 const HOSTED_ROUND_NOTE = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
 const JOINED_ROUND_NOTE = "This device now carries its own safe copy of the live round, even if the original host leaves.";
-export const ROUND_SETUP_STEPS = ["course", "review"];
+export const ROUND_SETUP_STEPS = ["course", "mode", "review"];
 
 export function parsePlayers(value, currentUserName) {
   const safeCurrentUserName = String(currentUserName || "").trim() || "Golfer";

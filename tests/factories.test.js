@@ -44,6 +44,21 @@ describe("factories", () => {
     expect(round.holes[0].entries).toHaveLength(2);
   });
 
+  it("keeps stableford rounds player-based instead of side-based", () => {
+    const round = createRound({
+      currentUser,
+      courseName: "National Pines",
+      teeBox: "Blue",
+      weather: "Warm 75F",
+      mode: "stableford",
+      players: ["Avery Brooks", "Maya Chen", "Theo Grant"],
+    });
+
+    expect(round.players).toHaveLength(3);
+    expect(round.sides).toHaveLength(0);
+    expect(round.holes[0].entries).toHaveLength(3);
+  });
+
   it("uses selected course hole data when a real tee box is supplied", () => {
     const round = createRound({
       currentUser,

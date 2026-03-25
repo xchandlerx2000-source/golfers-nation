@@ -1,4 +1,4 @@
-import { CONNECTION_COPY, COURSE_TEMPLATE, FEATURED_COURSE_ID, GAME_MODES } from "../config.js";
+import { CONNECTION_COPY, COURSE_TEMPLATE, FEATURED_COURSE_ID, GAME_MODES, isSideBasedMode } from "../config.js";
 import { ensureRoundSyncScaffold } from "./round-sync.js";
 import { cloneData, compactNames, uid } from "../utils/formatters.js";
 
@@ -92,7 +92,7 @@ function createPlayer(player, index, currentUserId, currentUserName) {
 }
 
 function createSides(mode, players) {
-  if (mode === "stroke") {
+  if (!isSideBasedMode(mode)) {
     return [];
   }
 
@@ -116,7 +116,7 @@ function createSides(mode, players) {
 }
 
 function createHoleEntries(mode, players, sides) {
-  const participants = mode === "stroke" ? players : sides;
+  const participants = isSideBasedMode(mode) ? sides : players;
   return participants.map((participant) => ({
     participantId: participant.id,
     strokes: null,
