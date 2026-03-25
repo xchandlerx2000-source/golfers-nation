@@ -7,6 +7,7 @@
     "node": ">=18"
   },
   "scripts": {
+    "build:course-catalog": "node scripts/build-course-catalog.mjs",
     "build:shell": "node scripts/build-shell-assets.mjs",
     "build:app": "node scripts/build-browser-bundle.mjs",
     "build:root": "node scripts/build-root-artifacts.mjs",

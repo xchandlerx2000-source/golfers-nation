@@ -2432,19 +2432,42 @@ export function bootstrapApp({
       return;
     }
 
-    if (action === "request-round-invite") {
+    if (action === "challenge-player" || action === "request-round-invite") {
+      let hostedRoundId = null;
       store.setState((draft) => {
         const profileId = actionElement.dataset.profileId || "";
         const profile = draft.profiles.find((entry) => entry.id === profileId);
-        appendActivity(draft, `${draft.currentUser.displayName} requested a round invite from ${profile?.publicProfile?.displayName || "a nearby golfer"}.`, "sync");
+        const challengerName = profile?.publicProfile?.displayName || "that golfer";
+        const activeRound = findRound(draft, draft.session.activeRoundId);
+
+        if (!activeRound) {
+          draft.session.selectedProfileId = profileId || draft.session.selectedProfileId;
+          setActiveView(draft, "round", "tab");
+          draft.session.roundScreenMode = "setup";
+          appendActivity(draft, `${draft.currentUser.displayName} opened live round setup to challenge ${challengerName}.`, "sync");
+          setFeedback(
+            draft,
+            "info",
+            "Start a live round",
+            `Pick a course, then choose Live Round to challenge ${challengerName}.`
+          );
+          return draft;
+        }
+
+        const hosted = ensureHostedGroupForRound(draft, activeRound);
+        hostedRoundId = activeRound.id;
+        focusRoundView(draft, activeRound.id, draft.currentUser.profileId, setActiveView);
+        draft.session.roundScreenMode = "lobby";
+        appendActivity(draft, `${draft.currentUser.displayName} challenged ${challengerName} with code ${hosted.group.inviteCode}.`, "sync");
         setFeedback(
           draft,
           "success",
-          "Join request ready",
-          `${profile?.publicProfile?.displayName || "That golfer"} can be invited through a future direct friend flow. For now, nearby join and invite codes stay as the live path.`
+          "Challenge ready",
+          `Invite code ${hosted.group.inviteCode} is ready. Share it with ${challengerName}.`
         );
         return draft;
-      }, { reason: "request-round-invite" });
+      }, { reason: "challenge-player" });
+      await finalizeHostedRoundSession(hostedRoundId);
       return;
     }
 

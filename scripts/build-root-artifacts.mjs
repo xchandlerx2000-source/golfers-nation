@@ -14,5 +14,6 @@ function runScript(scriptName) {
 }
 
 runScript("build-shell-assets.mjs");
+runScript("build-course-catalog.mjs");
 runScript("build-browser-bundle.mjs");
 

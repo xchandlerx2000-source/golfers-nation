@@ -2598,9 +2598,9 @@ function createStore(initialState) {
 // ---- src/state/course-state.js ----
 function getDefaultCourseState() {
   return {
-    catalogProviderId: "us-course-database",
+    catalogProviderId: "imported-us-course-database",
     catalogStatus: "ready",
-    lastImportSource: "us-seeded-course-database",
+    lastImportSource: "seeded-bootstrap-import",
     lastImportAt: null,
     recordsCount: 0,
     nearbyStatus: "idle",
@@ -4347,6 +4347,33 @@ function createRoundCourseSelection(courseId, teeBoxId = "") {
   };
 }
 
+// ---- src/services/course-import/generated/us-course-catalog.js ----
+function createBootstrapImportedRows() {
+  return listSeededCourseImportRows().map((row) => ({
+    ...row,
+    source: row.source || "seeded-bootstrap-import",
+    sourceType: "seeded-bootstrap-import",
+    providerLabel: "Imported U.S. course database",
+    metadata: {
+      ...(row.metadata || {}),
+      bootstrapImported: true,
+      sourceHistory: [
+        ...(row.metadata?.sourceHistory || []),
+        row.source || "seeded-bootstrap-import",
+      ],
+    },
+  }));
+}
+const IMPORTED_US_COURSE_SOURCES = [
+  {
+    id: "seeded-bootstrap-import",
+    label: "Seeded bootstrap import",
+    sourceType: "seeded-bootstrap-import",
+    recordCount: createBootstrapImportedRows().length,
+  },
+];
+const IMPORTED_US_COURSE_ROWS = createBootstrapImportedRows();
+
 // ---- src/services/course-import/us-course-import-service.js ----
 function normalizeImportedCourseQuery(value = "") {
   return String(value || "").trim().toLowerCase();
@@ -4541,34 +4568,59 @@ const localCourseProvider = {
 };
 
 // ---- src/services/course-providers/imported-us-course-provider.js ----
+const IMPORTED_PROVIDER_ID = "imported-us-course-database";
+const importedCourseCatalog = buildUsCourseImportCatalog(IMPORTED_US_COURSE_ROWS, {
+  providerId: IMPORTED_PROVIDER_ID,
+  providerLabel: "Imported U.S. course database",
+  source: "imported-course-catalog",
+  sourceType: "bulk-import",
+});
+
+function getImportedCourseCatalog() {
+  return importedCourseCatalog;
+}
 const importedUsCourseProvider = {
-  id: "imported-us-course-database",
+  id: IMPORTED_PROVIDER_ID,
   meta: {
-    id: "imported-us-course-database",
+    id: IMPORTED_PROVIDER_ID,
     label: "Imported U.S. course database",
-    live: false,
+    live: importedCourseCatalog.length > 0,
     supportsSearch: true,
     supportsNearby: true,
     supportsRoundTemplates: true,
-    description: "Future import adapter for a licensed or curated nationwide U.S. course dataset.",
+    recordCount: importedCourseCatalog.length,
+    importSourceCount: IMPORTED_US_COURSE_SOURCES.length,
+    description: importedCourseCatalog.length
+      ? "Import-generated U.S. course catalog ready for nationwide search, nearby lookup, and round templates."
+      : "Future import adapter for a licensed or curated nationwide U.S. course dataset.",
   },
-  searchCourses() {
-    return [];
+  searchCourses(query = "", { limit = 10 } = {}) {
+    return searchUsCourseImportCatalog(getImportedCourseCatalog(), query, { limit });
   },
-  getCourseQuickPicks() {
-    return [];
+  getCourseQuickPicks(limit = 4) {
+    return searchUsCourseImportCatalog(getImportedCourseCatalog(), "", { limit });
   },
-  getRoundSetupCourses() {
-    return [];
+  getRoundSetupCourses(query = "", limit = 10) {
+    return searchUsCourseImportCatalog(getImportedCourseCatalog(), query, { limit });
   },
-  getCourseById() {
-    return null;
+  getCourseById(courseId) {
+    return getImportedCourseCatalog().find((course) => course.id === courseId) || null;
   },
-  findNearbyCourses() {
-    return [];
+  findNearbyCourses(lat, lng, { limit = 6, radiusMiles = 50 } = {}) {
+    return findNearbyUsCourseImportCatalog(getImportedCourseCatalog(), lat, lng, { limit, radiusMiles });
   },
-  buildRoundTemplate() {
-    return null;
+  buildRoundTemplate(courseId, teeId = "", { holeCount = 18 } = {}) {
+    const course = this.getCourseById(courseId);
+    if (!course) {
+      return null;
+    }
+
+    const teeBox = findCourseTeeBoxRecord(course, teeId) || getDefaultCourseTeeBoxRecord(course);
+    return createCourseRoundTemplateRecord({
+      course,
+      teeBox,
+      holeCount,
+    });
   },
 };
 
@@ -4703,8 +4755,8 @@ const placesCourseProvider = {
 
 // ---- src/services/course-service.js ----
 const COURSE_PROVIDERS = [
-  localCourseProvider,
   importedUsCourseProvider,
+  localCourseProvider,
   licensedCourseProvider,
   golfnowCourseProvider,
   placesCourseProvider,
@@ -11777,6 +11829,14 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
       >
         ${preview.isFriend ? "Friends" : preview.pendingFriendRequest ? "Request sent" : "Add friend"}
       </button>
+      <button
+        class="button secondary"
+        type="button"
+        data-action="challenge-player"
+        data-profile-id="${escapeHtml(profileId)}"
+      >
+        Challenge
+      </button>
     `
     : `
       <button class="button subtle" type="button" data-action="share-profile-placeholder">Share profile</button>
@@ -12023,7 +12083,7 @@ function renderNearbyPlayerRows(nearbyPlayers) {
         <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(player.profileId)}">${player.isLive ? "View live card" : "View card"}</button>
         ${player.inviteCode
           ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${player.inviteCode}">${escapeHtml(player.joinActionLabel || "Join round")}</button>`
-          : `<button class="button secondary" type="button" data-action="request-round-invite" data-profile-id="${escapeHtml(player.profileId)}">${player.pendingFriendRequest ? "Invite pending" : "Join request"}</button>`}
+          : `<button class="button secondary" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(player.profileId)}">Challenge</button>`}
         <button class="button subtle" type="button" data-action="toggle-follow-profile" data-profile-id="${escapeHtml(player.profileId)}">${player.isFollowed ? "Following" : "Follow"}</button>
       </div>
     </article>
@@ -15052,6 +15112,7 @@ function renderCommunityView(state) {
   const nearbyGames = nearby.games;
   const nearbyPlayers = nearby.players;
   const friendRows = nearby.friends;
+  const friendLeaderboard = buildFriendLeaderboard(state).slice(0, 4);
   const featuredProfileId = state.session.selectedProfileId
     || activeRound?.players.find((player) => !player.userId)?.profileId
     || nearbyPlayers[0]?.profileId
@@ -15143,6 +15204,7 @@ function renderCommunityView(state) {
                     </div>
                     <div class="list-metrics">
                       ${friend.canJoin ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${friend.inviteCode}">Join</button>` : ""}
+                      ${!friend.canJoin ? `<button class="button secondary" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(friend.profileId)}">Challenge</button>` : ""}
                       <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(friend.profileId)}">View</button>
                     </div>
                   </article>
@@ -15161,22 +15223,40 @@ function renderCommunityView(state) {
         <div class="section-heading">
           <div>
             <p class="eyebrow">Social ranking</p>
-            <h3>Compact competitive preview</h3>
+            <h3>Friends leaderboard</h3>
           </div>
         </div>
-        ${renderCompetitionLayerCard(activeRound ? getRoundSummaryForState(state, activeRound) : {
-          friendLeaderboard: {
-            title: "Friends leaderboard",
-            entries: nearbyPlayers.slice(0, 3).map((player, index) => ({
-              rank: index + 1,
-              name: player.displayName,
-              relationshipLabel: player.relationshipLabel,
-              displayStatus: player.isLive ? "Live now" : player.statsSummary,
-            })),
-          },
-          sideGame: null,
-          tournamentScaffold: null,
-        })}
+        ${friendLeaderboard.length
+          ? `
+            <div class="stack-list compact-stack play-list">
+              ${friendLeaderboard.map((entry, index) => `
+                <article class="list-row play-list-row">
+                  <div>
+                    <strong>#${index + 1} ${escapeHtml(entry.displayName)}</strong>
+                    <p>${escapeHtml(entry.relationshipLabel)} / ${escapeHtml(entry.formLabel || entry.recentFormSummary || "Building form")}</p>
+                  </div>
+                  <div class="list-metrics">
+                    <span>${typeof entry.averageScore === "number" ? `${entry.averageScore.toFixed(1)} avg` : "New"}</span>
+                    <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(entry.profileId)}">View</button>
+                    <button class="button secondary" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(entry.profileId)}">Challenge</button>
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          `
+          : renderCompetitionLayerCard(activeRound ? getRoundSummaryForState(state, activeRound) : {
+              friendLeaderboard: {
+                title: "Friends leaderboard",
+                entries: nearbyPlayers.slice(0, 3).map((player, index) => ({
+                  rank: index + 1,
+                  name: player.displayName,
+                  relationshipLabel: player.relationshipLabel,
+                  displayStatus: player.isLive ? "Live now" : player.statsSummary,
+                })),
+              },
+              sideGame: null,
+              tournamentScaffold: null,
+            })}
       </article>
       ${renderCompetitivePreviewCard(state, featuredProfileId, featuredProfileId === state.currentUser.profileId ? "Your public matchup card" : "Selected golfer preview")}
       <article class="card card-span-2">
@@ -18903,19 +18983,42 @@ function bootstrapApp({
       return;
     }
 
-    if (action === "request-round-invite") {
+    if (action === "challenge-player" || action === "request-round-invite") {
+      let hostedRoundId = null;
       store.setState((draft) => {
         const profileId = actionElement.dataset.profileId || "";
         const profile = draft.profiles.find((entry) => entry.id === profileId);
-        appendActivity(draft, `${draft.currentUser.displayName} requested a round invite from ${profile?.publicProfile?.displayName || "a nearby golfer"}.`, "sync");
+        const challengerName = profile?.publicProfile?.displayName || "that golfer";
+        const activeRound = findRound(draft, draft.session.activeRoundId);
+
+        if (!activeRound) {
+          draft.session.selectedProfileId = profileId || draft.session.selectedProfileId;
+          setActiveView(draft, "round", "tab");
+          draft.session.roundScreenMode = "setup";
+          appendActivity(draft, `${draft.currentUser.displayName} opened live round setup to challenge ${challengerName}.`, "sync");
+          setFeedback(
+            draft,
+            "info",
+            "Start a live round",
+            `Pick a course, then choose Live Round to challenge ${challengerName}.`
+          );
+          return draft;
+        }
+
+        const hosted = ensureHostedGroupForRound(draft, activeRound);
+        hostedRoundId = activeRound.id;
+        focusRoundView(draft, activeRound.id, draft.currentUser.profileId, setActiveView);
+        draft.session.roundScreenMode = "lobby";
+        appendActivity(draft, `${draft.currentUser.displayName} challenged ${challengerName} with code ${hosted.group.inviteCode}.`, "sync");
         setFeedback(
           draft,
           "success",
-          "Join request ready",
-          `${profile?.publicProfile?.displayName || "That golfer"} can be invited through a future direct friend flow. For now, nearby join and invite codes stay as the live path.`
+          "Challenge ready",
+          `Invite code ${hosted.group.inviteCode} is ready. Share it with ${challengerName}.`
         );
         return draft;
-      }, { reason: "request-round-invite" });
+      }, { reason: "challenge-player" });
+      await finalizeHostedRoundSession(hostedRoundId);
       return;
     }
 

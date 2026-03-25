@@ -203,6 +203,19 @@ describe("ui helpers", () => {
     expect(markup).not.toContain(">Join Game<");
   });
 
+  it("renders friend-first challenge actions in Community", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "community";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Friends leaderboard");
+    expect(markup).toContain("Challenge");
+    expect(markup).toContain("Join now");
+  });
+
   it("renders the seeded course picker inside round setup", () => {
     const state = createDefaultState();
     state.auth.status = "authenticated";

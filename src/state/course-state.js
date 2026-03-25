@@ -1,8 +1,8 @@
 export function getDefaultCourseState() {
   return {
-    catalogProviderId: "us-course-database",
+    catalogProviderId: "imported-us-course-database",
     catalogStatus: "ready",
-    lastImportSource: "us-seeded-course-database",
+    lastImportSource: "seeded-bootstrap-import",
     lastImportAt: null,
     recordsCount: 0,
     nearbyStatus: "idle",

@@ -12,8 +12,8 @@ import { golfnowCourseProvider } from "./course-providers/golfnow-course-provide
 import { placesCourseProvider } from "./course-providers/places-course-provider.js";
 
 const COURSE_PROVIDERS = [
-  localCourseProvider,
   importedUsCourseProvider,
+  localCourseProvider,
   licensedCourseProvider,
   golfnowCourseProvider,
   placesCourseProvider,

@@ -24,6 +24,7 @@ const files = [
   "src/services/crash-log-service.js",
   "src/integrations/spotify-service.js",
   "src/services/course-library.js",
+  "src/services/course-import/generated/us-course-catalog.js",
   "src/services/course-import/us-course-import-service.js",
   "src/services/course-providers/local-course-provider.js",
   "src/services/course-providers/imported-us-course-provider.js",

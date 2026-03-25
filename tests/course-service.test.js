@@ -16,7 +16,8 @@ describe("course service", () => {
     const catalog = getCourseProviderCatalog();
 
     expect(catalog.some((provider) => provider.id === "us-course-database" && provider.live)).toBe(true);
-    expect(catalog.some((provider) => provider.id === "imported-us-course-database" && provider.live === false)).toBe(true);
+    expect(catalog.some((provider) => provider.id === "imported-us-course-database" && provider.live)).toBe(true);
+    expect(catalog.find((provider) => provider.id === "imported-us-course-database")?.recordCount).toBeGreaterThan(0);
     expect(catalog.some((provider) => provider.id === "golfnow-partner-api" && provider.live === false)).toBe(true);
   });
 
@@ -24,7 +25,7 @@ describe("course service", () => {
     const results = searchCourses("Lake Charles", { limit: 8 });
 
     expect(results[0].id).toBe("golden-nugget-lake-charles");
-    expect(results[0].providerId).toBe("us-course-database");
+    expect(results[0].providerId).toBe("imported-us-course-database");
     expect(results[0].teeBoxes.length).toBeGreaterThan(0);
     expect(results[0].metadata.featured).toBe(true);
     expect(results[0].slug).toBeTruthy();

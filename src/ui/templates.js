@@ -31,7 +31,7 @@ import {
   getDefaultCourseTeeBox,
   getRoundSetupDiscoveryState,
 } from "../services/course-service.js";
-import { buildCompetitivePreview, buildPlayerComparison, getCurrentProfile, getProfileById, getProfileForPlayer } from "../services/player-service.js";
+import { buildCompetitivePreview, buildFriendLeaderboard, buildPlayerComparison, getCurrentProfile, getProfileById, getProfileForPlayer } from "../services/player-service.js";
 import { renderSpotifySettingsPanel } from "./spotify-controls.js";
 
 const PREMIUM_FEATURES = new Set([
@@ -1123,6 +1123,14 @@ function renderCompetitivePreviewCard(state, profileId, title = "Competitive pre
       >
         ${preview.isFriend ? "Friends" : preview.pendingFriendRequest ? "Request sent" : "Add friend"}
       </button>
+      <button
+        class="button secondary"
+        type="button"
+        data-action="challenge-player"
+        data-profile-id="${escapeHtml(profileId)}"
+      >
+        Challenge
+      </button>
     `
     : `
       <button class="button subtle" type="button" data-action="share-profile-placeholder">Share profile</button>
@@ -1369,7 +1377,7 @@ function renderNearbyPlayerRows(nearbyPlayers) {
         <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(player.profileId)}">${player.isLive ? "View live card" : "View card"}</button>
         ${player.inviteCode
           ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${player.inviteCode}">${escapeHtml(player.joinActionLabel || "Join round")}</button>`
-          : `<button class="button secondary" type="button" data-action="request-round-invite" data-profile-id="${escapeHtml(player.profileId)}">${player.pendingFriendRequest ? "Invite pending" : "Join request"}</button>`}
+          : `<button class="button secondary" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(player.profileId)}">Challenge</button>`}
         <button class="button subtle" type="button" data-action="toggle-follow-profile" data-profile-id="${escapeHtml(player.profileId)}">${player.isFollowed ? "Following" : "Follow"}</button>
       </div>
     </article>
@@ -4399,6 +4407,7 @@ function renderCommunityView(state) {
   const nearbyGames = nearby.games;
   const nearbyPlayers = nearby.players;
   const friendRows = nearby.friends;
+  const friendLeaderboard = buildFriendLeaderboard(state).slice(0, 4);
   const featuredProfileId = state.session.selectedProfileId
     || activeRound?.players.find((player) => !player.userId)?.profileId
     || nearbyPlayers[0]?.profileId
@@ -4490,6 +4499,7 @@ function renderCommunityView(state) {
                     </div>
                     <div class="list-metrics">
                       ${friend.canJoin ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${friend.inviteCode}">Join</button>` : ""}
+                      ${!friend.canJoin ? `<button class="button secondary" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(friend.profileId)}">Challenge</button>` : ""}
                       <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(friend.profileId)}">View</button>
                     </div>
                   </article>
@@ -4508,22 +4518,40 @@ function renderCommunityView(state) {
         <div class="section-heading">
           <div>
             <p class="eyebrow">Social ranking</p>
-            <h3>Compact competitive preview</h3>
+            <h3>Friends leaderboard</h3>
           </div>
         </div>
-        ${renderCompetitionLayerCard(activeRound ? getRoundSummaryForState(state, activeRound) : {
-          friendLeaderboard: {
-            title: "Friends leaderboard",
-            entries: nearbyPlayers.slice(0, 3).map((player, index) => ({
-              rank: index + 1,
-              name: player.displayName,
-              relationshipLabel: player.relationshipLabel,
-              displayStatus: player.isLive ? "Live now" : player.statsSummary,
-            })),
-          },
-          sideGame: null,
-          tournamentScaffold: null,
-        })}
+        ${friendLeaderboard.length
+          ? `
+            <div class="stack-list compact-stack play-list">
+              ${friendLeaderboard.map((entry, index) => `
+                <article class="list-row play-list-row">
+                  <div>
+                    <strong>#${index + 1} ${escapeHtml(entry.displayName)}</strong>
+                    <p>${escapeHtml(entry.relationshipLabel)} / ${escapeHtml(entry.formLabel || entry.recentFormSummary || "Building form")}</p>
+                  </div>
+                  <div class="list-metrics">
+                    <span>${typeof entry.averageScore === "number" ? `${entry.averageScore.toFixed(1)} avg` : "New"}</span>
+                    <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(entry.profileId)}">View</button>
+                    <button class="button secondary" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(entry.profileId)}">Challenge</button>
+                  </div>
+                </article>
+              `).join("")}
+            </div>
+          `
+          : renderCompetitionLayerCard(activeRound ? getRoundSummaryForState(state, activeRound) : {
+              friendLeaderboard: {
+                title: "Friends leaderboard",
+                entries: nearbyPlayers.slice(0, 3).map((player, index) => ({
+                  rank: index + 1,
+                  name: player.displayName,
+                  relationshipLabel: player.relationshipLabel,
+                  displayStatus: player.isLive ? "Live now" : player.statsSummary,
+                })),
+              },
+              sideGame: null,
+              tournamentScaffold: null,
+            })}
       </article>
       ${renderCompetitivePreviewCard(state, featuredProfileId, featuredProfileId === state.currentUser.profileId ? "Your public matchup card" : "Selected golfer preview")}
       <article class="card card-span-2">
