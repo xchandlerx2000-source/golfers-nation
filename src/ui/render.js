@@ -271,7 +271,10 @@ function getDefaultSettingsSectionId(destination = "landing") {
 
 function normalizeLocalSettingsState(localUiState = {}, state = {}) {
   const destination = localUiState.settingsDestination || state?.session?.settingsDestination || "landing";
-  const section = localUiState.settingsSection || state?.session?.settingsSection || getDefaultSettingsSectionId(destination);
+  const rawSection = localUiState.settingsSection || state?.session?.settingsSection || getDefaultSettingsSectionId(destination);
+  const section = destination === "app" && (rawSection === "spotify" || rawSection === "app-support")
+    ? "integrations"
+    : rawSection;
   return {
     destination,
     section: destination === "landing" ? getDefaultSettingsSectionId("app") : section,

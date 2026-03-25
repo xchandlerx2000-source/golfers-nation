@@ -165,7 +165,7 @@ describe("ui helpers", () => {
     expect(markup).toContain('data-action="open-community-join"');
     expect(markup).toContain("Active Game");
     expect(markup).toContain("Course Assist");
-    expect(markup).toContain("Choose course");
+    expect(markup).toContain("Confirm course");
   });
 
   it("renders the seeded course picker inside round setup", () => {
@@ -257,10 +257,10 @@ describe("ui helpers", () => {
     const markup = renderAppTemplate(state);
 
     expect(markup).toContain("App Settings");
-    expect(markup).toContain("Appearance Mode");
-    expect(markup).toContain("Theme Style");
-    expect(markup).toContain("Display Comfort");
-    expect(markup).toContain("Live preview");
+    expect(markup).toContain("Mode");
+    expect(markup).toContain("Theme");
+    expect(markup).toContain("Display");
+    expect(markup).toContain("Preview");
     expect(markup).toContain('data-active-theme-card="true"');
     expect(markup).toContain("Ember");
     expect(markup).toContain('data-theme="ocean"');
@@ -305,7 +305,7 @@ describe("ui helpers", () => {
     state.auth.activeUserId = state.currentUser.id;
     state.session.activeView = "settings";
     state.session.settingsDestination = "app";
-    state.session.settingsSection = "spotify";
+    state.session.settingsSection = "integrations";
     state.currentUser.integrations = {
       spotify: {
         status: "connected",
@@ -382,7 +382,7 @@ describe("ui helpers", () => {
     state.auth.activeUserId = state.currentUser.id;
     state.session.activeView = "settings";
     state.session.settingsDestination = "app";
-    state.session.settingsSection = "app-support";
+    state.session.settingsSection = "integrations";
     state.session.settingsReturnView = "stats";
     state.session.crashLog = {
       count: 1,

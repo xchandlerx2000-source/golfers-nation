@@ -800,7 +800,7 @@ describe("bootstrap app", () => {
 
     document.querySelector('[data-action="open-settings"]').click();
     document.querySelector('[data-action="set-settings-destination"][data-destination="app"]').click();
-    document.querySelector('[data-action="set-settings-section"][data-section="spotify"]').click();
+    document.querySelector('[data-action="set-settings-section"][data-section="integrations"]').click();
     document.querySelector('[data-action="connect-spotify"]').click();
 
     expect(result.store.getState().currentUser.integrations.spotify.status).toBe("connected");
@@ -834,7 +834,7 @@ describe("bootstrap app", () => {
 
     document.querySelector('[data-action="open-settings"]').click();
     document.querySelector('[data-action="set-settings-destination"][data-destination="app"]').click();
-    document.querySelector('[data-action="set-settings-section"][data-section="app-support"]').click();
+    document.querySelector('[data-action="set-settings-section"][data-section="integrations"]').click();
 
     const feedbackForm = document.querySelector('[data-form="submit-tester-feedback"]');
     feedbackForm.querySelector('textarea[name="feedbackMessage"]').value = "Round scoring felt great, but the join flow could be clearer.";

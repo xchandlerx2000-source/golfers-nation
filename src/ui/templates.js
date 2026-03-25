@@ -161,8 +161,7 @@ const PROFILE_SETTINGS_SECTIONS = [
 const APP_SETTINGS_SECTIONS = [
   { id: "account", label: "Account" },
   { id: "appearance", label: "Appearance" },
-  { id: "spotify", label: "Spotify" },
-  { id: "app-support", label: "Support" },
+  { id: "integrations", label: "Integrations" },
 ];
 
 const NAV_ICONS = {
@@ -759,13 +758,13 @@ function renderAppMenu(state) {
       </button>
       <button class="app-menu-item" type="button" data-action="open-settings" data-destination="app" data-section="account" role="menuitem">
         <strong>App Settings</strong>
-        <span>Appearance, account access, Spotify, and support.</span>
+        <span>Account, appearance, and integrations.</span>
       </button>
-      <button class="app-menu-item" type="button" data-action="open-settings" data-destination="app" data-section="app-support" role="menuitem">
+      <button class="app-menu-item" type="button" data-action="open-settings" data-destination="app" data-section="integrations" role="menuitem">
         <strong>Feedback / Support</strong>
         <span>Send tester feedback or open support details.</span>
       </button>
-      <button class="app-menu-item" type="button" data-action="open-settings" data-destination="app" data-section="app-support" role="menuitem">
+      <button class="app-menu-item" type="button" data-action="open-settings" data-destination="app" data-section="integrations" role="menuitem">
         <strong>About</strong>
         <span>Version, app details, and release notes scaffold.</span>
       </button>
@@ -1335,46 +1334,18 @@ function getCurrentUserRelationshipCounts(state) {
   };
 }
 
-function renderNearbyStrategyPanel(strategy, {
-  compact = false,
-  includeActions = false,
-  activeRound = null,
-} = {}) {
-  return `
-    <article class="card nearby-strategy-card ${compact ? "nearby-strategy-card--compact" : ""}">
-      <div class="section-heading section-heading--compact">
-        <div>
-          <p class="eyebrow">Nearby detection</p>
-          <h3>${escapeHtml(strategy.title)}</h3>
-        </div>
-        <span class="status-pill">${escapeHtml(strategy.badge)}</span>
-      </div>
-      <p class="body-copy compact-copy">${escapeHtml(strategy.detail)}</p>
-      <div class="play-stat-strip nearby-signal-strip">
-        ${strategy.signals.map((signal) => `<span class="status-pill">${escapeHtml(signal)}</span>`).join("")}
-      </div>
-      ${includeActions
-        ? `
-          <div class="row-actions compact-actions nearby-strategy-actions">
-            <button class="button subtle" type="button" data-action="enable-nearby" ${activeRound ? "" : ""}>Location assist</button>
-            <button class="button subtle" type="button" data-action="enable-bluetooth" ${activeRound ? "" : ""}>Nearby sync mode</button>
-          </div>
-        `
-        : ""}
-    </article>
-  `;
-}
-
 function renderPlayCourseAssistCard(state, activeRound) {
   const roundSetup = getRoundSetup(state);
   const discovery = getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {});
-  const nearbyCourses = discovery.nearbyCourses.slice(0, 3);
   const selectedCourse = discovery.selectedCourse;
   const locationStatus = state.session?.nearby?.locationPermission === "granted"
     ? "Location on"
     : state.session?.nearby?.locationPermission === "denied"
       ? "Location off"
       : "Location optional";
+  const actionLabel = selectedCourse ? "Confirm course" : "Find course";
+  const actionName = selectedCourse ? "nav-view" : "detect-nearby-courses";
+  const actionValue = selectedCourse ? "round" : "";
 
   return `
     <article class="card play-screen-card play-compact-card play-course-card">
@@ -1385,32 +1356,12 @@ function renderPlayCourseAssistCard(state, activeRound) {
         </div>
         <span class="status-pill">${escapeHtml(locationStatus)}</span>
       </div>
-      <p class="play-active-copy">${escapeHtml(selectedCourse ? `${selectedCourse.city}, ${selectedCourse.state}` : discovery.nearbyCopy.detail)}</p>
-      ${nearbyCourses.length
-        ? `
-          <div class="play-nearby-row" aria-label="Nearby courses">
-            ${nearbyCourses.map((course) => `
-              <article class="play-nearby-card play-nearby-card--course">
-                <div class="play-nearby-card-copy">
-                  <strong>${escapeHtml(course.name)}</strong>
-                  <p>${escapeHtml(course.nearbyDistanceLabel || `${course.city}, ${course.state}`)}</p>
-                </div>
-              </article>
-            `).join("")}
-          </div>
-        `
-        : ""}
+      <p class="play-active-copy">${escapeHtml(selectedCourse ? `${selectedCourse.city}, ${selectedCourse.state}` : "Find a course to start.")}</p>
       <div class="row-actions compact-actions">
-        <button class="button secondary" type="button" data-action="detect-nearby-courses">
-          ${state.session?.nearby?.locationPermission === "granted" ? "Refresh nearby" : "Find courses"}
+        <button class="button secondary" type="button" data-action="${actionName}" ${actionValue ? `data-view="${actionValue}"` : ""}>
+          ${actionLabel}
         </button>
-        <button class="button subtle" type="button" data-action="nav-view" data-view="round">Choose course</button>
       </div>
-      ${renderNearbyStrategyPanel(getNearbyDiscoveryState(state).strategy, {
-        compact: true,
-        includeActions: true,
-        activeRound,
-      })}
     </article>
   `;
 }
@@ -1698,7 +1649,10 @@ function getDefaultSettingsSectionId(destination = "landing") {
 }
 
 function getSelectedSettingsSectionId(state, destination = "landing") {
-  const selectedId = state.session?.settingsSection || "";
+  const rawSelectedId = state.session?.settingsSection || "";
+  const selectedId = destination === "app" && (rawSelectedId === "spotify" || rawSelectedId === "app-support")
+    ? "integrations"
+    : rawSelectedId;
   const sections = getSettingsSectionsForDestination(destination);
   if (sections.some((section) => section.id === selectedId)) {
     return selectedId;
@@ -1712,7 +1666,7 @@ function getSettingsDestinationCopy(destination = "landing") {
     return {
       title: "My Profile",
       eyebrow: "Golfer identity",
-      description: "Identity, stats, sharing, and privacy.",
+      description: "Identity, stats, and privacy.",
     };
   }
 
@@ -1885,10 +1839,10 @@ function renderSettingsSectionNav(state, destination) {
   }
 
   return `
-    <div class="settings-section-nav" role="tablist" aria-label="${escapeHtml(destination === "profile" ? "My Profile sections" : "App Settings sections")}">
+    <div class="settings-section-list" role="tablist" aria-label="${escapeHtml(destination === "profile" ? "My Profile sections" : "App Settings sections")}">
       ${sections.map((section) => `
         <button
-          class="settings-section-pill ${selected === section.id ? "is-active" : ""}"
+          class="settings-section-row ${selected === section.id ? "is-active" : ""}"
           type="button"
           data-action="set-settings-section"
           data-section="${section.id}"
@@ -1943,12 +1897,12 @@ function renderSettingsLandingView(state) {
         <button class="card settings-destination-card" type="button" data-action="set-settings-destination" data-destination="profile" data-section="profile-identity">
           <span class="mini-label">My Profile</span>
           <strong>Golfer identity</strong>
-          <p>Public card, stats, and privacy.</p>
+          <p>Profile and stats.</p>
         </button>
         <button class="card settings-destination-card" type="button" data-action="set-settings-destination" data-destination="app" data-section="account">
           <span class="mini-label">App Settings</span>
           <strong>App controls</strong>
-          <p>Appearance, account, support, Spotify.</p>
+          <p>Account, look, integrations.</p>
         </button>
       </div>
     </section>
@@ -1994,7 +1948,7 @@ function renderSettingsDestinationHeader(state, destination) {
         <div>
           <p class="eyebrow">${escapeHtml(copy.eyebrow)}</p>
           <h3>${escapeHtml(copy.title)}</h3>
-          <p>${escapeHtml(copy.description)}</p>
+          <p class="compact-copy">${escapeHtml(copy.description)}</p>
         </div>
       </div>
       ${renderSettingsDestinationSwitch(destination)}
@@ -2011,8 +1965,7 @@ function renderSettingsPanelsForDestination(state, destination) {
     "golf-profile": renderGolfProfileSettingsCard(state),
     appearance: renderAppearanceSettingsCard(state),
     social: renderSocialSettingsCard(state),
-    spotify: renderSpotifySettingsCard(state),
-    "app-support": renderAppSupportSettingsCard(state),
+    integrations: renderIntegrationsSettingsCard(state),
   };
 
   return getSettingsSectionsForDestination(destination)
@@ -2134,7 +2087,7 @@ function renderAccountSettingsCard(state) {
       <article class="settings-support-panel">
         <span class="mini-label">Password</span>
         <strong>Password is managed by ${escapeHtml(provider)}</strong>
-        <p class="body-copy compact-copy">This account uses ${escapeHtml(provider)} sign-in, so password changes will live in the real provider flow when backend auth is connected.</p>
+        <p class="body-copy compact-copy">Use the ${escapeHtml(provider)} account flow to change it.</p>
       </article>
     `;
 
@@ -2143,7 +2096,7 @@ function renderAccountSettingsCard(state) {
       <div class="section-heading">
         <div>
           <p class="eyebrow">Account</p>
-          <h3>Account access and security</h3>
+          <h3>Account</h3>
         </div>
         <span class="status-pill">${escapeHtml(subscription.tier === "premium" ? "Premium" : "Free")}</span>
       </div>
@@ -2163,7 +2116,7 @@ function renderAccountSettingsCard(state) {
           </article>
         </div>
         <div class="row-actions">
-          <button class="button primary" type="button" data-action="sign-out">Log out account</button>
+          <button class="button primary" type="button" data-action="sign-out">Log out</button>
         </div>
       </div>
       ${passwordScaffold}
@@ -2171,16 +2124,89 @@ function renderAccountSettingsCard(state) {
   `;
 }
 
-function renderSpotifySettingsCard(state) {
+function renderIntegrationsSettingsCard(state) {
+  const crashLog = state.session?.crashLog || {
+    count: 0,
+    lastCrashAt: "",
+    latestStage: "",
+    entries: [],
+  };
+  const crashEntries = Array.isArray(crashLog.entries) ? crashLog.entries.slice(0, 3) : [];
+  const recentActivity = (state.social?.activity || [])
+    .slice(0, 3)
+    .map((entry) => entry.message)
+    .join(" | ");
+  const contextView = state.session.settingsReturnView || state.session.previousView || "stats";
+
   return `
-    <article class="card settings-card" data-settings-card="spotify">
+    <article class="card settings-card" data-settings-card="integrations">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Spotify</p>
-          <h3>Optional music companion</h3>
+          <p class="eyebrow">Integrations</p>
+          <h3>Integrations</h3>
         </div>
       </div>
-      ${renderSpotifySettingsPanel(state)}
+      <div class="stack-list settings-support-list">
+        <article class="settings-support-panel">
+          <span class="mini-label">Spotify</span>
+          <strong>Music companion</strong>
+          ${renderSpotifySettingsPanel(state)}
+        </article>
+        <button class="list-row large settings-link-row" type="button" data-action="open-help-section" data-section="getting-started">
+          <div>
+            <strong>Help Center</strong>
+            <p>Quick guides.</p>
+          </div>
+          <span>Open</span>
+        </button>
+        <button class="list-row large settings-link-row" type="button" data-action="contact-support-placeholder">
+          <div>
+            <strong>Support</strong>
+            <p>Send feedback or get help.</p>
+          </div>
+          <span>Email</span>
+        </button>
+      </div>
+      <article class="settings-support-panel">
+        <span class="mini-label">Crash logs</span>
+        <strong>${crashLog.count ? "Crash logs saved on this phone" : "No crash logs on this phone"}</strong>
+        <div class="row-actions">
+          <button class="button secondary" type="button" data-action="copy-crash-report" ${crashLog.count ? "" : "disabled"}>Copy crash report</button>
+          <button class="button subtle" type="button" data-action="clear-crash-logs" ${crashLog.count ? "" : "disabled"}>Clear logs</button>
+        </div>
+        ${crashEntries.length ? `
+          <div class="stack-list settings-support-list crash-log-list">
+            ${crashEntries.map((entry) => `
+              <article class="list-row large crash-log-entry">
+                <div>
+                  <strong>${escapeHtml(entry.stage || "runtime")}</strong>
+                  <p>${escapeHtml(entry.message || "Unknown error.")}</p>
+                </div>
+                <span>${escapeHtml(entry.id || "")}</span>
+              </article>
+            `).join("")}
+          </div>
+        ` : ""}
+      </article>
+      <form class="stack-form compact-form" data-form="submit-tester-feedback">
+        <input type="hidden" name="testerName" value="${escapeHtml(state.currentUser.displayName || state.currentUser.name)}" />
+        <input type="hidden" name="email" value="${escapeHtml(state.currentUser.email || "")}" />
+        <input type="hidden" name="feedbackArea" value="other" />
+        <input type="hidden" name="rating" value="4" />
+        <input type="hidden" name="appVersion" value="${escapeHtml(APP_VERSION)}" />
+        <input type="hidden" name="planTier" value="${escapeHtml(state.currentUser.subscription?.tier || "free")}" />
+        <input type="hidden" name="installState" value="${escapeHtml(state.session?.installState || "browser")}" />
+        <input type="hidden" name="appearanceMode" value="${escapeHtml(state.currentUser?.appearance?.colorMode || "system")}" />
+        <input type="hidden" name="themeId" value="${escapeHtml(state.currentUser?.appearance?.themeId || "forest")}" />
+        <input type="hidden" name="contextView" value="${escapeHtml(contextView)}" />
+        <input type="hidden" name="recentActivity" value="${escapeHtml(recentActivity)}" />
+        <input type="hidden" name="userAgent" value="${escapeHtml(typeof navigator === "undefined" ? "" : navigator.userAgent || "")}" />
+        <label>
+          Feedback
+          <textarea name="feedbackMessage" rows="3" placeholder="What needs attention?"></textarea>
+        </label>
+        <button class="button primary" type="submit">Send tester feedback</button>
+      </form>
     </article>
   `;
 }
@@ -2250,12 +2276,12 @@ function renderAppearanceSettingsCard(state) {
       <div class="section-heading">
         <div>
           <p class="eyebrow">Appearance</p>
-          <h3>App look and feel</h3>
+          <h3>Appearance</h3>
         </div>
       </div>
       <form class="stack-form" data-form="save-appearance-settings">
         <div class="settings-option-group">
-          <span class="mini-label">Appearance Mode</span>
+          <span class="mini-label">Mode</span>
           <div class="settings-choice-grid">
             ${APPEARANCE_MODE_OPTIONS.map((option) => `
               <label class="settings-choice-card ${appearance.colorMode === option.id ? "is-selected" : ""}">
@@ -2267,10 +2293,10 @@ function renderAppearanceSettingsCard(state) {
           </div>
         </div>
         <div class="settings-option-group">
-          <span class="mini-label">Theme Style</span>
+          <span class="mini-label">Theme</span>
           <div class="theme-current-card" data-active-theme-card="true" data-theme-preview="${escapeHtml(activeTheme.id)}">
             <div class="theme-current-copy" aria-live="polite">
-              <span class="theme-current-eyebrow">Live preview</span>
+              <span class="theme-current-eyebrow">Preview</span>
               <strong data-active-theme-name="true">${escapeHtml(activeTheme.label)}</strong>
               <p data-active-theme-description="true">${escapeHtml(activeTheme.description)}</p>
             </div>
@@ -2284,7 +2310,6 @@ function renderAppearanceSettingsCard(state) {
             <strong>Saved to this golfer</strong>
             <p>${escapeHtml(activeMode.label)} / ${escapeHtml(textScale.label)} / ${appearance.compactMode ? "Compact layout" : "Comfortable layout"} / ${appearance.contrastMode === "high" ? "Higher contrast" : "Standard contrast"}</p>
           </div>
-          <p class="body-copy compact-copy">Themes update the background, cards, buttons, header glow, and nav highlight right away. Tap a card to preview it live.</p>
           <div class="theme-choice-grid">
             ${THEME_PRESET_OPTIONS.map((theme) => `
               <label class="theme-choice-card ${appearance.themeId === theme.id ? "is-selected" : ""}" data-theme-preview="${theme.id}">
@@ -2296,7 +2321,7 @@ function renderAppearanceSettingsCard(state) {
                 </div>
                 <div class="theme-choice-meta">
                   <strong>${escapeHtml(theme.label)}</strong>
-                  <span class="theme-choice-badge">Previewing</span>
+                  <span class="theme-choice-badge">Preview</span>
                 </div>
                 <p>${escapeHtml(theme.description)}</p>
               </label>
@@ -2304,7 +2329,7 @@ function renderAppearanceSettingsCard(state) {
           </div>
         </div>
         <div class="settings-option-group">
-          <span class="mini-label">Display Comfort</span>
+          <span class="mini-label">Display</span>
           <div class="settings-choice-grid settings-choice-grid--dual">
             ${TEXT_SCALE_OPTIONS.map((option) => `
               <label class="settings-choice-card ${appearance.textScale === option.id ? "is-selected" : ""}">
@@ -2317,17 +2342,16 @@ function renderAppearanceSettingsCard(state) {
           <div class="settings-toggle-grid">
             <label class="settings-toggle-card ${appearance.compactMode ? "is-selected" : ""}">
               <input type="checkbox" name="compactMode" data-appearance-input="true" ${appearance.compactMode ? "checked" : ""} />
-              <strong>Compact layout</strong>
-              <p>Tightens vertical spacing for quicker one-handed use.</p>
+              <strong>Compact</strong>
+              <p>Tighter spacing.</p>
             </label>
             <label class="settings-toggle-card ${appearance.contrastMode === "high" ? "is-selected" : ""}">
               <input type="checkbox" name="contrastMode" value="high" data-appearance-input="true" ${appearance.contrastMode === "high" ? "checked" : ""} />
-              <strong>Higher contrast</strong>
-              <p>Strengthens text and surface separation without changing the theme.</p>
+              <strong>High contrast</strong>
+              <p>Stronger separation.</p>
             </label>
           </div>
         </div>
-        <p class="body-copy compact-copy">Theme selections preview right away. Save appearance to keep them on this golfer account.</p>
         <button class="button primary" type="submit">Save appearance</button>
       </form>
     </article>
@@ -4265,7 +4289,7 @@ function renderStatsView(state) {
               <strong>Your stats screen will build itself from real rounds.</strong>
               <div class="row-actions empty-state-actions">
                 <button class="button primary" type="button" data-action="nav-view" data-view="round">Start round</button>
-                <button class="button subtle" type="button" data-action="open-settings" data-section="app-support">Send feedback</button>
+                <button class="button subtle" type="button" data-action="open-settings" data-section="integrations">Send feedback</button>
                 ${renderHelpLink("How stats build", "stats-competition", true)}
               </div>
               <p>Finish one round and you’ll start seeing history, summaries, and player trends here.</p>

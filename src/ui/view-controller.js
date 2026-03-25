@@ -12,7 +12,7 @@ function getViewIndex(viewId) {
 }
 
 const PROFILE_SETTINGS_SECTION_IDS = new Set(["profile-identity", "golf-profile", "social"]);
-const APP_SETTINGS_SECTION_IDS = new Set(["account", "appearance", "spotify", "app-support"]);
+const APP_SETTINGS_SECTION_IDS = new Set(["account", "appearance", "integrations", "spotify", "app-support"]);
 
 export function getSettingsDestinationForSection(sectionId = "", requestedDestination = "") {
   if (requestedDestination === "profile" || requestedDestination === "app" || requestedDestination === "landing") {

@@ -466,7 +466,7 @@ export function bootstrapApp({
   };
 
   const refreshCrashLogsIfNeeded = (destination = "", section = "") => {
-    if (destination === "app" && section === "app-support") {
+    if (destination === "app" && (section === "app-support" || section === "integrations")) {
       refreshCrashLogState();
     }
   };
