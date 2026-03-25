@@ -1767,6 +1767,21 @@ textarea {
   gap: 10px;
 }
 
+.hole-nav-meta {
+  text-align: center;
+}
+
+.hole-nav-meta strong,
+.hole-nav-meta span {
+  margin: 0;
+}
+
+.hole-nav-meta span {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
 .hole-pills {
   overflow-x: auto;
   padding-bottom: 6px;
@@ -2054,6 +2069,10 @@ textarea {
 .round-support-stack {
   display: grid;
   gap: 12px;
+}
+
+.round-support-stack--accordion {
+  gap: 10px;
 }
 
 .profile-visibility-grid {
@@ -4382,10 +4401,18 @@ button:disabled {
   grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
 }
 
+.round-grid-live--score {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .round-main-column,
 .round-side-column {
   display: grid;
   gap: 16px;
+}
+
+.round-main-column--score {
+  max-width: 760px;
 }
 
 .round-live-summary article {

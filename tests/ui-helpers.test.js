@@ -375,6 +375,10 @@ describe("ui helpers", () => {
     expect(markup).toContain('data-action="adjust-score"');
     expect(markup).toContain("Next Hole");
     expect(markup).toContain("More stats");
+    expect(markup).toContain("Players / Group");
+    expect(markup).toContain("Leaderboard");
+    expect(markup).toContain("Finish Round");
+    expect(markup).not.toContain('class="hole-pill');
   });
 
   it("renders the in-app tester feedback form in app support settings", () => {
@@ -452,7 +456,8 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Score at least one hole first");
+    expect(markup).toContain("Finish Round");
+    expect(markup).toContain("0/18 played");
     expect(markup).toContain(`data-action="finish-round" data-round-id="${state.rounds[0].id}" disabled`);
   });
 
@@ -518,7 +523,7 @@ describe("ui helpers", () => {
     const markup = renderAppTemplate(state);
 
     expect(markup).toContain("Saving...");
-    expect(markup).toContain("backing up to your golfer account");
+    expect(markup).toContain("1/18 played");
     expect(markup).toContain(`data-action="finish-round" data-round-id="${state.rounds[0].id}" disabled`);
   });
 
@@ -557,7 +562,6 @@ describe("ui helpers", () => {
     const markup = renderAppTemplate(state);
 
     expect(markup).toContain("Saved locally");
-    expect(markup).toContain("stored safely on this phone first and waiting for cloud backup");
     expect(markup).toContain("Room");
   });
 

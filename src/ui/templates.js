@@ -3223,35 +3223,16 @@ function renderCreateRoundCard(state, activeRound) {
 
 function renderHoleNavigator(round, selectedHole) {
   const progress = getRoundProgress(round);
-  const nextOpenHole = getNextOpenHole(round, selectedHole);
   const completion = getHoleCompletionStats(round, selectedHole);
   const selected = round.holes.find((hole) => hole.number === selectedHole) || round.holes[0];
   return `
     <div class="hole-nav">
       <button class="button subtle hole-stepper" type="button" data-action="step-hole" data-direction="-1" aria-label="Previous hole">Prev</button>
-      <div class="hole-pills">
-        ${round.holes
-          .map((hole) => {
-            const activeClass = selectedHole === hole.number ? "is-active" : "";
-            const completeClass = hole.entries.some((entry) => entry.strokes && entry.strokes > 0) ? "is-complete" : "";
-            return `
-              <button class="hole-pill ${activeClass} ${completeClass}" type="button" data-action="select-hole" data-hole="${hole.number}">
-                <span>${hole.number}</span>
-                <strong>Par ${hole.par}</strong>
-              </button>
-            `;
-          })
-          .join("")}
+      <div class="hole-nav-meta">
+        <strong>Hole ${selected.number}</strong>
+        <span>Par ${selected.par} / ${selected.yards} yds / ${completion.scored}/${completion.total} scored / ${progress.completedHoles}/${round.holes.length} played</span>
       </div>
       <button class="button subtle hole-stepper" type="button" data-action="step-hole" data-direction="1" aria-label="Next hole">Next</button>
-    </div>
-    <div class="hole-utility-row">
-      <span class="hole-utility-chip hole-utility-chip--primary">Par ${selected.par} / ${selected.yards} yds</span>
-      <span class="hole-utility-chip">${completion.scored}/${completion.total} scored</span>
-      <span class="hole-utility-chip">${progress.completedHoles}/18 played</span>
-      <button class="button primary hole-next-button" type="button" data-action="jump-next-open" data-hole="${nextOpenHole}">
-        Next hole ${nextOpenHole}
-      </button>
     </div>
   `;
 }
@@ -3409,7 +3390,6 @@ function renderHoleEditor(state, round) {
   const hole = round.holes.find((item) => item.number === selectedHole) || round.holes[0];
   const participants = getScoringParticipants(round);
   const summary = getRoundSummaryForState(state, round);
-  const roundSafety = getRoundSavePresentation(round);
   const localParticipantId = summary.localParticipant?.id;
   const leadParticipantId = summary.leaderboard[0]?.id;
   const nextOpenHole = getNextOpenHole(round, selectedHole);
@@ -3491,7 +3471,7 @@ function renderHoleEditor(state, round) {
           </div>
         </div>
         <div class="competitive-note competitive-note--tight">
-          <span class="competitive-pill ${context.isLeader ? "is-leading" : ""}">${escapeHtml(context.feedback.headline)}</span>
+          ${secondary ? `<span class="competitive-pill ${context.isLeader ? "is-leading" : ""}">${escapeHtml(context.feedback.headline)}</span>` : ""}
           ${context.scorePulseVisible ? `<span class="score-feedback-pill is-saved">Saved</span>` : ""}
           ${context.leaderboardEntry?.rankTrend && context.leaderboardEntry.rankTrend !== "steady"
             ? `<span class="score-feedback-pill">${escapeHtml(context.leaderboardEntry.rankTrendLabel || "Moved")}</span>`
@@ -3743,8 +3723,7 @@ function renderHoleEditor(state, round) {
           <p class="body-copy compact-copy round-score-subcopy">Par ${hole.par} / ${hole.yards} yds</p>
         </div>
         <div class="round-score-status">
-          <span class="status-pill">${escapeHtml(summary.localParticipant?.displayStatus || "--")}</span>
-          <span class="status-pill">${escapeHtml(roundSafety.title)}</span>
+          <span class="status-pill">${escapeHtml(summary.localParticipant?.displayStatus || "Ready")}</span>
         </div>
       </div>
       ${renderHoleNavigator(round, selectedHole)}
@@ -3753,75 +3732,22 @@ function renderHoleEditor(state, round) {
       </div>
       ${secondaryParticipants.length
         ? `
-          <div class="round-shared-group">
-            <div class="section-heading section-heading--compact">
-              <div>
-                <p class="eyebrow">Group</p>
-                <h4>Everyone else</h4>
+          <details class="round-secondary-entry" data-persist-key="round-group-entry-${round.id}-${hole.number}">
+            <summary>
+              <span>Players / Group</span>
+              <strong>${secondaryParticipants.length} more ${secondaryParticipants.length === 1 ? "golfer" : "golfers"}</strong>
+            </summary>
+            <div class="stack-list round-secondary-entry-list">
+              <div class="stack-list compact-stack shared-round-list">
+                ${secondaryParticipants.map((participant) => renderSharedParticipantRow(participant)).join("")}
               </div>
-            </div>
-            <div class="stack-list compact-stack shared-round-list">
-              ${secondaryParticipants.map((participant) => renderSharedParticipantRow(participant)).join("")}
-            </div>
-            <details class="round-secondary-entry" data-persist-key="round-secondary-entry-${round.id}-${hole.number}">
-              <summary>
-                <span>Score another golfer</span>
-                <strong>${secondaryParticipants.length} extra ${secondaryParticipants.length === 1 ? "card" : "cards"}</strong>
-              </summary>
               <div class="stack-list round-secondary-entry-list">
                 ${secondaryParticipants.map((participant) => renderEditableParticipant(participant, { secondary: true })).join("")}
               </div>
-            </details>
-          </div>
+            </div>
+          </details>
         `
         : ""}
-    </article>
-  `;
-}
-
-function renderRoundSessionCard(state, round, group) {
-  const selectedHole = state.session.selectedHole;
-  const hole = round.holes.find((item) => item.number === selectedHole) || round.holes[0];
-  const sync = getSyncPresentation(round, group);
-  const safety = getRoundSavePresentation(round);
-  const inviteCode = group?.inviteCode || round?.inviteCode || "";
-  const pendingLocalChanges = getPendingRoundEvents(round).length > 0;
-  const sessionCopy = round.sync?.saveState === "retry-needed" || pendingLocalChanges ? safety.detail : sync.message;
-
-  return `
-    <article class="card round-support-card round-session-card">
-      <div class="round-session-main">
-        <div>
-          <p class="eyebrow">Active session</p>
-          <h3>${escapeHtml(round.courseName)}</h3>
-          <p class="body-copy compact-copy">Hole ${hole.number} / Par ${hole.par} / ${hole.yards} yds / ${escapeHtml(round.teeBox)} / ${round.holes?.length || round.selectedHoleCount || 18}</p>
-        </div>
-        <div class="round-session-code">
-          <span>Code</span>
-          <strong>${escapeHtml(inviteCode || "Host to share")}</strong>
-        </div>
-      </div>
-      <div class="play-stat-strip round-session-strip">
-        <span class="status-pill">${escapeHtml(sync.title)}</span>
-        <span class="status-pill">${escapeHtml(safety.title)}</span>
-        <span class="status-pill">${round.players.length} golfers</span>
-      </div>
-      <p class="body-copy compact-copy">${escapeHtml(sessionCopy)}</p>
-      <div class="participant-preview-row round-session-players">
-        ${round.players.map((player) => `
-          <span class="player-preview-pill player-preview-pill--static">
-            ${renderAvatarChip(getProfileForPlayer(state, player)?.publicProfile.avatarLabel || player.avatarLabel)}
-            <span>${escapeHtml(player.name)}</span>
-          </span>
-        `).join("")}
-      </div>
-      <div class="row-actions compact-actions">
-        ${inviteCode
-          ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Copy code</button>`
-          : `<button class="button secondary" type="button" data-action="host-active-round">Host round</button>`}
-        <button class="button subtle" type="button" data-action="nav-view" data-view="community">Room</button>
-        ${safety.showRetry ? `<button class="button subtle" type="button" data-action="retry-cloud-save">Retry save</button>` : `<button class="button subtle" type="button" data-action="jump-next-open" data-hole="${getNextOpenHole(round, selectedHole)}">Next hole</button>`}
-      </div>
     </article>
   `;
 }
@@ -3832,56 +3758,124 @@ function renderLeaderboardCard(state, round) {
   const localEntry = summary.leaderboard.find((entry) => entry.isLocal);
 
   return `
-    <article class="card live-leaderboard-card round-support-card live-leaderboard-card--compact">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">Leaderboard</p>
-          <h3>Compact live view</h3>
-        </div>
-      </div>
-      <div class="round-subtle-strip">
-        <span class="mini-label">${leader ? `Leader ${leader.name}` : "Leaderboard"}</span>
-        <strong>${localEntry ? `You #${localEntry.rank} / ${localEntry.displayStatus}` : leader ? leader.displayStatus : "Waiting on scores"}</strong>
-      </div>
-      ${renderCompetitiveSpotlights(summary)}
-      <div class="leaderboard-list leaderboard-list--compact">
-        ${summary.leaderboard
-          .map((entry) => {
-            const gapLabel = !leader || entry.id === leader.id
-              ? "Leader"
-              : round.mode === "match"
-                ? "Chasing"
-                : `${Math.max(0, entry.toPar - leader.toPar)} back`;
-            const previewProfileId = findParticipantProfileId(round, entry.id);
-            const previewProfile = previewProfileId ? getProfileById(state, previewProfileId) : null;
+    <div class="round-subtle-strip">
+      <span class="mini-label">${leader ? `Leader ${leader.name}` : "Leaderboard"}</span>
+      <strong>${localEntry ? `You #${localEntry.rank}` : leader ? leader.displayStatus : "Waiting"}</strong>
+    </div>
+    <div class="leaderboard-list leaderboard-list--compact">
+      ${summary.leaderboard
+        .slice(0, 4)
+        .map((entry) => {
+          const gapLabel = !leader || entry.id === leader.id
+            ? "Leader"
+            : round.mode === "match"
+              ? "Chasing"
+              : `${Math.max(0, entry.toPar - leader.toPar)} back`;
+          const previewProfileId = findParticipantProfileId(round, entry.id);
+          const previewProfile = previewProfileId ? getProfileById(state, previewProfileId) : null;
 
-            return `
-              <article class="leader-row leader-row--compact ${entry.isLocal ? "is-local" : ""} ${entry.id === leader?.id ? "is-leader" : ""}">
-                <div class="leader-row-main">
-                  <span class="rank-pill">#${entry.rank}</span>
-                  ${renderAvatarChip(previewProfile?.publicProfile.avatarLabel || entry.name)}
-                  <div class="leader-name-row">
-                    <div>
-                      <strong>${escapeHtml(entry.name)}</strong>
-                      <p>${escapeHtml(entry.subtitle)}</p>
-                    </div>
+          return `
+            <article class="leader-row leader-row--compact ${entry.isLocal ? "is-local" : ""} ${entry.id === leader?.id ? "is-leader" : ""}">
+              <div class="leader-row-main">
+                <span class="rank-pill">#${entry.rank}</span>
+                ${renderAvatarChip(previewProfile?.publicProfile.avatarLabel || entry.name)}
+                <div class="leader-name-row">
+                  <div>
+                    <strong>${escapeHtml(entry.name)}</strong>
+                    <p>${escapeHtml(entry.subtitle)}</p>
                   </div>
                 </div>
-                <div class="leader-row-trailing">
-                  <span>Thru ${entry.thru}</span>
-                  <strong>${escapeHtml(entry.displayStatus)}</strong>
-                  <span>${escapeHtml(gapLabel)}</span>
-                  <span class="leader-trend-pill is-${escapeHtml(entry.rankTrend || "steady")}">${escapeHtml(entry.rankTrendLabel || "Steady")}</span>
-                  ${previewProfileId
-                    ? `<button class="button subtle leaderboard-preview-button" type="button" data-action="select-profile-preview" data-profile-id="${previewProfileId}" data-preview-view="community">View card</button>`
-                    : ""}
-                </div>
-              </article>
-            `;
-          })
-          .join("")}
+              </div>
+              <div class="leader-row-trailing">
+                <span>Thru ${entry.thru}</span>
+                <strong>${escapeHtml(entry.displayStatus)}</strong>
+                <span>${escapeHtml(gapLabel)}</span>
+              </div>
+            </article>
+          `;
+        })
+        .join("")}
+    </div>
+  `;
+}
+
+function renderRoundPlayersDrawer(state, round, group) {
+  const sync = getSyncPresentation(round, group);
+  const safety = getRoundSavePresentation(round);
+  const inviteCode = group?.inviteCode || round?.inviteCode || "";
+
+  return `
+    <details class="round-secondary-entry" data-persist-key="round-session-${round.id}">
+      <summary>
+        <span>Players / Group</span>
+        <strong>${round.players.length} golfers${inviteCode ? ` / ${inviteCode}` : ""}</strong>
+      </summary>
+      <div class="stack-list round-secondary-entry-list">
+        <div class="round-subtle-strip">
+          <span class="mini-label">${escapeHtml(sync.title)}</span>
+          <strong>${escapeHtml(safety.title)}</strong>
+        </div>
+        <div class="participant-preview-row round-session-players">
+          ${round.players.map((player) => `
+            <span class="player-preview-pill player-preview-pill--static">
+              ${renderAvatarChip(getProfileForPlayer(state, player)?.publicProfile.avatarLabel || player.avatarLabel)}
+              <span>${escapeHtml(player.name)}</span>
+            </span>
+          `).join("")}
+        </div>
+        <div class="row-actions compact-actions">
+          ${inviteCode
+            ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Copy code</button>`
+            : `<button class="button secondary" type="button" data-action="host-active-round">Host round</button>`}
+          <button class="button subtle" type="button" data-action="nav-view" data-view="community">Room</button>
+        </div>
       </div>
-    </article>
+    </details>
+  `;
+}
+
+function renderRoundLeaderboardDrawer(state, round) {
+  const summary = getRoundSummaryForState(state, round);
+  const localEntry = summary.leaderboard.find((entry) => entry.isLocal);
+  const leader = summary.leaderboard[0];
+
+  return `
+    <details class="round-secondary-entry" data-persist-key="round-leaderboard-${round.id}">
+      <summary>
+        <span>Leaderboard</span>
+        <strong>${localEntry ? `You #${localEntry.rank}` : leader ? `Leader ${leader.name}` : "Waiting"}</strong>
+      </summary>
+      <div class="stack-list round-secondary-entry-list">
+        ${renderLeaderboardCard(state, round)}
+      </div>
+    </details>
+  `;
+}
+
+function renderRoundFinishDrawer(state, round) {
+  const progress = getRoundProgress(round);
+  const summary = getRoundSummaryForState(state, round);
+  const canFinish = progress.completedHoles > 0;
+  const saveInProgress = state.session?.cloudSync?.status === "syncing"
+    && state.session?.cloudSync?.scope === "round-finish"
+    && state.session?.cloudSync?.roundId === round.id;
+
+  return `
+    <details class="round-secondary-entry" data-persist-key="round-finish-${round.id}">
+      <summary>
+        <span>Finish Round</span>
+        <strong>${progress.completedHoles}/${round.holes.length} played</strong>
+      </summary>
+      <div class="stack-list round-secondary-entry-list">
+        <div class="round-subtle-strip">
+          <span class="mini-label">${escapeHtml(summary.localParticipant?.displayStatus || "In progress")}</span>
+          <strong>${canFinish ? escapeHtml(summary.winnerLabel) : "Keep scoring"}</strong>
+        </div>
+        <div class="finish-actions">
+          <button class="button primary finish-button" type="button" data-action="finish-round" data-round-id="${round.id}" ${canFinish && !saveInProgress ? "" : "disabled"}>${saveInProgress ? "Saving..." : "Finish Round"}</button>
+        </div>
+      </div>
+    </details>
   `;
 }
 
@@ -3935,57 +3929,6 @@ function renderLiveStateCard(state, round, group) {
   `;
 }
 
-function renderRoundControlCard(state, round) {
-  const progress = getRoundProgress(round);
-  const summary = getRoundSummaryForState(state, round);
-  const canFinish = progress.completedHoles > 0;
-  const saveInProgress = state.session?.cloudSync?.status === "syncing"
-    && state.session?.cloudSync?.scope === "round-finish"
-    && state.session?.cloudSync?.roundId === round.id;
-  const pendingCount = getPendingRoundEvents(round).length;
-  const saveCopy = saveInProgress
-    ? "Your round is already finishing and backing up to your golfer account. Stay here for a moment instead of tapping again."
-    : round.sync?.saveState === "retry-needed"
-      ? `This round is already safe on this phone. ${pendingCount === 1 ? "1 live change is" : `${pendingCount} live changes are`} still waiting for cloud backup.`
-      : canFinish
-        ? "Finish once the group is in. The round moves into history immediately, stays safe on this phone first, and then backs up to this golfer account."
-        : "Score at least one hole first. That keeps accidental taps from saving an empty round into history.";
-
-  return `
-    <article class="card premium-finish-card round-support-card">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">Finish flow</p>
-          <h3>Close the card</h3>
-        </div>
-      </div>
-      <div class="summary-grid">
-        <article>
-          <span>Your status</span>
-          <strong>${escapeHtml(summary.localParticipant?.displayStatus || "--")}</strong>
-        </article>
-        <article>
-          <span>Completed</span>
-          <strong>${progress.completedHoles}/18</strong>
-        </article>
-        <article>
-          <span>Remaining</span>
-          <strong>${progress.remainingHoles}</strong>
-        </article>
-        <article>
-          <span>Projected leader</span>
-          <strong>${escapeHtml(summary.winnerLabel)}</strong>
-        </article>
-      </div>
-      <p class="body-copy">${saveCopy}</p>
-      <div class="finish-actions">
-        <button class="button primary finish-button" type="button" data-action="finish-round" data-round-id="${round.id}" ${canFinish && !saveInProgress ? "" : "disabled"}>${saveInProgress ? "Saving..." : "Finish round"}</button>
-        <button class="button subtle" type="button" data-action="nav-view" data-view="stats">${round.sync?.saveState === "retry-needed" ? "Check round history" : "Review stats first"}</button>
-      </div>
-    </article>
-  `;
-}
-
 function renderRoundView(state) {
   const activeRound = getActiveRound(state);
   const activeGroup = getActiveGroup(state, activeRound);
@@ -3998,28 +3941,14 @@ function renderRoundView(state) {
     `;
   }
 
-  const summary = getRoundSummaryForState(state, activeRound);
-
   return `
-    <section class="view-grid round-grid round-grid-live">
-      <div class="round-main-column">
-        ${renderRoundSessionCard(state, activeRound, activeGroup)}
+    <section class="view-grid round-grid round-grid-live round-grid-live--score">
+      <div class="round-main-column round-main-column--score">
         ${renderHoleEditor(state, activeRound)}
-      </div>
-      <div class="round-side-column">
-        <div class="round-support-stack">
-          ${renderLeaderboardCard(state, activeRound)}
-          ${renderRoundControlCard(state, activeRound)}
-        </div>
-        <div class="round-desktop-support">
-          ${renderCompetitionLayerCard(summary)}
-          ${renderCompetitivePreviewCard(
-            state,
-            state.session.selectedProfileId
-              || activeRound.players.find((player) => !player.userId)?.profileId
-              || state.currentUser.profileId,
-            "Selected player matchup"
-          )}
+        <div class="round-support-stack round-support-stack--accordion">
+          ${renderRoundPlayersDrawer(state, activeRound, activeGroup)}
+          ${renderRoundLeaderboardDrawer(state, activeRound)}
+          ${renderRoundFinishDrawer(state, activeRound)}
         </div>
       </div>
     </section>
