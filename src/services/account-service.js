@@ -188,7 +188,7 @@ function createPeerProfiles() {
       displayName: "Maya Chen",
       username: "@mayachen",
       avatarLabel: "MC",
-      homeCourse: "National Pines",
+      homeCourse: "Pebble Beach Golf Links",
       handicap: 5.2,
       bio: "Strong iron player and dependable weekend match partner.",
       publicStats: {
@@ -203,7 +203,7 @@ function createPeerProfiles() {
       displayName: "Theo Grant",
       username: "@theogrant",
       avatarLabel: "TG",
-      homeCourse: "Shadow Ridge",
+      homeCourse: "Shadow Creek Golf Course",
       handicap: 9.8,
       bio: "Steady fairway finder with a strong closing stretch.",
       publicStats: {
@@ -218,7 +218,7 @@ function createPeerProfiles() {
       displayName: "Jordan Wells",
       username: "@jordanwells",
       avatarLabel: "JW",
-      homeCourse: "Prairie Lake",
+      homeCourse: "Torrey Pines Golf Course - South",
       handicap: 7.1,
       bio: "Competitive group golfer who loves live leaderboards.",
       publicStats: {
@@ -279,7 +279,7 @@ function createSeededWorkspace(account, options = {}) {
   const premiumMode = options.premiumMode || "stroke";
   const activeRound = createRound({
     currentUser: account,
-    courseName: premiumMode === "stroke" ? "National Pines" : "North Point",
+    courseName: premiumMode === "stroke" ? "The Country Club at Golden Nugget" : "Torrey Pines Golf Course - South",
     teeBox: "Blue",
     weather: premiumMode === "stroke" ? "Windy 68F" : "Clear 70F",
     mode: premiumMode,
@@ -290,7 +290,7 @@ function createSeededWorkspace(account, options = {}) {
 
   const completedStroke = createCompletedSeedRound({
     currentUser: account,
-    courseName: "Shadow Ridge",
+    courseName: "Shadow Creek Golf Course",
     weather: "Clear 72F",
     mode: "stroke",
     players: profiles.slice(0, 3).map(profilePlayer),
@@ -303,7 +303,7 @@ function createSeededWorkspace(account, options = {}) {
 
   const completedScramble = createCompletedSeedRound({
     currentUser: account,
-    courseName: "Prairie Lake",
+    courseName: "Pebble Beach Golf Links",
     weather: "Warm 76F",
     mode: "scramble",
     players: [profiles[0], profiles[3], profiles[1], profiles[2]].map(profilePlayer),
@@ -318,7 +318,7 @@ function createSeededWorkspace(account, options = {}) {
     tournaments: [
       createTournament({
         name: "Great Lakes Weekend Cup",
-        courseName: "National Pines",
+        courseName: "Pebble Beach Golf Links",
         date: new Date(Date.now() + 1000 * 60 * 60 * 24 * 8).toISOString(),
         mode: "stroke",
         fieldSize: 24,
@@ -326,7 +326,7 @@ function createSeededWorkspace(account, options = {}) {
       }),
       createTournament({
         name: "Twilight Match Series",
-        courseName: "North Point",
+        courseName: "Torrey Pines Golf Course - South",
         date: new Date(Date.now() + 1000 * 60 * 60 * 24 * 15).toISOString(),
         mode: account.subscription.tier === "premium" ? "match" : "stroke",
         fieldSize: 8,
@@ -729,7 +729,7 @@ export function createDefaultAccountState() {
     tier: "free",
     seededDemo: true,
     city: "Chicago, IL",
-    homeCourse: "Whispering Pines",
+    homeCourse: "The Country Club at Golden Nugget",
     handicap: 8.4,
     bio: "Competitive weekend golfer building a better multi-state season.",
     seasonGoal: "Break 80 in three new states",
@@ -750,7 +750,7 @@ export function createDefaultAccountState() {
     tier: "premium",
     seededDemo: true,
     city: "Seattle, WA",
-    homeCourse: "National Pines",
+    homeCourse: "Pebble Beach Golf Links",
     handicap: 5.2,
     bio: "Competitive player using premium analytics and live group tools.",
     seasonGoal: "Win three weekend events this season",
@@ -770,7 +770,7 @@ export function createDefaultAccountState() {
     tier: "free",
     seededDemo: true,
     city: "Austin, TX",
-    homeCourse: "Blue River",
+    homeCourse: "TPC Louisiana",
     handicap: 10.1,
     bio: "Google mock sign-in account for review flows.",
   });
@@ -784,7 +784,7 @@ export function createDefaultAccountState() {
     tier: "premium",
     seededDemo: true,
     city: "Scottsdale, AZ",
-    homeCourse: "North Point",
+    homeCourse: "Torrey Pines Golf Course - South",
     handicap: 6.8,
     bio: "Apple mock sign-in account with premium access for review flows.",
   });

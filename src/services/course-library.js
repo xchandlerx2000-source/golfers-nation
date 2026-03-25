@@ -9,6 +9,14 @@ const STATE_FULL_NAMES = {
   CA: "California",
 };
 
+function slugifyCourseValue(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function roundToFive(value) {
   return Math.max(70, Math.round(value / 5) * 5);
 }
@@ -50,6 +58,10 @@ function scaleHoles(baseHoles, factor) {
 
 function createCourse({
   id,
+  slug = "",
+  clubName = "",
+  courseName = "",
+  displayName = "",
   name,
   city,
   state,
@@ -65,12 +77,16 @@ function createCourse({
   architect = "",
   opened = null,
   courseType = "championship",
-  source = "seeded-curated-demo",
+  source = "us-seeded-course-database",
   seeded = true,
   teeBoxes,
 }) {
   return {
     id,
+    slug: slug || slugifyCourseValue(id || `${name}-${city}-${state}`),
+    clubName: clubName || name,
+    courseName: courseName || name,
+    displayName: displayName || (clubName && courseName && clubName !== courseName ? `${clubName} - ${courseName}` : (courseName || name)),
     name,
     city,
     state,
@@ -87,6 +103,7 @@ function createCourse({
     opened,
     courseType,
     source,
+    sourceType: "seeded-us-database",
     seeded,
     teeBoxes,
   };
@@ -651,7 +668,7 @@ export function getRoundSetupCourses(query = "", limit = 10) {
 export function createManualCourseSelection(courseName = "", teeBox = "") {
   return {
     courseId: null,
-    courseName: courseName || "National Pines",
+    courseName: courseName || "Manual course",
     teeBoxId: null,
     teeBoxName: teeBox || "Blue",
     holes: cloneData(COURSE_TEMPLATE),
@@ -661,6 +678,7 @@ export function createManualCourseSelection(courseName = "", teeBox = "") {
     latitude: null,
     longitude: null,
     source: "manual-template",
+    sourceType: "manual-fallback",
     seeded: false,
     aliases: [],
     keywords: [],

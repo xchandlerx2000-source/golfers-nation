@@ -1,14 +1,13 @@
-export const mockCourseProvider = {
-  id: "mock-course-provider",
+export const importedUsCourseProvider = {
+  id: "imported-us-course-database",
   meta: {
-    id: "mock-course-provider",
-    label: "Mock provider",
+    id: "imported-us-course-database",
+    label: "Imported U.S. course database",
     live: false,
-    testingOnly: true,
     supportsSearch: true,
-    supportsNearby: false,
-    supportsRoundTemplates: false,
-    description: "Scaffolded provider reserved for future mocked integration tests and demo data injection.",
+    supportsNearby: true,
+    supportsRoundTemplates: true,
+    description: "Future import adapter for a licensed or curated nationwide U.S. course dataset.",
   },
   searchCourses() {
     return [];

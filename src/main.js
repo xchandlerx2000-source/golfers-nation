@@ -528,8 +528,26 @@ export function bootstrapApp({
     const roundSetup = getRoundSetupState(draft);
 
     if (Number(direction) > 0) {
-      if (currentStep === "course" && !roundSetup.selectedCourseId && !String(roundSetup.manualCourseName || "").trim()) {
-        setFeedback(draft, "info", "Choose Course", "Pick a course or enter a quick custom course first.");
+      if (currentStep === "course" && !String(roundSetup.courseMethod || "").trim()) {
+        setFeedback(draft, "info", "Choose Course", "Pick how you want to choose the course.");
+        return false;
+      }
+
+      if (
+        currentStep === "course"
+        && roundSetup.courseMethod === "manual"
+        && !String(roundSetup.manualCourseName || "").trim()
+      ) {
+        setFeedback(draft, "info", "Choose Course", "Enter a course name first.");
+        return false;
+      }
+
+      if (
+        currentStep === "course"
+        && roundSetup.courseMethod !== "manual"
+        && !roundSetup.selectedCourseId
+      ) {
+        setFeedback(draft, "info", "Choose Course", "Pick a course first.");
         return false;
       }
 
@@ -1654,6 +1672,43 @@ export function bootstrapApp({
       return;
     }
 
+    if (action === "choose-course-method") {
+      store.setState((draft) => {
+        const method = String(actionElement.dataset.method || "search");
+        const currentSetup = getRoundSetupState(draft);
+        draft.session.roundSetup = {
+          ...currentSetup,
+          courseMethod: method,
+          courseQuery: method === "search" ? currentSetup.courseQuery : "",
+          ...(method === "search"
+            ? {
+                selectedCourseId: "",
+                selectedTeeBoxId: "",
+              }
+            : {}),
+          ...(method === "manual"
+            ? {
+                selectedCourseId: "",
+                selectedTeeBoxId: "",
+              }
+            : {}),
+        };
+        return draft;
+      }, { reason: "choose-course-method" });
+      return;
+    }
+
+    if (action === "back-course-methods") {
+      store.setState((draft) => {
+        draft.session.roundSetup = {
+          ...getRoundSetupState(draft),
+          courseMethod: "",
+        };
+        return draft;
+      }, { reason: "back-course-methods" });
+      return;
+    }
+
     if (action === "round-setup-step") {
       store.setState((draft) => {
         const explicitStep = String(actionElement.dataset.step || "").trim();
@@ -1702,6 +1757,11 @@ export function bootstrapApp({
 
     if (action === "select-course") {
       store.setState((draft) => {
+        const currentSetup = getRoundSetupState(draft);
+        draft.session.roundSetup = {
+          ...currentSetup,
+          courseMethod: currentSetup.courseMethod || "search",
+        };
         setSelectedCourse(draft, actionElement.dataset.courseId, actionElement.dataset.teeBoxId || "");
         return draft;
       }, { reason: "select-course" });
@@ -1712,6 +1772,7 @@ export function bootstrapApp({
       store.setState((draft) => {
         draft.session.roundSetup = {
           ...getRoundSetupState(draft),
+          courseMethod: "",
           selectedCourseId: "",
           selectedTeeBoxId: "",
         };
@@ -2647,10 +2708,29 @@ export function bootstrapApp({
     store.setState((draft) => {
       draft.session.roundSetup = {
         ...getRoundSetupState(draft),
+        courseMethod: "search",
         courseQuery: String(courseSearchInput.value || "").trim(),
       };
       return draft;
     }, { reason: "course-search-input" });
+  });
+
+  root.addEventListener("toggle", (event) => {
+    const section = getClosestEventElement(event.target, ".community-section-card");
+    if (!section || !section.open) {
+      return;
+    }
+
+    const parent = section.parentElement;
+    if (!parent) {
+      return;
+    }
+
+    parent.querySelectorAll(".community-section-card[open]").forEach((item) => {
+      if (item !== section) {
+        item.open = false;
+      }
+    });
   });
 
   root.addEventListener("submit", async (event) => {

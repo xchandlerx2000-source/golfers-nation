@@ -11,7 +11,7 @@ const SEEDED_DISCOVERABLE_ROOMS = [
   {
     inviteCode: "WIND7",
     title: "Saturday Wind Game",
-    courseName: "Lakeview Downs",
+    courseName: "TPC Louisiana",
     weather: "Windy 64F",
     mode: "stroke",
     players: [
@@ -25,7 +25,7 @@ const SEEDED_DISCOVERABLE_ROOMS = [
   {
     inviteCode: "MATCH9",
     title: "Twilight Match",
-    courseName: "North Point",
+    courseName: "Torrey Pines Golf Course - South",
     weather: "Clear 70F",
     mode: "match",
     players: [
@@ -40,7 +40,7 @@ const SEEDED_DISCOVERABLE_ROOMS = [
   {
     inviteCode: "SCRAM8",
     title: "Sunday Scramble",
-    courseName: "Red Cedar Club",
+    courseName: "Pebble Beach Golf Links",
     weather: "Warm 78F",
     mode: "scramble",
     players: [

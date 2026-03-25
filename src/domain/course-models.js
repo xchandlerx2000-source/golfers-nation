@@ -1,6 +1,14 @@
 import { COURSE_TEMPLATE } from "../config.js";
 import { cloneData } from "../utils/formatters.js";
 
+function slugifyCourseValue(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function normalizeCourseHoleNumber(rawHole, fallbackNumber) {
   return Number(rawHole?.number || fallbackNumber || 0);
 }
@@ -46,18 +54,24 @@ export function normalizeCourseTeeBoxRecord(rawTeeBox = {}, fallbackIndex = 0) {
   };
 }
 
-export function normalizeCourseRecord(rawCourse = {}, providerId = "local-manual") {
+export function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-database") {
   const teeBoxes = Array.isArray(rawCourse?.teeBoxes)
     ? rawCourse.teeBoxes.map((teeBox, index) => normalizeCourseTeeBoxRecord(teeBox, index))
     : [];
   const referenceTee = teeBoxes[0] || normalizeCourseTeeBoxRecord({}, 0);
   const holes = referenceTee.holes.map((hole, index) => normalizeCourseHoleRecord(hole, index + 1));
+  const clubName = rawCourse?.clubName || rawCourse?.name || "";
+  const courseName = rawCourse?.courseName || rawCourse?.name || clubName;
+  const displayName = rawCourse?.displayName || (clubName && courseName && clubName !== courseName ? `${clubName} - ${courseName}` : courseName || clubName);
+  const aliases = cloneData(rawCourse?.aliases || []);
+  const keywords = cloneData(rawCourse?.keywords || []);
+  const slug = rawCourse?.slug || slugifyCourseValue(rawCourse?.id || `${displayName}-${rawCourse?.city || ""}-${rawCourse?.state || ""}`);
   const metadata = {
     providerId,
     providerLabel: rawCourse?.providerLabel || "",
     region: rawCourse?.region || "",
-    aliases: cloneData(rawCourse?.aliases || []),
-    keywords: cloneData(rawCourse?.keywords || []),
+    aliases,
+    keywords,
     featured: Boolean(rawCourse?.featured),
     featuredNote: rawCourse?.featuredNote || "",
     priority: rawCourse?.priority ?? 100,
@@ -66,6 +80,7 @@ export function normalizeCourseRecord(rawCourse = {}, providerId = "local-manual
     courseType: rawCourse?.courseType || "course",
     seeded: Boolean(rawCourse?.seeded),
     source: rawCourse?.source || providerId,
+    sourceType: rawCourse?.sourceType || rawCourse?.metadata?.sourceType || "seeded-us-database",
     gpsReady: rawCourse?.latitude !== null && rawCourse?.latitude !== undefined && rawCourse?.longitude !== null && rawCourse?.longitude !== undefined,
     routingReady: Boolean(rawCourse?.metadata?.routingReady),
     holeDetailReady: holes.length > 0,
@@ -75,15 +90,20 @@ export function normalizeCourseRecord(rawCourse = {}, providerId = "local-manual
 
   return {
     id: rawCourse?.id || "",
+    slug,
     providerId,
-    clubName: rawCourse?.clubName || rawCourse?.name || "",
-    name: rawCourse?.name || rawCourse?.clubName || "",
+    clubName,
+    courseName,
+    displayName,
+    name: courseName || clubName,
     address: rawCourse?.address || rawCourse?.addressLine1 || "",
     city: rawCourse?.city || "",
     state: rawCourse?.state || "",
     stateName: rawCourse?.stateName || rawCourse?.state || "",
     country: rawCourse?.country || "USA",
     region: rawCourse?.region || "",
+    aliases,
+    searchKeywords: keywords,
     latitude: rawCourse?.latitude ?? null,
     longitude: rawCourse?.longitude ?? null,
     holesCount: rawCourse?.holesCount || referenceTee.holes.length || holes.length,
@@ -133,9 +153,11 @@ export function createCourseRoundTemplateRecord({
 
   return {
     courseId: course.id,
-    providerId: course.providerId || course.metadata?.providerId || "local-manual",
-    courseName: course.name,
-    clubName: course.clubName || course.name,
+    courseSlug: course.slug || "",
+    providerId: course.providerId || course.metadata?.providerId || "us-course-database",
+    courseName: course.courseName || course.name,
+    clubName: course.clubName || course.courseName || course.name,
+    displayName: course.displayName || course.courseName || course.name,
     address: course.address || "",
     city: course.city,
     state: course.state,
@@ -152,7 +174,7 @@ export function createCourseRoundTemplateRecord({
     totalYardage,
     slope: teeBox.slope ?? null,
     rating: teeBox.rating ?? null,
-    source: course.metadata?.source || course.providerId || "local-manual",
+    source: course.metadata?.source || course.providerId || "us-course-database",
     seeded: Boolean(course.metadata?.seeded),
     metadata: {
       ...cloneData(course.metadata || {}),
@@ -177,9 +199,11 @@ export function createManualRoundTemplateRecord({
 
   return {
     courseId: null,
+    courseSlug: "",
     providerId,
-    courseName: courseName || "National Pines",
-    clubName: courseName || "National Pines",
+    courseName: courseName || "Manual course",
+    clubName: courseName || "Manual course",
+    displayName: courseName || "Manual course",
     address: "",
     city: "",
     state: "",

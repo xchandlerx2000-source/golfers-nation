@@ -120,6 +120,7 @@ export function setSelectedCourse(draft, courseId, teeBoxId = "") {
   if (!course) {
     draft.session.roundSetup = {
       ...getRoundSetupState(draft),
+      courseMethod: "search",
       selectedCourseId: "",
       selectedTeeBoxId: "",
     };
@@ -129,6 +130,7 @@ export function setSelectedCourse(draft, courseId, teeBoxId = "") {
   const defaultTee = getDefaultCourseTeeBox(course);
   draft.session.roundSetup = {
     ...getRoundSetupState(draft),
+    courseMethod: getRoundSetupState(draft).courseMethod || "detected",
     selectedCourseId: course.id,
     selectedTeeBoxId: teeBoxId || defaultTee?.id || "",
     selectedHoleCount: Math.min(

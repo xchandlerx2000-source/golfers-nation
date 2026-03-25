@@ -4,6 +4,7 @@ import {
   findCourseTeeBoxRecord,
   getDefaultCourseTeeBoxRecord,
 } from "../domain/course-models.js";
+import { importedUsCourseProvider } from "./course-providers/imported-us-course-provider.js";
 import { licensedCourseProvider } from "./course-providers/licensed-course-provider.js";
 import { localCourseProvider } from "./course-providers/local-course-provider.js";
 import { mockCourseProvider } from "./course-providers/mock-course-provider.js";
@@ -12,16 +13,25 @@ import { placesCourseProvider } from "./course-providers/places-course-provider.
 
 const COURSE_PROVIDERS = [
   localCourseProvider,
+  importedUsCourseProvider,
   licensedCourseProvider,
   golfnowCourseProvider,
   placesCourseProvider,
   mockCourseProvider,
 ];
 
-function getProviders({ includeScaffolded = true } = {}) {
-  return includeScaffolded
-    ? COURSE_PROVIDERS
-    : COURSE_PROVIDERS.filter((provider) => provider?.meta?.live !== false);
+function getProviders({ includeScaffolded = true, includeTestingProviders = false } = {}) {
+  return COURSE_PROVIDERS.filter((provider) => {
+    if (!includeScaffolded && provider?.meta?.live === false) {
+      return false;
+    }
+
+    if (!includeTestingProviders && provider?.meta?.testingOnly) {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 function getCourseKey(course = {}) {
@@ -160,14 +170,15 @@ export function getCourseDefaultRoundSetup() {
   return {
     step: "type",
     intent: "local",
+    courseMethod: "",
     courseQuery: "",
     selectedCourseId: featuredCourse?.id || "",
     selectedTeeBoxId: featuredTeeBox?.id || "",
     selectedHoleCount: 18,
     mode: "stroke",
     players: "",
-    manualCourseName: "National Pines",
-    manualTeeBoxName: "Blue",
+    manualCourseName: "",
+    manualTeeBoxName: "",
   };
 }
 
@@ -191,7 +202,7 @@ function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
   if (nearbyState.locationPermission === "granted") {
     return {
       title: "No nearby curated course matched",
-      message: "Location assist is on, but the current seeded library did not find a close course. Search manually or use the quick custom fallback.",
+      message: "Location assist is on, but no course record matched nearby yet. Search manually or use manual setup.",
       tone: "info",
       canRefresh: true,
     };
@@ -200,7 +211,7 @@ function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
   if (nearbyState.locationPermission === "denied") {
     return {
       title: "Location is off",
-      message: "Search by course name, city, or state instead. Manual round setup still stays available.",
+      message: "Search by course name, city, or state instead. Manual setup stays available.",
       tone: "muted",
       canRefresh: false,
     };
@@ -209,7 +220,7 @@ function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
   if (nearbyState.locationStatus === "fallback") {
     return {
       title: "Nearby assist is limited",
-      message: "Golfers Nation is still showing useful course search and quick picks even without location data.",
+      message: "Course search stays available even without location data.",
       tone: "muted",
       canRefresh: true,
     };
@@ -217,7 +228,7 @@ function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
 
   return {
     title: "Find the course you are playing",
-    message: "Use location assist to surface likely nearby courses, or search manually if you would rather pick the course yourself.",
+    message: "Use location assist or search for the course you are playing.",
     tone: "muted",
     canRefresh: true,
   };

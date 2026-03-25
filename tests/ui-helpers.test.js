@@ -159,7 +159,7 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("No live round yet");
+    expect(markup).toContain("No round yet");
     expect(markup).toContain("Start Round");
     expect(markup).toContain("Join Game");
     expect(markup).toContain('data-action="open-community-join"');
@@ -179,6 +179,7 @@ describe("ui helpers", () => {
     state.session.roundSetup = {
       ...state.session.roundSetup,
       step: "course",
+      courseMethod: "search",
       courseQuery: "California",
       selectedCourseId: "pebble-beach-california",
       selectedTeeBoxId: "pebble-beach-california-championship",
@@ -187,7 +188,7 @@ describe("ui helpers", () => {
     const markup = renderAppTemplate(state);
 
     expect(markup).toContain("Step 2");
-    expect(markup).toContain("Choose course");
+    expect(markup).toContain("Search course");
     expect(markup).toContain("Pebble Beach Golf Links");
     expect(markup).toContain("Selected");
     expect(markup).toContain('name="selectedCourseId" value="pebble-beach-california"');
@@ -279,7 +280,7 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Discover golfers and join rounds fast");
+    expect(markup).toContain("Join and discover");
     expect(markup).toContain("Join options");
     expect(markup).toContain("Nearby players");
     expect(markup).toContain("Nearby games");

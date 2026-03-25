@@ -267,6 +267,8 @@ const TESTER_FEEDBACK_AREAS = [
 ];
 
 // ---- src/domain/factories.js ----
+const DEFAULT_REAL_COURSE_NAME = "The Country Club at Golden Nugget";
+
 function slugifyName(value) {
   return String(value || "")
     .toLowerCase()
@@ -441,10 +443,10 @@ function createRound({
     id: uid("round"),
     status,
     mode: safeMode,
-    courseName: courseName || "National Pines",
+    courseName: courseName || DEFAULT_REAL_COURSE_NAME,
     teeBox: teeBox || "Blue",
     teeBoxId,
-    courseId,
+    courseId: courseId || FEATURED_COURSE_ID,
     courseCity,
     courseState,
     courseCountry,
@@ -1830,6 +1832,14 @@ function workspaceHasPendingRoundSync(workspace) {
 }
 
 // ---- src/domain/course-models.js ----
+function slugifyCourseValue(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function normalizeCourseHoleNumber(rawHole, fallbackNumber) {
   return Number(rawHole?.number || fallbackNumber || 0);
 }
@@ -1872,18 +1882,24 @@ function normalizeCourseTeeBoxRecord(rawTeeBox = {}, fallbackIndex = 0) {
     holes,
   };
 }
-function normalizeCourseRecord(rawCourse = {}, providerId = "local-manual") {
+function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-database") {
   const teeBoxes = Array.isArray(rawCourse?.teeBoxes)
     ? rawCourse.teeBoxes.map((teeBox, index) => normalizeCourseTeeBoxRecord(teeBox, index))
     : [];
   const referenceTee = teeBoxes[0] || normalizeCourseTeeBoxRecord({}, 0);
   const holes = referenceTee.holes.map((hole, index) => normalizeCourseHoleRecord(hole, index + 1));
+  const clubName = rawCourse?.clubName || rawCourse?.name || "";
+  const courseName = rawCourse?.courseName || rawCourse?.name || clubName;
+  const displayName = rawCourse?.displayName || (clubName && courseName && clubName !== courseName ? `${clubName} - ${courseName}` : courseName || clubName);
+  const aliases = cloneData(rawCourse?.aliases || []);
+  const keywords = cloneData(rawCourse?.keywords || []);
+  const slug = rawCourse?.slug || slugifyCourseValue(rawCourse?.id || `${displayName}-${rawCourse?.city || ""}-${rawCourse?.state || ""}`);
   const metadata = {
     providerId,
     providerLabel: rawCourse?.providerLabel || "",
     region: rawCourse?.region || "",
-    aliases: cloneData(rawCourse?.aliases || []),
-    keywords: cloneData(rawCourse?.keywords || []),
+    aliases,
+    keywords,
     featured: Boolean(rawCourse?.featured),
     featuredNote: rawCourse?.featuredNote || "",
     priority: rawCourse?.priority ?? 100,
@@ -1892,6 +1908,7 @@ function normalizeCourseRecord(rawCourse = {}, providerId = "local-manual") {
     courseType: rawCourse?.courseType || "course",
     seeded: Boolean(rawCourse?.seeded),
     source: rawCourse?.source || providerId,
+    sourceType: rawCourse?.sourceType || rawCourse?.metadata?.sourceType || "seeded-us-database",
     gpsReady: rawCourse?.latitude !== null && rawCourse?.latitude !== undefined && rawCourse?.longitude !== null && rawCourse?.longitude !== undefined,
     routingReady: Boolean(rawCourse?.metadata?.routingReady),
     holeDetailReady: holes.length > 0,
@@ -1901,15 +1918,20 @@ function normalizeCourseRecord(rawCourse = {}, providerId = "local-manual") {
 
   return {
     id: rawCourse?.id || "",
+    slug,
     providerId,
-    clubName: rawCourse?.clubName || rawCourse?.name || "",
-    name: rawCourse?.name || rawCourse?.clubName || "",
+    clubName,
+    courseName,
+    displayName,
+    name: courseName || clubName,
     address: rawCourse?.address || rawCourse?.addressLine1 || "",
     city: rawCourse?.city || "",
     state: rawCourse?.state || "",
     stateName: rawCourse?.stateName || rawCourse?.state || "",
     country: rawCourse?.country || "USA",
     region: rawCourse?.region || "",
+    aliases,
+    searchKeywords: keywords,
     latitude: rawCourse?.latitude ?? null,
     longitude: rawCourse?.longitude ?? null,
     holesCount: rawCourse?.holesCount || referenceTee.holes.length || holes.length,
@@ -1956,9 +1978,11 @@ function createCourseRoundTemplateRecord({
 
   return {
     courseId: course.id,
-    providerId: course.providerId || course.metadata?.providerId || "local-manual",
-    courseName: course.name,
-    clubName: course.clubName || course.name,
+    courseSlug: course.slug || "",
+    providerId: course.providerId || course.metadata?.providerId || "us-course-database",
+    courseName: course.courseName || course.name,
+    clubName: course.clubName || course.courseName || course.name,
+    displayName: course.displayName || course.courseName || course.name,
     address: course.address || "",
     city: course.city,
     state: course.state,
@@ -1975,7 +1999,7 @@ function createCourseRoundTemplateRecord({
     totalYardage,
     slope: teeBox.slope ?? null,
     rating: teeBox.rating ?? null,
-    source: course.metadata?.source || course.providerId || "local-manual",
+    source: course.metadata?.source || course.providerId || "us-course-database",
     seeded: Boolean(course.metadata?.seeded),
     metadata: {
       ...cloneData(course.metadata || {}),
@@ -1999,9 +2023,11 @@ function createManualRoundTemplateRecord({
 
   return {
     courseId: null,
+    courseSlug: "",
     providerId,
-    courseName: courseName || "National Pines",
-    clubName: courseName || "National Pines",
+    courseName: courseName || "Manual course",
+    clubName: courseName || "Manual course",
+    displayName: courseName || "Manual course",
     address: "",
     city: "",
     state: "",
@@ -3183,6 +3209,14 @@ const STATE_FULL_NAMES = {
   CA: "California",
 };
 
+function slugifyCourseValue(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function roundToFive(value) {
   return Math.max(70, Math.round(value / 5) * 5);
 }
@@ -3224,6 +3258,10 @@ function scaleHoles(baseHoles, factor) {
 
 function createCourse({
   id,
+  slug = "",
+  clubName = "",
+  courseName = "",
+  displayName = "",
   name,
   city,
   state,
@@ -3239,12 +3277,16 @@ function createCourse({
   architect = "",
   opened = null,
   courseType = "championship",
-  source = "seeded-curated-demo",
+  source = "us-seeded-course-database",
   seeded = true,
   teeBoxes,
 }) {
   return {
     id,
+    slug: slug || slugifyCourseValue(id || `${name}-${city}-${state}`),
+    clubName: clubName || name,
+    courseName: courseName || name,
+    displayName: displayName || (clubName && courseName && clubName !== courseName ? `${clubName} - ${courseName}` : (courseName || name)),
     name,
     city,
     state,
@@ -3261,6 +3303,7 @@ function createCourse({
     opened,
     courseType,
     source,
+    sourceType: "seeded-us-database",
     seeded,
     teeBoxes,
   };
@@ -3817,7 +3860,7 @@ function getRoundSetupCourses(query = "", limit = 10) {
 function createManualCourseSelection(courseName = "", teeBox = "") {
   return {
     courseId: null,
-    courseName: courseName || "National Pines",
+    courseName: courseName || "Manual course",
     teeBoxId: null,
     teeBoxName: teeBox || "Blue",
     holes: cloneData(COURSE_TEMPLATE),
@@ -3827,6 +3870,7 @@ function createManualCourseSelection(courseName = "", teeBox = "") {
     latitude: null,
     longitude: null,
     source: "manual-template",
+    sourceType: "manual-fallback",
     seeded: false,
     aliases: [],
     keywords: [],
@@ -3882,7 +3926,7 @@ function createRoundCourseSelection(courseId, teeBoxId = "") {
 }
 
 // ---- src/services/course-providers/local-course-provider.js ----
-const LOCAL_PROVIDER_ID = "local-manual";
+const LOCAL_PROVIDER_ID = "us-course-database";
 
 const COURSE_ADDRESS_OVERRIDES = {
   "golden-nugget-lake-charles": "2550 Golden Nugget Blvd",
@@ -3937,12 +3981,12 @@ const localCourseProvider = {
   id: LOCAL_PROVIDER_ID,
   meta: {
     id: LOCAL_PROVIDER_ID,
-    label: "Local/manual provider",
+    label: "U.S. course database",
     live: true,
     supportsSearch: true,
     supportsNearby: true,
     supportsRoundTemplates: true,
-    description: "Curated seeded courses plus manual fallback templates for testing and early production flows.",
+    description: "Built-in U.S. course records for search, nearby course assist, and round templates.",
   },
   searchCourses(query = "", { limit = 10 } = {}) {
     return searchCourseLibrary(query)
@@ -3994,6 +4038,38 @@ const localCourseProvider = {
   },
 };
 
+// ---- src/services/course-providers/imported-us-course-provider.js ----
+const importedUsCourseProvider = {
+  id: "imported-us-course-database",
+  meta: {
+    id: "imported-us-course-database",
+    label: "Imported U.S. course database",
+    live: false,
+    supportsSearch: true,
+    supportsNearby: true,
+    supportsRoundTemplates: true,
+    description: "Future import adapter for a licensed or curated nationwide U.S. course dataset.",
+  },
+  searchCourses() {
+    return [];
+  },
+  getCourseQuickPicks() {
+    return [];
+  },
+  getRoundSetupCourses() {
+    return [];
+  },
+  getCourseById() {
+    return null;
+  },
+  findNearbyCourses() {
+    return [];
+  },
+  buildRoundTemplate() {
+    return null;
+  },
+};
+
 // ---- src/services/course-providers/mock-course-provider.js ----
 const mockCourseProvider = {
   id: "mock-course-provider",
@@ -4001,6 +4077,7 @@ const mockCourseProvider = {
     id: "mock-course-provider",
     label: "Mock provider",
     live: false,
+    testingOnly: true,
     supportsSearch: true,
     supportsNearby: false,
     supportsRoundTemplates: false,
@@ -4125,16 +4202,25 @@ const placesCourseProvider = {
 // ---- src/services/course-service.js ----
 const COURSE_PROVIDERS = [
   localCourseProvider,
+  importedUsCourseProvider,
   licensedCourseProvider,
   golfnowCourseProvider,
   placesCourseProvider,
   mockCourseProvider,
 ];
 
-function getProviders({ includeScaffolded = true } = {}) {
-  return includeScaffolded
-    ? COURSE_PROVIDERS
-    : COURSE_PROVIDERS.filter((provider) => provider?.meta?.live !== false);
+function getProviders({ includeScaffolded = true, includeTestingProviders = false } = {}) {
+  return COURSE_PROVIDERS.filter((provider) => {
+    if (!includeScaffolded && provider?.meta?.live === false) {
+      return false;
+    }
+
+    if (!includeTestingProviders && provider?.meta?.testingOnly) {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 function getCourseKey(course = {}) {
@@ -4262,14 +4348,15 @@ function getCourseDefaultRoundSetup() {
   return {
     step: "type",
     intent: "local",
+    courseMethod: "",
     courseQuery: "",
     selectedCourseId: featuredCourse?.id || "",
     selectedTeeBoxId: featuredTeeBox?.id || "",
     selectedHoleCount: 18,
     mode: "stroke",
     players: "",
-    manualCourseName: "National Pines",
-    manualTeeBoxName: "Blue",
+    manualCourseName: "",
+    manualTeeBoxName: "",
   };
 }
 function getCourseRoundSetupState(roundSetup = {}) {
@@ -4292,7 +4379,7 @@ function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
   if (nearbyState.locationPermission === "granted") {
     return {
       title: "No nearby curated course matched",
-      message: "Location assist is on, but the current seeded library did not find a close course. Search manually or use the quick custom fallback.",
+      message: "Location assist is on, but no course record matched nearby yet. Search manually or use manual setup.",
       tone: "info",
       canRefresh: true,
     };
@@ -4301,7 +4388,7 @@ function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
   if (nearbyState.locationPermission === "denied") {
     return {
       title: "Location is off",
-      message: "Search by course name, city, or state instead. Manual round setup still stays available.",
+      message: "Search by course name, city, or state instead. Manual setup stays available.",
       tone: "muted",
       canRefresh: false,
     };
@@ -4310,7 +4397,7 @@ function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
   if (nearbyState.locationStatus === "fallback") {
     return {
       title: "Nearby assist is limited",
-      message: "Golfers Nation is still showing useful course search and quick picks even without location data.",
+      message: "Course search stays available even without location data.",
       tone: "muted",
       canRefresh: true,
     };
@@ -4318,7 +4405,7 @@ function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
 
   return {
     title: "Find the course you are playing",
-    message: "Use location assist to surface likely nearby courses, or search manually if you would rather pick the course yourself.",
+    message: "Use location assist or search for the course you are playing.",
     tone: "muted",
     canRefresh: true,
   };
@@ -4534,7 +4621,7 @@ function createPeerProfiles() {
       displayName: "Maya Chen",
       username: "@mayachen",
       avatarLabel: "MC",
-      homeCourse: "National Pines",
+      homeCourse: "Pebble Beach Golf Links",
       handicap: 5.2,
       bio: "Strong iron player and dependable weekend match partner.",
       publicStats: {
@@ -4549,7 +4636,7 @@ function createPeerProfiles() {
       displayName: "Theo Grant",
       username: "@theogrant",
       avatarLabel: "TG",
-      homeCourse: "Shadow Ridge",
+      homeCourse: "Shadow Creek Golf Course",
       handicap: 9.8,
       bio: "Steady fairway finder with a strong closing stretch.",
       publicStats: {
@@ -4564,7 +4651,7 @@ function createPeerProfiles() {
       displayName: "Jordan Wells",
       username: "@jordanwells",
       avatarLabel: "JW",
-      homeCourse: "Prairie Lake",
+      homeCourse: "Torrey Pines Golf Course - South",
       handicap: 7.1,
       bio: "Competitive group golfer who loves live leaderboards.",
       publicStats: {
@@ -4625,7 +4712,7 @@ function createSeededWorkspace(account, options = {}) {
   const premiumMode = options.premiumMode || "stroke";
   const activeRound = createRound({
     currentUser: account,
-    courseName: premiumMode === "stroke" ? "National Pines" : "North Point",
+    courseName: premiumMode === "stroke" ? "The Country Club at Golden Nugget" : "Torrey Pines Golf Course - South",
     teeBox: "Blue",
     weather: premiumMode === "stroke" ? "Windy 68F" : "Clear 70F",
     mode: premiumMode,
@@ -4636,7 +4723,7 @@ function createSeededWorkspace(account, options = {}) {
 
   const completedStroke = createCompletedSeedRound({
     currentUser: account,
-    courseName: "Shadow Ridge",
+    courseName: "Shadow Creek Golf Course",
     weather: "Clear 72F",
     mode: "stroke",
     players: profiles.slice(0, 3).map(profilePlayer),
@@ -4649,7 +4736,7 @@ function createSeededWorkspace(account, options = {}) {
 
   const completedScramble = createCompletedSeedRound({
     currentUser: account,
-    courseName: "Prairie Lake",
+    courseName: "Pebble Beach Golf Links",
     weather: "Warm 76F",
     mode: "scramble",
     players: [profiles[0], profiles[3], profiles[1], profiles[2]].map(profilePlayer),
@@ -4664,7 +4751,7 @@ function createSeededWorkspace(account, options = {}) {
     tournaments: [
       createTournament({
         name: "Great Lakes Weekend Cup",
-        courseName: "National Pines",
+        courseName: "Pebble Beach Golf Links",
         date: new Date(Date.now() + 1000 * 60 * 60 * 24 * 8).toISOString(),
         mode: "stroke",
         fieldSize: 24,
@@ -4672,7 +4759,7 @@ function createSeededWorkspace(account, options = {}) {
       }),
       createTournament({
         name: "Twilight Match Series",
-        courseName: "North Point",
+        courseName: "Torrey Pines Golf Course - South",
         date: new Date(Date.now() + 1000 * 60 * 60 * 24 * 15).toISOString(),
         mode: account.subscription.tier === "premium" ? "match" : "stroke",
         fieldSize: 8,
@@ -5069,7 +5156,7 @@ function createDefaultAccountState() {
     tier: "free",
     seededDemo: true,
     city: "Chicago, IL",
-    homeCourse: "Whispering Pines",
+    homeCourse: "The Country Club at Golden Nugget",
     handicap: 8.4,
     bio: "Competitive weekend golfer building a better multi-state season.",
     seasonGoal: "Break 80 in three new states",
@@ -5090,7 +5177,7 @@ function createDefaultAccountState() {
     tier: "premium",
     seededDemo: true,
     city: "Seattle, WA",
-    homeCourse: "National Pines",
+    homeCourse: "Pebble Beach Golf Links",
     handicap: 5.2,
     bio: "Competitive player using premium analytics and live group tools.",
     seasonGoal: "Win three weekend events this season",
@@ -5110,7 +5197,7 @@ function createDefaultAccountState() {
     tier: "free",
     seededDemo: true,
     city: "Austin, TX",
-    homeCourse: "Blue River",
+    homeCourse: "TPC Louisiana",
     handicap: 10.1,
     bio: "Google mock sign-in account for review flows.",
   });
@@ -5124,7 +5211,7 @@ function createDefaultAccountState() {
     tier: "premium",
     seededDemo: true,
     city: "Scottsdale, AZ",
-    homeCourse: "North Point",
+    homeCourse: "Torrey Pines Golf Course - South",
     handicap: 6.8,
     bio: "Apple mock sign-in account with premium access for review flows.",
   });
@@ -6725,7 +6812,7 @@ const SEEDED_DISCOVERABLE_ROOMS = [
   {
     inviteCode: "WIND7",
     title: "Saturday Wind Game",
-    courseName: "Lakeview Downs",
+    courseName: "TPC Louisiana",
     weather: "Windy 64F",
     mode: "stroke",
     players: [
@@ -6739,7 +6826,7 @@ const SEEDED_DISCOVERABLE_ROOMS = [
   {
     inviteCode: "MATCH9",
     title: "Twilight Match",
-    courseName: "North Point",
+    courseName: "Torrey Pines Golf Course - South",
     weather: "Clear 70F",
     mode: "match",
     players: [
@@ -6754,7 +6841,7 @@ const SEEDED_DISCOVERABLE_ROOMS = [
   {
     inviteCode: "SCRAM8",
     title: "Sunday Scramble",
-    courseName: "Red Cedar Club",
+    courseName: "Pebble Beach Golf Links",
     weather: "Warm 78F",
     mode: "scramble",
     players: [
@@ -7549,6 +7636,7 @@ function setSelectedCourse(draft, courseId, teeBoxId = "") {
   if (!course) {
     draft.session.roundSetup = {
       ...getRoundSetupState(draft),
+      courseMethod: "search",
       selectedCourseId: "",
       selectedTeeBoxId: "",
     };
@@ -7558,6 +7646,7 @@ function setSelectedCourse(draft, courseId, teeBoxId = "") {
   const defaultTee = getDefaultCourseTeeBox(course);
   draft.session.roundSetup = {
     ...getRoundSetupState(draft),
+    courseMethod: getRoundSetupState(draft).courseMethod || "detected",
     selectedCourseId: course.id,
     selectedTeeBoxId: teeBoxId || defaultTee?.id || "",
     selectedHoleCount: Math.min(
@@ -10181,7 +10270,7 @@ const HELP_SECTIONS = [
     title: "Playing a Round",
     description: "How to start, join, score, and finish a round without getting lost.",
     items: [
-      { title: "How do I start a round?", body: "Open Round, keep Golden Nugget loaded if you want the fastest path, and tap Start round." },
+      { title: "How do I start a round?", body: "Open Round, confirm the course, and tap Start round." },
       { title: "How do invite codes work?", body: "Ask the host for the round code, open Community, then enter the code to join." },
       { title: "How should I score?", body: "Tap the large score buttons first. Use fairway, GIR, putts, and penalties for deeper stats." },
     ],
@@ -10479,7 +10568,7 @@ function renderFirstRoundGuide(state, placement) {
           </div>
           <span class="status-pill">New golfer</span>
         </div>
-        <p class="body-copy">Use the highlighted Start round button. Golden Nugget Lake Charles is already loaded so you can get into scoring quickly.</p>
+        <p class="body-copy">Use the highlighted Start round button and confirm the real course you are playing.</p>
         <div class="summary-grid onboarding-list">
           <article>
             <strong>1</strong>
@@ -10487,7 +10576,7 @@ function renderFirstRoundGuide(state, placement) {
           </article>
           <article>
             <strong>2</strong>
-            <p>Keep Golden Nugget selected and press <strong>Start round</strong>.</p>
+            <p>Confirm the course and press <strong>Start round</strong>.</p>
           </article>
           <article>
             <strong>3</strong>
@@ -10512,7 +10601,7 @@ function renderFirstRoundGuide(state, placement) {
           </div>
           <span class="status-pill">Keep it simple</span>
         </div>
-        <p class="body-copy compact-copy">For the easiest first round, keep stroke play selected, leave Golden Nugget loaded, and tap the highlighted <strong>Start round</strong> button.</p>
+        <p class="body-copy compact-copy">For the easiest first round, keep stroke play selected, confirm the course, and tap <strong>Start round</strong>.</p>
       </article>
     `;
   }
@@ -11404,10 +11493,8 @@ function renderPlayCourseAssistCard(state, activeRound) {
   const discovery = getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {});
   const selectedCourse = discovery.selectedCourse;
   const locationStatus = state.session?.nearby?.locationPermission === "granted"
-    ? "Location on"
-    : state.session?.nearby?.locationPermission === "denied"
-      ? "Location off"
-      : "Location optional";
+    ? "Detected"
+    : "Find course";
   const actionLabel = selectedCourse ? "Confirm course" : "Find course";
   const actionName = selectedCourse ? "nav-view" : "detect-nearby-courses";
   const actionValue = selectedCourse ? "round" : "";
@@ -11417,11 +11504,11 @@ function renderPlayCourseAssistCard(state, activeRound) {
       <div class="section-heading section-heading--compact">
         <div>
           <p class="eyebrow">Course Assist</p>
-          <h3>${escapeHtml(selectedCourse?.name || discovery.nearbyCopy.title)}</h3>
+          <h3>${escapeHtml(selectedCourse?.displayName || selectedCourse?.name || "Find course")}</h3>
         </div>
         <span class="status-pill">${escapeHtml(locationStatus)}</span>
       </div>
-      <p class="play-active-copy">${escapeHtml(selectedCourse ? `${selectedCourse.city}, ${selectedCourse.state}` : "Find a course to start.")}</p>
+      ${selectedCourse ? `<p class="play-active-copy">${escapeHtml(`${selectedCourse.city}, ${selectedCourse.state}`)}</p>` : ""}
       <div class="row-actions compact-actions">
         <button class="button secondary" type="button" data-action="${actionName}" ${actionValue ? `data-view="${actionValue}"` : ""}>
           ${actionLabel}
@@ -11491,13 +11578,10 @@ function renderPlayActiveGameCard(state, activeRound) {
     return `
       <article class="card play-screen-card play-compact-card play-active-card play-active-card--empty">
         <div class="play-screen-card-head">
-          <div>
-            <p class="eyebrow">Active Game</p>
-            <h3>No live round yet</h3>
-          </div>
+          <p class="eyebrow">Active Game</p>
           <span class="status-pill">Ready</span>
         </div>
-        <p class="play-active-copy">Start a round or join one to see it here.</p>
+        <strong>No round yet</strong>
       </article>
     `;
   }
@@ -11674,14 +11758,15 @@ function getRoundSetup(state) {
   return {
     step: setup.step || "type",
     intent: setup.intent || "local",
+    courseMethod: setup.courseMethod || "",
     courseQuery: setup.courseQuery || "",
     selectedCourseId: setup.selectedCourseId || "",
     selectedTeeBoxId: setup.selectedTeeBoxId || "",
     selectedHoleCount: Number(setup.selectedHoleCount || 18),
     mode: setup.mode || "stroke",
     players: setup.players || "",
-    manualCourseName: setup.manualCourseName || "National Pines",
-    manualTeeBoxName: setup.manualTeeBoxName || "Blue",
+    manualCourseName: setup.manualCourseName || "",
+    manualTeeBoxName: setup.manualTeeBoxName || "",
   };
 }
 
@@ -11814,7 +11899,7 @@ function renderAuthScreen(state) {
             </article>
             <article>
               <strong>3</strong>
-              <p>Golden Nugget Lake Charles will be ready as your first course.</p>
+              <p>The app will preload a real course so you can start quickly.</p>
             </article>
           </div>
         ` : ""}
@@ -11974,35 +12059,6 @@ function renderSettingsLandingView(state) {
   `;
 }
 
-function renderSettingsDestinationSwitch(destination) {
-  return `
-    <div class="settings-destination-switch" role="tablist" aria-label="Profile destinations">
-      <button
-        class="settings-destination-pill ${destination === "profile" ? "is-active" : ""}"
-        type="button"
-        data-action="set-settings-destination"
-        data-destination="profile"
-        data-section="profile-identity"
-        role="tab"
-        aria-selected="${destination === "profile" ? "true" : "false"}"
-      >
-        My Profile
-      </button>
-      <button
-        class="settings-destination-pill ${destination === "app" ? "is-active" : ""}"
-        type="button"
-        data-action="set-settings-destination"
-        data-destination="app"
-        data-section="account"
-        role="tab"
-        aria-selected="${destination === "app" ? "true" : "false"}"
-      >
-        App Settings
-      </button>
-    </div>
-  `;
-}
-
 function renderSettingsDestinationHeader(state, destination) {
   const copy = getSettingsDestinationCopy(destination);
 
@@ -12016,7 +12072,6 @@ function renderSettingsDestinationHeader(state, destination) {
           <p class="compact-copy">${escapeHtml(copy.description)}</p>
         </div>
       </div>
-      ${renderSettingsDestinationSwitch(destination)}
       ${renderSettingsSectionNav(state, destination)}
     </article>
   `;
@@ -12859,6 +12914,7 @@ function renderCoursePicker(state) {
     nearbyCourses,
     nearbyCopy,
   } = discovery;
+  const courseMethod = String(roundSetup.courseMethod || "").trim();
   const holeCountOptions = [9, 18]
     .filter((count) => count <= Number(selectedCourse?.holesCount || 18))
     .concat(
@@ -12871,6 +12927,158 @@ function renderCoursePicker(state) {
     : state.session?.nearby?.locationPermission === "denied"
       ? "Location off"
       : "Location optional";
+
+  if (!courseMethod) {
+    return `
+      <div class="stack-list course-picker-block round-setup-step-card">
+        <div class="round-setup-step-head">
+          <p class="eyebrow">Step 2</p>
+          <h4>Choose course</h4>
+        </div>
+        <div class="round-choice-grid round-choice-grid--tight">
+          <button class="round-choice-button" type="button" data-action="choose-course-method" data-method="detected">
+            <strong>Nearby Courses</strong>
+            <span>Use location assist</span>
+          </button>
+          <button class="round-choice-button" type="button" data-action="choose-course-method" data-method="search">
+            <strong>Search Course</strong>
+            <span>Find by name or city</span>
+          </button>
+          <button class="round-choice-button" type="button" data-action="choose-course-method" data-method="manual">
+            <strong>Quick Custom</strong>
+            <span>Use a simple card</span>
+          </button>
+        </div>
+        <div class="round-setup-footer">
+          <button class="button subtle" type="button" data-action="round-setup-step" data-direction="-1">Back</button>
+          <span class="round-setup-footer-spacer"></span>
+        </div>
+      </div>
+    `;
+  }
+
+  if (courseMethod === "manual") {
+    return `
+      <div class="stack-list course-picker-block round-setup-step-card">
+        <div class="round-setup-step-head">
+          <p class="eyebrow">Step 2</p>
+          <h4>Custom course</h4>
+        </div>
+        <div class="split-inputs">
+          <label>
+            Course
+            <input
+              name="courseName"
+              type="text"
+              value="${escapeHtml(roundSetup.manualCourseName)}"
+              data-round-setup-field="manualCourseName"
+              placeholder="Course name"
+            />
+          </label>
+          <label>
+            Tee
+            <input
+              name="teeBox"
+              type="text"
+              value="${escapeHtml(roundSetup.manualTeeBoxName)}"
+              data-round-setup-field="manualTeeBoxName"
+              placeholder="Tee name"
+            />
+          </label>
+        </div>
+        <div class="row-actions compact-actions">
+          <button class="button subtle" type="button" data-action="back-course-methods">Change method</button>
+        </div>
+        ${renderRoundSetupFooter({
+          canGoBack: true,
+          nextLabel: "Next",
+          nextDirection: 1,
+          nextDisabled: !String(roundSetup.manualCourseName || "").trim(),
+        })}
+      </div>
+    `;
+  }
+
+  if (courseMethod === "search") {
+    return `
+      <div class="stack-list course-picker-block round-setup-step-card">
+        <div class="round-setup-step-head">
+          <p class="eyebrow">Step 2</p>
+          <h4>Search course</h4>
+        </div>
+        <div class="course-search-shell" data-course-search-shell="true">
+          <label class="course-search-field">
+            <span>Search Course</span>
+            <input data-course-search-input="true" type="search" value="${escapeHtml(roundSetup.courseQuery)}" placeholder="Course or city" />
+          </label>
+        </div>
+        <div class="course-results-list course-results-list--compact">
+          ${searchResults.length
+            ? searchResults.slice(0, 6).map((course) => {
+                const featuredTee = getDefaultCourseTeeBox(course);
+                const isSelected = course.id === selectedCourse?.id;
+                return `
+                  <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
+                    <div class="course-result-copy">
+                      <strong>${escapeHtml(course.displayName || course.name)}</strong>
+                      <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
+                    </div>
+                    <div class="course-result-meta">
+                      <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
+                      <span>${featuredTee?.totalYardage || "--"} yds</span>
+                    </div>
+                  </button>
+                `;
+              }).join("")
+            : `
+              <div class="empty-state compact-empty-state">
+                <strong>No course match</strong>
+              </div>
+            `}
+        </div>
+        ${selectedCourse && selectedTeeBox
+          ? `
+            <article class="course-selected-card" data-selected-course="true">
+              <div class="course-selected-copy">
+                <span class="mini-label">Selected</span>
+                <strong>${escapeHtml(selectedCourse.displayName || selectedCourse.name)}</strong>
+                <p>${escapeHtml(selectedTeeBox.name)} / ${selectedTeeBox.totalYardage} yds / Par ${selectedTeeBox.totalPar}</p>
+              </div>
+              <div class="split-inputs course-selected-actions">
+                <label>
+                  Tee
+                  <select name="selectedTeeBoxId" form="create-round-form" data-course-tee-select="true">
+                    ${selectedCourse.teeBoxes.map((teeBox) => `
+                      <option value="${teeBox.id}" ${teeBox.id === selectedTeeBox.id ? "selected" : ""}>
+                        ${escapeHtml(teeBox.name)} / ${teeBox.totalYardage} yds
+                      </option>
+                    `).join("")}
+                  </select>
+                </label>
+                <label>
+                  Holes
+                  <select name="selectedHoleCount" form="create-round-form" data-course-hole-count-select="true">
+                    ${holeCountOptions.map((count) => `
+                      <option value="${count}" ${count === roundSetup.selectedHoleCount ? "selected" : ""}>${count}</option>
+                    `).join("")}
+                  </select>
+                </label>
+              </div>
+            </article>
+          `
+          : ""}
+        <div class="row-actions compact-actions">
+          <button class="button subtle" type="button" data-action="back-course-methods">Change method</button>
+        </div>
+        ${renderRoundSetupFooter({
+          canGoBack: true,
+          nextLabel: "Next",
+          nextDirection: 1,
+          nextDisabled: !selectedCourse,
+        })}
+      </div>
+    `;
+  }
 
   return `
     <div class="stack-list course-picker-block round-setup-step-card">
@@ -12895,67 +13103,39 @@ function renderCoursePicker(state) {
               const isSelected = course.id === selectedCourse?.id;
               return `
                 <button class="course-result-card course-result-card--compact ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${nearbyTee?.id || ""}">
-                  <strong>${escapeHtml(course.name)}</strong>
+                  <strong>${escapeHtml(course.displayName || course.name)}</strong>
                   <p>${escapeHtml(course.nearbyDistanceLabel || `${course.city}, ${course.state}`)}</p>
                 </button>
               `;
             }).join("")}
           </div>
         `
-        : ""}
-      ${quickPicks.length
-        ? `
-          <div class="round-setup-choice-row" aria-label="Quick course picks">
-            ${quickPicks.map((course) => {
-              const featuredTee = getDefaultCourseTeeBox(course);
-              const isSelected = course.id === selectedCourse?.id;
-              return `
-                <button class="course-result-card course-result-card--compact ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
-                  <strong>${escapeHtml(course.name)}</strong>
-                  <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
-                </button>
-              `;
-            }).join("")}
-          </div>
-        `
-        : ""}
-      <div class="course-search-shell" data-course-search-shell="true">
-        <label class="course-search-field">
-          <span>Search Course</span>
-          <input data-course-search-input="true" type="search" value="${escapeHtml(roundSetup.courseQuery)}" placeholder="Course or city" />
-        </label>
-      </div>
-      <div class="course-results-list course-results-list--compact">
-        ${searchResults.length
-          ? searchResults.slice(0, 6).map((course) => {
-              const featuredTee = getDefaultCourseTeeBox(course);
-              const isSelected = course.id === selectedCourse?.id;
-              return `
-                <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
-                  <div class="course-result-copy">
-                    <strong>${escapeHtml(course.name)}</strong>
+        : quickPicks.length
+          ? `
+            <div class="round-setup-choice-row" aria-label="Quick course picks">
+              ${quickPicks.map((course) => {
+                const featuredTee = getDefaultCourseTeeBox(course);
+                const isSelected = course.id === selectedCourse?.id;
+                return `
+                  <button class="course-result-card course-result-card--compact ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
+                    <strong>${escapeHtml(course.displayName || course.name)}</strong>
                     <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
-                  </div>
-                  <div class="course-result-meta">
-                    <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
-                    <span>${featuredTee?.totalYardage || "--"} yds</span>
-                  </div>
-                </button>
-              `;
-            }).join("")
+                  </button>
+                `;
+              }).join("")}
+            </div>
+          `
           : `
             <div class="empty-state compact-empty-state">
-              <strong>No course match</strong>
-              <p>Use the quick custom course below.</p>
+              <strong>No nearby course</strong>
             </div>
           `}
-      </div>
       ${selectedCourse && selectedTeeBox
         ? `
           <article class="course-selected-card" data-selected-course="true">
             <div class="course-selected-copy">
               <span class="mini-label">Selected</span>
-              <strong>${escapeHtml(selectedCourse.name)}</strong>
+              <strong>${escapeHtml(selectedCourse.displayName || selectedCourse.name)}</strong>
               <p>${escapeHtml(selectedTeeBox.name)} / ${selectedTeeBox.totalYardage} yds / Par ${selectedTeeBox.totalPar}</p>
             </div>
             <div class="split-inputs course-selected-actions">
@@ -12978,36 +13158,18 @@ function renderCoursePicker(state) {
                 </select>
               </label>
             </div>
-            <div class="row-actions compact-actions">
-              <button class="button subtle" type="button" data-action="clear-selected-course">Use Custom</button>
-            </div>
           </article>
         `
-        : `
-          <div class="split-inputs">
-            <label>
-              Course
-              <input
-                name="courseName"
-                type="text"
-                value="${escapeHtml(roundSetup.manualCourseName)}"
-                data-round-setup-field="manualCourseName"
-                placeholder="Custom course"
-              />
-            </label>
-            <label>
-              Tee
-              <input
-                name="teeBox"
-                type="text"
-                value="${escapeHtml(roundSetup.manualTeeBoxName)}"
-                data-round-setup-field="manualTeeBoxName"
-                placeholder="Blue"
-              />
-            </label>
-          </div>
-        `}
-      ${renderRoundSetupFooter({ canGoBack: true, nextLabel: "Next", nextDirection: 1 })}
+        : ""}
+      <div class="row-actions compact-actions">
+        <button class="button subtle" type="button" data-action="back-course-methods">Change method</button>
+      </div>
+      ${renderRoundSetupFooter({
+        canGoBack: true,
+        nextLabel: "Next",
+        nextDirection: 1,
+        nextDisabled: !selectedCourse,
+      })}
     </div>
   `;
 }
@@ -13022,7 +13184,7 @@ function renderCreateRoundCard(state, activeRound) {
   const selectedCourse = discovery.selectedCourse;
   const selectedTeeBox = discovery.selectedTeeBox;
   const manualCourse = buildManualRoundTemplate(
-    roundSetup.manualCourseName || activeRound?.courseName || "National Pines",
+    roundSetup.manualCourseName || activeRound?.courseName || "Manual course",
     roundSetup.manualTeeBoxName || activeRound?.teeBox || "Blue",
     { holeCount: roundSetup.selectedHoleCount || 18 }
   );
@@ -14399,7 +14561,7 @@ function renderTournamentModule(state) {
         </label>
         <label>
           Course
-          <input name="courseName" type="text" placeholder="National Pines" required />
+          <input name="courseName" type="text" placeholder="Pebble Beach Golf Links" required />
         </label>
         <div class="split-inputs">
           <label>
@@ -14445,16 +14607,11 @@ function renderCommunityView(state) {
         <div class="section-heading">
           <div>
             <p class="eyebrow">Community</p>
-            <h3>Discover golfers and join rounds fast</h3>
+            <h3>Join and discover</h3>
           </div>
           <span class="status-pill">${escapeHtml(inviteCode || "No code yet")}</span>
         </div>
-        <p class="body-copy compact-copy">Join with a code, find active golfers, or jump into nearby hosted rounds.</p>
-        <div class="community-compact-badges">
-          <span class="status-pill">Code fallback</span>
-          <span class="status-pill">Nearby games</span>
-          <span class="status-pill">Player cards</span>
-        </div>
+        <p class="body-copy compact-copy">Join by code or pick a nearby game.</p>
       </article>
       <details class="card discovery-card community-section-card" data-persist-key="community-join-options" open>
         <summary class="community-section-summary">
@@ -15094,6 +15251,21 @@ function restorePersistedDetailKeys(root, detailKeys = []) {
   });
 }
 
+function enforceSingleOpenCommunitySection(root) {
+  if (!root) {
+    return;
+  }
+
+  const openSections = [...root.querySelectorAll(".community-section-card[open]")];
+  if (openSections.length <= 1) {
+    return;
+  }
+
+  openSections.slice(1).forEach((section) => {
+    section.open = false;
+  });
+}
+
 function getDefaultSettingsSectionId(destination = "landing") {
   if (destination === "profile") {
     return "profile-identity";
@@ -15292,6 +15464,8 @@ function createRenderer(root) {
     if (sameView) {
       restorePersistedDetailKeys(root, persistedDetailKeys);
     }
+
+    enforceSingleOpenCommunitySection(root);
 
     if (pendingScrollRestore && typeof cancelAnimationFrame === "function") {
       cancelAnimationFrame(pendingScrollRestore);
@@ -16303,8 +16477,26 @@ function bootstrapApp({
     const roundSetup = getRoundSetupState(draft);
 
     if (Number(direction) > 0) {
-      if (currentStep === "course" && !roundSetup.selectedCourseId && !String(roundSetup.manualCourseName || "").trim()) {
-        setFeedback(draft, "info", "Choose Course", "Pick a course or enter a quick custom course first.");
+      if (currentStep === "course" && !String(roundSetup.courseMethod || "").trim()) {
+        setFeedback(draft, "info", "Choose Course", "Pick how you want to choose the course.");
+        return false;
+      }
+
+      if (
+        currentStep === "course"
+        && roundSetup.courseMethod === "manual"
+        && !String(roundSetup.manualCourseName || "").trim()
+      ) {
+        setFeedback(draft, "info", "Choose Course", "Enter a course name first.");
+        return false;
+      }
+
+      if (
+        currentStep === "course"
+        && roundSetup.courseMethod !== "manual"
+        && !roundSetup.selectedCourseId
+      ) {
+        setFeedback(draft, "info", "Choose Course", "Pick a course first.");
         return false;
       }
 
@@ -17429,6 +17621,43 @@ function bootstrapApp({
       return;
     }
 
+    if (action === "choose-course-method") {
+      store.setState((draft) => {
+        const method = String(actionElement.dataset.method || "search");
+        const currentSetup = getRoundSetupState(draft);
+        draft.session.roundSetup = {
+          ...currentSetup,
+          courseMethod: method,
+          courseQuery: method === "search" ? currentSetup.courseQuery : "",
+          ...(method === "search"
+            ? {
+                selectedCourseId: "",
+                selectedTeeBoxId: "",
+              }
+            : {}),
+          ...(method === "manual"
+            ? {
+                selectedCourseId: "",
+                selectedTeeBoxId: "",
+              }
+            : {}),
+        };
+        return draft;
+      }, { reason: "choose-course-method" });
+      return;
+    }
+
+    if (action === "back-course-methods") {
+      store.setState((draft) => {
+        draft.session.roundSetup = {
+          ...getRoundSetupState(draft),
+          courseMethod: "",
+        };
+        return draft;
+      }, { reason: "back-course-methods" });
+      return;
+    }
+
     if (action === "round-setup-step") {
       store.setState((draft) => {
         const explicitStep = String(actionElement.dataset.step || "").trim();
@@ -17477,6 +17706,11 @@ function bootstrapApp({
 
     if (action === "select-course") {
       store.setState((draft) => {
+        const currentSetup = getRoundSetupState(draft);
+        draft.session.roundSetup = {
+          ...currentSetup,
+          courseMethod: currentSetup.courseMethod || "search",
+        };
         setSelectedCourse(draft, actionElement.dataset.courseId, actionElement.dataset.teeBoxId || "");
         return draft;
       }, { reason: "select-course" });
@@ -17487,6 +17721,7 @@ function bootstrapApp({
       store.setState((draft) => {
         draft.session.roundSetup = {
           ...getRoundSetupState(draft),
+          courseMethod: "",
           selectedCourseId: "",
           selectedTeeBoxId: "",
         };
@@ -18422,10 +18657,29 @@ function bootstrapApp({
     store.setState((draft) => {
       draft.session.roundSetup = {
         ...getRoundSetupState(draft),
+        courseMethod: "search",
         courseQuery: String(courseSearchInput.value || "").trim(),
       };
       return draft;
     }, { reason: "course-search-input" });
+  });
+
+  root.addEventListener("toggle", (event) => {
+    const section = getClosestEventElement(event.target, ".community-section-card");
+    if (!section || !section.open) {
+      return;
+    }
+
+    const parent = section.parentElement;
+    if (!parent) {
+      return;
+    }
+
+    parent.querySelectorAll(".community-section-card[open]").forEach((item) => {
+      if (item !== section) {
+        item.open = false;
+      }
+    });
   });
 
   root.addEventListener("submit", async (event) => {

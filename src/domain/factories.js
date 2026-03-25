@@ -1,6 +1,8 @@
-import { CONNECTION_COPY, COURSE_TEMPLATE, GAME_MODES } from "../config.js";
+import { CONNECTION_COPY, COURSE_TEMPLATE, FEATURED_COURSE_ID, GAME_MODES } from "../config.js";
 import { ensureRoundSyncScaffold } from "./round-sync.js";
 import { cloneData, compactNames, uid } from "../utils/formatters.js";
+
+const DEFAULT_REAL_COURSE_NAME = "The Country Club at Golden Nugget";
 
 function slugifyName(value) {
   return String(value || "")
@@ -177,10 +179,10 @@ export function createRound({
     id: uid("round"),
     status,
     mode: safeMode,
-    courseName: courseName || "National Pines",
+    courseName: courseName || DEFAULT_REAL_COURSE_NAME,
     teeBox: teeBox || "Blue",
     teeBoxId,
-    courseId,
+    courseId: courseId || FEATURED_COURSE_ID,
     courseCity,
     courseState,
     courseCountry,

@@ -257,6 +257,21 @@ function restorePersistedDetailKeys(root, detailKeys = []) {
   });
 }
 
+function enforceSingleOpenCommunitySection(root) {
+  if (!root) {
+    return;
+  }
+
+  const openSections = [...root.querySelectorAll(".community-section-card[open]")];
+  if (openSections.length <= 1) {
+    return;
+  }
+
+  openSections.slice(1).forEach((section) => {
+    section.open = false;
+  });
+}
+
 function getDefaultSettingsSectionId(destination = "landing") {
   if (destination === "profile") {
     return "profile-identity";
@@ -456,6 +471,8 @@ export function createRenderer(root) {
     if (sameView) {
       restorePersistedDetailKeys(root, persistedDetailKeys);
     }
+
+    enforceSingleOpenCommunitySection(root);
 
     if (pendingScrollRestore && typeof cancelAnimationFrame === "function") {
       cancelAnimationFrame(pendingScrollRestore);

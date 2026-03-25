@@ -22,6 +22,7 @@ const files = [
   "src/integrations/spotify-service.js",
   "src/services/course-library.js",
   "src/services/course-providers/local-course-provider.js",
+  "src/services/course-providers/imported-us-course-provider.js",
   "src/services/course-providers/mock-course-provider.js",
   "src/services/course-providers/licensed-course-provider.js",
   "src/services/course-providers/golfnow-course-provider.js",

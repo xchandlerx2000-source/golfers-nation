@@ -400,6 +400,7 @@ describe("bootstrap app", () => {
     });
 
     openRoundWizardForLocalRound();
+    document.querySelector('[data-action="choose-course-method"][data-method="detected"]').click();
     clickRoundWizardNext();
     clickRoundWizardNext();
     const playerInput = document.querySelector('[data-round-setup-field="players"]');
@@ -433,6 +434,7 @@ describe("bootstrap app", () => {
     });
 
     openRoundWizardForLocalRound();
+    document.querySelector('[data-action="choose-course-method"][data-method="search"]').click();
     const searchInput = document.querySelector('[data-course-search-input]');
     searchInput.value = "Pebble";
     searchInput.dispatchEvent(new Event("input", { bubbles: true }));
@@ -475,6 +477,7 @@ describe("bootstrap app", () => {
     });
 
     openRoundWizardForLocalRound();
+    document.querySelector('[data-action="choose-course-method"][data-method="detected"]').click();
     clickRoundWizardNext();
     clickRoundWizardNext();
     clickRoundWizardNext();
@@ -508,6 +511,7 @@ describe("bootstrap app", () => {
     });
 
     openRoundWizardForLocalRound();
+    document.querySelector('[data-action="choose-course-method"][data-method="detected"]').click();
     clickRoundWizardNext();
     clickRoundWizardNext();
     clickRoundWizardNext();

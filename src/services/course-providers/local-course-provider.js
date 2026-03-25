@@ -12,7 +12,7 @@ import {
   normalizeCourseRecord,
 } from "../../domain/course-models.js";
 
-const LOCAL_PROVIDER_ID = "local-manual";
+const LOCAL_PROVIDER_ID = "us-course-database";
 
 const COURSE_ADDRESS_OVERRIDES = {
   "golden-nugget-lake-charles": "2550 Golden Nugget Blvd",
@@ -68,12 +68,12 @@ export const localCourseProvider = {
   id: LOCAL_PROVIDER_ID,
   meta: {
     id: LOCAL_PROVIDER_ID,
-    label: "Local/manual provider",
+    label: "U.S. course database",
     live: true,
     supportsSearch: true,
     supportsNearby: true,
     supportsRoundTemplates: true,
-    description: "Curated seeded courses plus manual fallback templates for testing and early production flows.",
+    description: "Built-in U.S. course records for search, nearby course assist, and round templates.",
   },
   searchCourses(query = "", { limit = 10 } = {}) {
     return searchCourseLibrary(query)

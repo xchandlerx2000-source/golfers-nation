@@ -108,7 +108,7 @@ const HELP_SECTIONS = [
     title: "Playing a Round",
     description: "How to start, join, score, and finish a round without getting lost.",
     items: [
-      { title: "How do I start a round?", body: "Open Round, keep Golden Nugget loaded if you want the fastest path, and tap Start round." },
+      { title: "How do I start a round?", body: "Open Round, confirm the course, and tap Start round." },
       { title: "How do invite codes work?", body: "Ask the host for the round code, open Community, then enter the code to join." },
       { title: "How should I score?", body: "Tap the large score buttons first. Use fairway, GIR, putts, and penalties for deeper stats." },
     ],
@@ -406,7 +406,7 @@ function renderFirstRoundGuide(state, placement) {
           </div>
           <span class="status-pill">New golfer</span>
         </div>
-        <p class="body-copy">Use the highlighted Start round button. Golden Nugget Lake Charles is already loaded so you can get into scoring quickly.</p>
+        <p class="body-copy">Use the highlighted Start round button and confirm the real course you are playing.</p>
         <div class="summary-grid onboarding-list">
           <article>
             <strong>1</strong>
@@ -414,7 +414,7 @@ function renderFirstRoundGuide(state, placement) {
           </article>
           <article>
             <strong>2</strong>
-            <p>Keep Golden Nugget selected and press <strong>Start round</strong>.</p>
+            <p>Confirm the course and press <strong>Start round</strong>.</p>
           </article>
           <article>
             <strong>3</strong>
@@ -439,7 +439,7 @@ function renderFirstRoundGuide(state, placement) {
           </div>
           <span class="status-pill">Keep it simple</span>
         </div>
-        <p class="body-copy compact-copy">For the easiest first round, keep stroke play selected, leave Golden Nugget loaded, and tap the highlighted <strong>Start round</strong> button.</p>
+        <p class="body-copy compact-copy">For the easiest first round, keep stroke play selected, confirm the course, and tap <strong>Start round</strong>.</p>
       </article>
     `;
   }
@@ -1339,10 +1339,8 @@ function renderPlayCourseAssistCard(state, activeRound) {
   const discovery = getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {});
   const selectedCourse = discovery.selectedCourse;
   const locationStatus = state.session?.nearby?.locationPermission === "granted"
-    ? "Location on"
-    : state.session?.nearby?.locationPermission === "denied"
-      ? "Location off"
-      : "Location optional";
+    ? "Detected"
+    : "Find course";
   const actionLabel = selectedCourse ? "Confirm course" : "Find course";
   const actionName = selectedCourse ? "nav-view" : "detect-nearby-courses";
   const actionValue = selectedCourse ? "round" : "";
@@ -1352,11 +1350,11 @@ function renderPlayCourseAssistCard(state, activeRound) {
       <div class="section-heading section-heading--compact">
         <div>
           <p class="eyebrow">Course Assist</p>
-          <h3>${escapeHtml(selectedCourse?.name || discovery.nearbyCopy.title)}</h3>
+          <h3>${escapeHtml(selectedCourse?.displayName || selectedCourse?.name || "Find course")}</h3>
         </div>
         <span class="status-pill">${escapeHtml(locationStatus)}</span>
       </div>
-      <p class="play-active-copy">${escapeHtml(selectedCourse ? `${selectedCourse.city}, ${selectedCourse.state}` : "Find a course to start.")}</p>
+      ${selectedCourse ? `<p class="play-active-copy">${escapeHtml(`${selectedCourse.city}, ${selectedCourse.state}`)}</p>` : ""}
       <div class="row-actions compact-actions">
         <button class="button secondary" type="button" data-action="${actionName}" ${actionValue ? `data-view="${actionValue}"` : ""}>
           ${actionLabel}
@@ -1426,13 +1424,10 @@ function renderPlayActiveGameCard(state, activeRound) {
     return `
       <article class="card play-screen-card play-compact-card play-active-card play-active-card--empty">
         <div class="play-screen-card-head">
-          <div>
-            <p class="eyebrow">Active Game</p>
-            <h3>No live round yet</h3>
-          </div>
+          <p class="eyebrow">Active Game</p>
           <span class="status-pill">Ready</span>
         </div>
-        <p class="play-active-copy">Start a round or join one to see it here.</p>
+        <strong>No round yet</strong>
       </article>
     `;
   }
@@ -1609,14 +1604,15 @@ function getRoundSetup(state) {
   return {
     step: setup.step || "type",
     intent: setup.intent || "local",
+    courseMethod: setup.courseMethod || "",
     courseQuery: setup.courseQuery || "",
     selectedCourseId: setup.selectedCourseId || "",
     selectedTeeBoxId: setup.selectedTeeBoxId || "",
     selectedHoleCount: Number(setup.selectedHoleCount || 18),
     mode: setup.mode || "stroke",
     players: setup.players || "",
-    manualCourseName: setup.manualCourseName || "National Pines",
-    manualTeeBoxName: setup.manualTeeBoxName || "Blue",
+    manualCourseName: setup.manualCourseName || "",
+    manualTeeBoxName: setup.manualTeeBoxName || "",
   };
 }
 
@@ -1749,7 +1745,7 @@ function renderAuthScreen(state) {
             </article>
             <article>
               <strong>3</strong>
-              <p>Golden Nugget Lake Charles will be ready as your first course.</p>
+              <p>The app will preload a real course so you can start quickly.</p>
             </article>
           </div>
         ` : ""}
@@ -1909,35 +1905,6 @@ function renderSettingsLandingView(state) {
   `;
 }
 
-function renderSettingsDestinationSwitch(destination) {
-  return `
-    <div class="settings-destination-switch" role="tablist" aria-label="Profile destinations">
-      <button
-        class="settings-destination-pill ${destination === "profile" ? "is-active" : ""}"
-        type="button"
-        data-action="set-settings-destination"
-        data-destination="profile"
-        data-section="profile-identity"
-        role="tab"
-        aria-selected="${destination === "profile" ? "true" : "false"}"
-      >
-        My Profile
-      </button>
-      <button
-        class="settings-destination-pill ${destination === "app" ? "is-active" : ""}"
-        type="button"
-        data-action="set-settings-destination"
-        data-destination="app"
-        data-section="account"
-        role="tab"
-        aria-selected="${destination === "app" ? "true" : "false"}"
-      >
-        App Settings
-      </button>
-    </div>
-  `;
-}
-
 function renderSettingsDestinationHeader(state, destination) {
   const copy = getSettingsDestinationCopy(destination);
 
@@ -1951,7 +1918,6 @@ function renderSettingsDestinationHeader(state, destination) {
           <p class="compact-copy">${escapeHtml(copy.description)}</p>
         </div>
       </div>
-      ${renderSettingsDestinationSwitch(destination)}
       ${renderSettingsSectionNav(state, destination)}
     </article>
   `;
@@ -2794,6 +2760,7 @@ function renderCoursePicker(state) {
     nearbyCourses,
     nearbyCopy,
   } = discovery;
+  const courseMethod = String(roundSetup.courseMethod || "").trim();
   const holeCountOptions = [9, 18]
     .filter((count) => count <= Number(selectedCourse?.holesCount || 18))
     .concat(
@@ -2806,6 +2773,158 @@ function renderCoursePicker(state) {
     : state.session?.nearby?.locationPermission === "denied"
       ? "Location off"
       : "Location optional";
+
+  if (!courseMethod) {
+    return `
+      <div class="stack-list course-picker-block round-setup-step-card">
+        <div class="round-setup-step-head">
+          <p class="eyebrow">Step 2</p>
+          <h4>Choose course</h4>
+        </div>
+        <div class="round-choice-grid round-choice-grid--tight">
+          <button class="round-choice-button" type="button" data-action="choose-course-method" data-method="detected">
+            <strong>Nearby Courses</strong>
+            <span>Use location assist</span>
+          </button>
+          <button class="round-choice-button" type="button" data-action="choose-course-method" data-method="search">
+            <strong>Search Course</strong>
+            <span>Find by name or city</span>
+          </button>
+          <button class="round-choice-button" type="button" data-action="choose-course-method" data-method="manual">
+            <strong>Quick Custom</strong>
+            <span>Use a simple card</span>
+          </button>
+        </div>
+        <div class="round-setup-footer">
+          <button class="button subtle" type="button" data-action="round-setup-step" data-direction="-1">Back</button>
+          <span class="round-setup-footer-spacer"></span>
+        </div>
+      </div>
+    `;
+  }
+
+  if (courseMethod === "manual") {
+    return `
+      <div class="stack-list course-picker-block round-setup-step-card">
+        <div class="round-setup-step-head">
+          <p class="eyebrow">Step 2</p>
+          <h4>Custom course</h4>
+        </div>
+        <div class="split-inputs">
+          <label>
+            Course
+            <input
+              name="courseName"
+              type="text"
+              value="${escapeHtml(roundSetup.manualCourseName)}"
+              data-round-setup-field="manualCourseName"
+              placeholder="Course name"
+            />
+          </label>
+          <label>
+            Tee
+            <input
+              name="teeBox"
+              type="text"
+              value="${escapeHtml(roundSetup.manualTeeBoxName)}"
+              data-round-setup-field="manualTeeBoxName"
+              placeholder="Tee name"
+            />
+          </label>
+        </div>
+        <div class="row-actions compact-actions">
+          <button class="button subtle" type="button" data-action="back-course-methods">Change method</button>
+        </div>
+        ${renderRoundSetupFooter({
+          canGoBack: true,
+          nextLabel: "Next",
+          nextDirection: 1,
+          nextDisabled: !String(roundSetup.manualCourseName || "").trim(),
+        })}
+      </div>
+    `;
+  }
+
+  if (courseMethod === "search") {
+    return `
+      <div class="stack-list course-picker-block round-setup-step-card">
+        <div class="round-setup-step-head">
+          <p class="eyebrow">Step 2</p>
+          <h4>Search course</h4>
+        </div>
+        <div class="course-search-shell" data-course-search-shell="true">
+          <label class="course-search-field">
+            <span>Search Course</span>
+            <input data-course-search-input="true" type="search" value="${escapeHtml(roundSetup.courseQuery)}" placeholder="Course or city" />
+          </label>
+        </div>
+        <div class="course-results-list course-results-list--compact">
+          ${searchResults.length
+            ? searchResults.slice(0, 6).map((course) => {
+                const featuredTee = getDefaultCourseTeeBox(course);
+                const isSelected = course.id === selectedCourse?.id;
+                return `
+                  <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
+                    <div class="course-result-copy">
+                      <strong>${escapeHtml(course.displayName || course.name)}</strong>
+                      <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
+                    </div>
+                    <div class="course-result-meta">
+                      <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
+                      <span>${featuredTee?.totalYardage || "--"} yds</span>
+                    </div>
+                  </button>
+                `;
+              }).join("")
+            : `
+              <div class="empty-state compact-empty-state">
+                <strong>No course match</strong>
+              </div>
+            `}
+        </div>
+        ${selectedCourse && selectedTeeBox
+          ? `
+            <article class="course-selected-card" data-selected-course="true">
+              <div class="course-selected-copy">
+                <span class="mini-label">Selected</span>
+                <strong>${escapeHtml(selectedCourse.displayName || selectedCourse.name)}</strong>
+                <p>${escapeHtml(selectedTeeBox.name)} / ${selectedTeeBox.totalYardage} yds / Par ${selectedTeeBox.totalPar}</p>
+              </div>
+              <div class="split-inputs course-selected-actions">
+                <label>
+                  Tee
+                  <select name="selectedTeeBoxId" form="create-round-form" data-course-tee-select="true">
+                    ${selectedCourse.teeBoxes.map((teeBox) => `
+                      <option value="${teeBox.id}" ${teeBox.id === selectedTeeBox.id ? "selected" : ""}>
+                        ${escapeHtml(teeBox.name)} / ${teeBox.totalYardage} yds
+                      </option>
+                    `).join("")}
+                  </select>
+                </label>
+                <label>
+                  Holes
+                  <select name="selectedHoleCount" form="create-round-form" data-course-hole-count-select="true">
+                    ${holeCountOptions.map((count) => `
+                      <option value="${count}" ${count === roundSetup.selectedHoleCount ? "selected" : ""}>${count}</option>
+                    `).join("")}
+                  </select>
+                </label>
+              </div>
+            </article>
+          `
+          : ""}
+        <div class="row-actions compact-actions">
+          <button class="button subtle" type="button" data-action="back-course-methods">Change method</button>
+        </div>
+        ${renderRoundSetupFooter({
+          canGoBack: true,
+          nextLabel: "Next",
+          nextDirection: 1,
+          nextDisabled: !selectedCourse,
+        })}
+      </div>
+    `;
+  }
 
   return `
     <div class="stack-list course-picker-block round-setup-step-card">
@@ -2830,67 +2949,39 @@ function renderCoursePicker(state) {
               const isSelected = course.id === selectedCourse?.id;
               return `
                 <button class="course-result-card course-result-card--compact ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${nearbyTee?.id || ""}">
-                  <strong>${escapeHtml(course.name)}</strong>
+                  <strong>${escapeHtml(course.displayName || course.name)}</strong>
                   <p>${escapeHtml(course.nearbyDistanceLabel || `${course.city}, ${course.state}`)}</p>
                 </button>
               `;
             }).join("")}
           </div>
         `
-        : ""}
-      ${quickPicks.length
-        ? `
-          <div class="round-setup-choice-row" aria-label="Quick course picks">
-            ${quickPicks.map((course) => {
-              const featuredTee = getDefaultCourseTeeBox(course);
-              const isSelected = course.id === selectedCourse?.id;
-              return `
-                <button class="course-result-card course-result-card--compact ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
-                  <strong>${escapeHtml(course.name)}</strong>
-                  <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
-                </button>
-              `;
-            }).join("")}
-          </div>
-        `
-        : ""}
-      <div class="course-search-shell" data-course-search-shell="true">
-        <label class="course-search-field">
-          <span>Search Course</span>
-          <input data-course-search-input="true" type="search" value="${escapeHtml(roundSetup.courseQuery)}" placeholder="Course or city" />
-        </label>
-      </div>
-      <div class="course-results-list course-results-list--compact">
-        ${searchResults.length
-          ? searchResults.slice(0, 6).map((course) => {
-              const featuredTee = getDefaultCourseTeeBox(course);
-              const isSelected = course.id === selectedCourse?.id;
-              return `
-                <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
-                  <div class="course-result-copy">
-                    <strong>${escapeHtml(course.name)}</strong>
+        : quickPicks.length
+          ? `
+            <div class="round-setup-choice-row" aria-label="Quick course picks">
+              ${quickPicks.map((course) => {
+                const featuredTee = getDefaultCourseTeeBox(course);
+                const isSelected = course.id === selectedCourse?.id;
+                return `
+                  <button class="course-result-card course-result-card--compact ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
+                    <strong>${escapeHtml(course.displayName || course.name)}</strong>
                     <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
-                  </div>
-                  <div class="course-result-meta">
-                    <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
-                    <span>${featuredTee?.totalYardage || "--"} yds</span>
-                  </div>
-                </button>
-              `;
-            }).join("")
+                  </button>
+                `;
+              }).join("")}
+            </div>
+          `
           : `
             <div class="empty-state compact-empty-state">
-              <strong>No course match</strong>
-              <p>Use the quick custom course below.</p>
+              <strong>No nearby course</strong>
             </div>
           `}
-      </div>
       ${selectedCourse && selectedTeeBox
         ? `
           <article class="course-selected-card" data-selected-course="true">
             <div class="course-selected-copy">
               <span class="mini-label">Selected</span>
-              <strong>${escapeHtml(selectedCourse.name)}</strong>
+              <strong>${escapeHtml(selectedCourse.displayName || selectedCourse.name)}</strong>
               <p>${escapeHtml(selectedTeeBox.name)} / ${selectedTeeBox.totalYardage} yds / Par ${selectedTeeBox.totalPar}</p>
             </div>
             <div class="split-inputs course-selected-actions">
@@ -2913,36 +3004,18 @@ function renderCoursePicker(state) {
                 </select>
               </label>
             </div>
-            <div class="row-actions compact-actions">
-              <button class="button subtle" type="button" data-action="clear-selected-course">Use Custom</button>
-            </div>
           </article>
         `
-        : `
-          <div class="split-inputs">
-            <label>
-              Course
-              <input
-                name="courseName"
-                type="text"
-                value="${escapeHtml(roundSetup.manualCourseName)}"
-                data-round-setup-field="manualCourseName"
-                placeholder="Custom course"
-              />
-            </label>
-            <label>
-              Tee
-              <input
-                name="teeBox"
-                type="text"
-                value="${escapeHtml(roundSetup.manualTeeBoxName)}"
-                data-round-setup-field="manualTeeBoxName"
-                placeholder="Blue"
-              />
-            </label>
-          </div>
-        `}
-      ${renderRoundSetupFooter({ canGoBack: true, nextLabel: "Next", nextDirection: 1 })}
+        : ""}
+      <div class="row-actions compact-actions">
+        <button class="button subtle" type="button" data-action="back-course-methods">Change method</button>
+      </div>
+      ${renderRoundSetupFooter({
+        canGoBack: true,
+        nextLabel: "Next",
+        nextDirection: 1,
+        nextDisabled: !selectedCourse,
+      })}
     </div>
   `;
 }
@@ -2957,7 +3030,7 @@ function renderCreateRoundCard(state, activeRound) {
   const selectedCourse = discovery.selectedCourse;
   const selectedTeeBox = discovery.selectedTeeBox;
   const manualCourse = buildManualRoundTemplate(
-    roundSetup.manualCourseName || activeRound?.courseName || "National Pines",
+    roundSetup.manualCourseName || activeRound?.courseName || "Manual course",
     roundSetup.manualTeeBoxName || activeRound?.teeBox || "Blue",
     { holeCount: roundSetup.selectedHoleCount || 18 }
   );
@@ -4334,7 +4407,7 @@ function renderTournamentModule(state) {
         </label>
         <label>
           Course
-          <input name="courseName" type="text" placeholder="National Pines" required />
+          <input name="courseName" type="text" placeholder="Pebble Beach Golf Links" required />
         </label>
         <div class="split-inputs">
           <label>
@@ -4380,16 +4453,11 @@ function renderCommunityView(state) {
         <div class="section-heading">
           <div>
             <p class="eyebrow">Community</p>
-            <h3>Discover golfers and join rounds fast</h3>
+            <h3>Join and discover</h3>
           </div>
           <span class="status-pill">${escapeHtml(inviteCode || "No code yet")}</span>
         </div>
-        <p class="body-copy compact-copy">Join with a code, find active golfers, or jump into nearby hosted rounds.</p>
-        <div class="community-compact-badges">
-          <span class="status-pill">Code fallback</span>
-          <span class="status-pill">Nearby games</span>
-          <span class="status-pill">Player cards</span>
-        </div>
+        <p class="body-copy compact-copy">Join by code or pick a nearby game.</p>
       </article>
       <details class="card discovery-card community-section-card" data-persist-key="community-join-options" open>
         <summary class="community-section-summary">
