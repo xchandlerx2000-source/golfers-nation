@@ -11506,7 +11506,6 @@ function renderLiveSessionStrip(activeRound, activeGroup) {
     ? activeGroup.members.map((member) => member.displayName).filter(Boolean)
     : activeRound?.players?.map((player) => player.name).filter(Boolean) || [];
   const playerCount = players.length || 1;
-  const liveStatus = `${getGameModeLabel(activeRound?.mode || "stroke")} • ${sync?.title || "Not connected"}`;
   const liveBadge = activeRound?.sync?.transport && activeRound.sync.transport !== "local"
     ? "LIVE"
     : "LOCAL";
@@ -11521,12 +11520,14 @@ function renderLiveSessionStrip(activeRound, activeGroup) {
       <details class="live-strip${hiddenClass}" id="liveStrip" data-persist-key="live-strip">
         <summary class="live-strip-summary">
           <div class="live-strip-main">
-            <span class="live-strip-badge">${liveBadge}</span>
-            <span class="live-strip-status">${escapeHtml(sync?.title || "Not connected")}</span>
-            <span aria-hidden="true">&bull;</span>
-            <span id="livePlayers" class="live-strip-players">${playerCount} ${playerCount === 1 ? "golfer" : "golfers"}</span>
+            <span class="live-strip-status-line">
+              <span class="live-strip-badge">${liveBadge}</span>
+              <span class="live-strip-status">${escapeHtml(sync?.title || "Not connected")}</span>
+              <span aria-hidden="true">&bull;</span>
+              <span id="livePlayers" class="live-strip-players">${playerCount} ${playerCount === 1 ? "player" : "players"}</span>
+            </span>
           </div>
-          <span class="live-strip-toggle">Open</span>
+          <span class="live-strip-toggle" aria-hidden="true">+</span>
         </summary>
         <div class="live-strip-detail-row">
           <span>Code <b id="liveCode">${escapeHtml(inviteCode)}</b>${escapeHtml(`${activeRound?.currentHole ? ` / Hole ${activeRound.currentHole}` : ""} / ${detailSummary}`)}</span>
@@ -12031,10 +12032,21 @@ function renderNearbyPlayerRows(nearbyPlayers) {
 
 function renderPrimaryActions(state, activeRound) {
   const hasActiveRound = Boolean(activeRound && activeRound.status === "active");
+  const activeGroup = getActiveGroup(state, activeRound);
+  const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "";
   return `
       <div class="play-screen-actions">
-        <button class="button primary primary-btn ${shouldShowFirstRoundGuide(state) && !hasActiveRound ? "guided-action" : ""}" type="button" data-action="nav-view" data-view="round">Start Round</button>
-        <button class="button secondary secondary-btn" type="button" data-action="open-community-join">Join Game</button>
+        ${hasActiveRound
+          ? `
+            <button class="button primary primary-btn" type="button" data-action="resume-round" data-round-id="${activeRound.id}">Open Score</button>
+            ${inviteCode
+              ? `<button class="button secondary secondary-btn" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Invite</button>`
+              : `<button class="button secondary secondary-btn" type="button" data-action="host-active-round">Invite</button>`}
+          `
+          : `
+            <button class="button primary primary-btn ${shouldShowFirstRoundGuide(state) ? "guided-action" : ""}" type="button" data-action="nav-view" data-view="round">Start Round</button>
+            <button class="button secondary secondary-btn" type="button" data-action="open-community-join">Join Game</button>
+          `}
       </div>
     `;
 }
@@ -14357,24 +14369,6 @@ function renderHoleEditor(state, round) {
       <div class="participant-grid participant-grid--single">
         ${primaryParticipant ? renderEditableParticipant(primaryParticipant) : ""}
       </div>
-      ${secondaryParticipants.length
-        ? `
-          <details class="round-secondary-entry" data-persist-key="round-group-entry-${round.id}-${hole.number}">
-            <summary>
-              <span>Players</span>
-              <strong>${secondaryParticipants.length} more ${secondaryParticipants.length === 1 ? "golfer" : "golfers"}</strong>
-            </summary>
-            <div class="stack-list round-secondary-entry-list">
-              <div class="stack-list compact-stack shared-round-list">
-                ${secondaryParticipants.map((participant) => renderSharedParticipantRow(participant)).join("")}
-              </div>
-              <div class="stack-list round-secondary-entry-list">
-                ${secondaryParticipants.map((participant) => renderEditableParticipant(participant, { secondary: true })).join("")}
-              </div>
-            </div>
-          </details>
-        `
-        : ""}
     </article>
   `;
 }

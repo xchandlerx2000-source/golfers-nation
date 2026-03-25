@@ -88,8 +88,9 @@ describe("ui helpers", () => {
 
     expect(markup).toContain('id="liveStrip"');
     expect(markup).toContain("ABC123");
-    expect(markup).toContain("2 golfers");
-    expect(markup).toContain("Open");
+    expect(markup).toContain("2 players");
+    expect(markup).toContain("LIVE");
+    expect(markup).toContain("Connected");
   });
 
   it("shows local-first trust messaging when live round backup needs a retry", () => {
@@ -166,6 +167,40 @@ describe("ui helpers", () => {
     expect(markup).not.toContain("Active Game");
     expect(markup).not.toContain("Course Assist");
     expect(markup).not.toContain("Confirm course");
+  });
+
+  it("shows only Open Score and Invite on Home when an active round exists", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "home";
+
+    const round = createRound({
+      currentUser: state.currentUser,
+      courseName: "Pebble Beach Golf Links",
+      teeBox: "Blue",
+      weather: "Clear 72F",
+      mode: "stroke",
+      players: [state.currentUser.name, "Maya Chen"],
+      syncTransport: "invite",
+      inviteCode: "ABC123",
+    });
+    const group = createGroup({
+      round,
+      currentUser: state.currentUser,
+      inviteCode: "ABC123",
+    });
+
+    state.rounds.unshift(round);
+    state.groups.unshift(group);
+    state.session.activeRoundId = round.id;
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Open Score");
+    expect(markup).toContain(">Invite<");
+    expect(markup).not.toContain(">Start Round<");
+    expect(markup).not.toContain(">Join Game<");
   });
 
   it("renders the seeded course picker inside round setup", () => {
