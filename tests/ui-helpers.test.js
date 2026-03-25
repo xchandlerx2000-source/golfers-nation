@@ -89,7 +89,7 @@ describe("ui helpers", () => {
     expect(markup).toContain('id="liveStrip"');
     expect(markup).toContain("ABC123");
     expect(markup).toContain("2 golfers");
-    expect(markup).toContain("Details");
+    expect(markup).toContain("Open");
   });
 
   it("shows local-first trust messaging when live round backup needs a retry", () => {
@@ -163,7 +163,7 @@ describe("ui helpers", () => {
     expect(markup).toContain("Start Round");
     expect(markup).toContain("Join Game");
     expect(markup).toContain('data-action="open-community-join"');
-    expect(markup).toContain("Active Game");
+    expect(markup).not.toContain("Active Game");
     expect(markup).not.toContain("Course Assist");
     expect(markup).not.toContain("Confirm course");
   });
@@ -375,9 +375,9 @@ describe("ui helpers", () => {
     expect(markup).toContain('data-action="adjust-score"');
     expect(markup).toContain("Next Hole");
     expect(markup).toContain("More stats");
-    expect(markup).toContain("Players / Group");
-    expect(markup).toContain("Leaderboard");
-    expect(markup).toContain("Finish Round");
+    expect(markup).toContain("Players");
+    expect(markup).toContain("Live board");
+    expect(markup).toContain("Finish");
     expect(markup).not.toContain('class="hole-pill');
   });
 
@@ -456,7 +456,7 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Finish Round");
+    expect(markup).toContain("Finish");
     expect(markup).toContain("0/18 played");
     expect(markup).toContain(`data-action="finish-round" data-round-id="${state.rounds[0].id}" disabled`);
   });

@@ -1205,10 +1205,12 @@ body[data-app-shell-mode="standalone"] .screen-stage {
 }
 
 .brand-mark--compact {
-  width: 38px;
-  height: 38px;
-  border-radius: 14px;
-  font-size: 0.78rem;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  font-size: 0.74rem;
+  border-color: rgba(var(--accent-rgb), 0.12);
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.14), rgba(var(--success-rgb), 0.1));
 }
 
 .round-entry-card {
@@ -5151,31 +5153,31 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
-  min-height: 48px;
+  min-height: 44px;
   margin: 0 -12px 6px;
-  padding: 0 12px;
+  padding: 0 10px;
   border-radius: 0;
   border-left: 0;
   border-right: 0;
   border-top: 0;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent),
     color-mix(in srgb, var(--nav-shell-bg) 96%, transparent);
-  box-shadow: 0 8px 20px rgba(9, 14, 27, 0.18);
+  box-shadow: 0 6px 16px rgba(9, 14, 27, 0.14);
 }
 
 .top-bar {
-  height: 48px;
+  height: 44px;
   justify-content: space-between;
   align-items: center;
-  column-gap: 8px;
+  column-gap: 6px;
 }
 
 .top-bar-action,
 .top-left,
 .top-right {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -5421,12 +5423,12 @@ body {
 
 .score-screen {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .score-screen h2 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.42rem;
   line-height: 1.05;
   text-align: center;
 }
@@ -5435,18 +5437,18 @@ body {
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
   color: var(--text-soft);
-  font-size: 0.8rem;
+  font-size: 0.76rem;
 }
 
 .score-control {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   font-size: 24px;
-  margin: 10px 0 14px;
+  margin: 8px 0 10px;
 }
 
 .score-control button {
@@ -5760,6 +5762,10 @@ body {
 
 .live-strip {
   margin: 0 -12px 6px;
+  background:
+    linear-gradient(180deg, rgba(var(--success-rgb), 0.14), rgba(var(--success-rgb), 0.08)),
+    color-mix(in srgb, var(--success) 12%, var(--nav-shell-bg));
+  font-size: 11px;
 }
 
 .live-strip-summary {
@@ -5767,7 +5773,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 5px 12px;
+  padding: 4px 12px;
   list-style: none;
   cursor: pointer;
 }
@@ -5788,12 +5794,12 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 18px;
-  padding: 0 7px;
+  min-height: 16px;
+  padding: 0 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.14);
   color: #ffffff;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: 800;
   letter-spacing: 0.05em;
 }
@@ -5801,7 +5807,7 @@ body {
 .live-strip-code,
 .live-strip-status,
 .live-strip-players {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   line-height: 1.1;
 }
 
@@ -5816,39 +5822,39 @@ body {
 
 .live-strip-toggle {
   color: rgba(255, 255, 255, 0.78);
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   white-space: nowrap;
 }
 
 .live-strip-detail-row {
   display: grid;
   gap: 2px;
-  padding: 0 12px 6px;
+  padding: 0 12px 5px;
   color: rgba(255, 255, 255, 0.84);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
 }
 
 .play-screen {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .play-screen-card,
 .play-screen-hero {
-  gap: 6px;
-  padding: 9px 10px;
+  gap: 5px;
+  padding: 8px 9px;
   margin-bottom: 0;
   border-radius: 12px;
   border: 1px solid var(--line-soft);
   background:
-    linear-gradient(180deg, rgba(255, 248, 236, 0.04), rgba(255, 248, 236, 0.01)),
-    color-mix(in srgb, var(--surface) 95%, transparent);
-  box-shadow: var(--shadow-soft);
+    linear-gradient(180deg, rgba(255, 248, 236, 0.025), rgba(255, 248, 236, 0)),
+    color-mix(in srgb, var(--surface) 97%, transparent);
+  box-shadow: 0 10px 20px rgba(10, 14, 21, 0.14);
 }
 
 .play-screen-grid {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .play-screen-card h3,
@@ -5859,40 +5865,66 @@ body {
 }
 
 .play-screen-card-head {
-  gap: 6px;
+  gap: 5px;
   align-items: flex-start;
 }
 
 .play-screen-actions {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .primary-btn,
 .secondary-btn {
   margin: 0;
-  padding: 12px;
-  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 12px;
+  min-height: 46px;
   font-size: 15px;
   border-radius: 12px;
 }
 
-.play-active-card {
-  gap: 6px;
+.primary-btn::after,
+.secondary-btn::after {
+  content: "\2192";
+  font-size: 0.95em;
+  opacity: 0.78;
+  transform: translateX(0);
+  transition: transform var(--motion-standard), opacity var(--motion-standard);
 }
 
-.play-course-card .nearby-strategy-card {
-  margin-top: 2px;
-  padding: 10px;
-  border-radius: 12px;
+.primary-btn:hover::after,
+.secondary-btn:hover::after,
+.primary-btn:focus-visible::after,
+.secondary-btn:focus-visible::after {
+  opacity: 1;
+  transform: translateX(1px);
+}
+
+.play-active-card {
+  gap: 5px;
+}
+
+.play-active-card--empty {
+  min-height: 0;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.play-active-card--empty strong {
+  font-size: 0.92rem;
+  font-weight: 600;
 }
 
 .play-active-strip-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
   color: var(--text-soft);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
 }
 
 .play-active-strip-meta span {
@@ -5925,7 +5957,7 @@ body {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   color: var(--text);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
 }
 
 .play-player-pill--extra {

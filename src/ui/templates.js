@@ -845,15 +845,17 @@ function renderAppShellHeader(state, activeRound, subscription) {
 }
 
 function renderLiveSessionStrip(activeRound, activeGroup) {
+  const sync = activeRound ? getSyncPresentation(activeRound, activeGroup) : null;
   const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "---";
   const players = activeGroup?.members?.length
     ? activeGroup.members.map((member) => member.displayName).filter(Boolean)
     : activeRound?.players?.map((player) => player.name).filter(Boolean) || [];
   const playerCount = players.length || 1;
-  const liveStatus = activeRound?.connectionState === "live"
-    ? "Live sync"
-    : "Saved local";
+  const liveStatus = sync?.title || "Not connected";
   const holeLabel = activeRound?.currentHole ? `Hole ${activeRound.currentHole}` : "Hole 1";
+  const liveBadge = activeRound?.sync?.transport && activeRound.sync.transport !== "local"
+    ? "LIVE"
+    : "LOCAL";
   const detailSummary = [
     activeRound?.courseName || "Active round",
     activeRound?.teeBox ? `${activeRound.teeBox} tees` : null,
@@ -861,20 +863,20 @@ function renderLiveSessionStrip(activeRound, activeGroup) {
   ].filter(Boolean).join(" / ");
   const hiddenClass = activeRound ? "" : " hidden";
   return `
-    <details class="live-strip${hiddenClass}" id="liveStrip" data-persist-key="live-strip">
-      <summary class="live-strip-summary">
-        <div class="live-strip-main">
-          <span class="live-strip-badge">LIVE</span>
-          <span class="live-strip-code"><b id="liveCode">${escapeHtml(inviteCode)}</b></span>
-          <span id="livePlayers" class="live-strip-players">${playerCount} ${playerCount === 1 ? "golfer" : "golfers"}</span>
-          <span class="live-strip-status">${escapeHtml(`${holeLabel} / ${liveStatus}`)}</span>
+      <details class="live-strip${hiddenClass}" id="liveStrip" data-persist-key="live-strip">
+        <summary class="live-strip-summary">
+          <div class="live-strip-main">
+            <span class="live-strip-badge">${liveBadge}</span>
+            <span class="live-strip-code"><b id="liveCode">${escapeHtml(inviteCode)}</b></span>
+            <span id="livePlayers" class="live-strip-players">${playerCount} ${playerCount === 1 ? "golfer" : "golfers"}</span>
+            <span class="live-strip-status">${escapeHtml(`${holeLabel} / ${liveStatus}`)}</span>
+          </div>
+          <span class="live-strip-toggle">Open</span>
+        </summary>
+        <div class="live-strip-detail-row">
+          <span>${escapeHtml(detailSummary)}</span>
+          <span>${escapeHtml(players.join(", ") || "You")}</span>
         </div>
-        <span class="live-strip-toggle">Details</span>
-      </summary>
-      <div class="live-strip-detail-row">
-        <span>${escapeHtml(detailSummary)}</span>
-        <span>${escapeHtml(players.join(", ") || "You")}</span>
-      </div>
     </details>
   `;
 }
@@ -1394,10 +1396,6 @@ function renderPlayActiveGameCard(state, activeRound) {
   if (!activeRound) {
     return `
       <article class="card play-screen-card play-compact-card play-active-card play-active-card--empty">
-        <div class="play-screen-card-head">
-          <p class="eyebrow">Active Game</p>
-          <span class="status-pill">Ready</span>
-        </div>
         <strong>No round yet</strong>
       </article>
     `;
@@ -1409,7 +1407,7 @@ function renderPlayActiveGameCard(state, activeRound) {
       <article class="card play-screen-card play-compact-card play-active-card">
         <div class="play-screen-card-head">
           <div>
-            <p class="eyebrow">Active Game</p>
+            <p class="eyebrow">Live round</p>
             <h3>${escapeHtml(activeRound.courseName)}</h3>
           </div>
           <span class="status-pill ${sync.tone === "success" ? "is-live" : ""}">${escapeHtml(sync.title)}</span>
@@ -1417,18 +1415,18 @@ function renderPlayActiveGameCard(state, activeRound) {
         <div class="play-active-strip-meta">
           <span><strong>Code</strong> ${escapeHtml(inviteCode || "---")}</span>
           <span><strong>Hole</strong> ${activeRound.currentHole}</span>
-          <span><strong>Tee</strong> ${escapeHtml(activeRound.teeBox || "Default")}</span>
+          <span><strong>Players</strong> ${players.length || 1}</span>
           <span><strong>Status</strong> ${escapeHtml(sync.title)}</span>
         </div>
         <div class="play-active-players" aria-label="Players in active game">
           ${visiblePlayers.length
-            ? visiblePlayers.map((name) => `<span class="play-player-pill">${escapeHtml(name)}</span>`).join("")
-            : `<span class="play-player-pill">You</span>`}
+              ? visiblePlayers.map((name) => `<span class="play-player-pill">${escapeHtml(name)}</span>`).join("")
+              : `<span class="play-player-pill">You</span>`}
           ${extraPlayers > 0 ? `<span class="play-player-pill play-player-pill--extra">+${extraPlayers}</span>` : ""}
         </div>
         <div class="row-actions compact-actions">
-          <button class="button primary" type="button" data-action="resume-round" data-round-id="${activeRound.id}">Continue Round</button>
-          ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Copy invite</button>` : `<button class="button secondary" type="button" data-action="host-active-round">Go live</button>`}
+          <button class="button primary" type="button" data-action="resume-round" data-round-id="${activeRound.id}">Open Score</button>
+          ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Invite</button>` : `<button class="button secondary" type="button" data-action="host-active-round">Go live</button>`}
         </div>
       </article>
     `;
@@ -3580,7 +3578,6 @@ function renderHoleEditor(state, round) {
                 <div class="score-screen-meta">
                   <span>Par ${hole.par}</span>
                   <span>${hole.yards} yds</span>
-                  <span>${escapeHtml(context.leaderboardEntry?.displayStatus || "Ready")}</span>
                 </div>
                 <div class="score-control">
                   <button
@@ -3614,7 +3611,7 @@ function renderHoleEditor(state, round) {
         <details class="advanced-hole-stats" data-persist-key="advanced-hole-${hole.number}-${participant.id}">
           <summary>
             <span>More stats</span>
-            <strong>${escapeHtml(context.advancedSummary)}</strong>
+            <strong>Putts, penalties, flags</strong>
           </summary>
           <div class="advanced-hole-stats-body">
             <div class="split-inputs score-secondary-grid">
@@ -3718,7 +3715,7 @@ function renderHoleEditor(state, round) {
           ${renderAvatarChip(context.previewProfile?.publicProfile.avatarLabel || participant.avatarLabel)}
           <div>
             <strong>${escapeHtml(participant.name)}</strong>
-            <p>${escapeHtml(context.feedback.headline)} / ${escapeHtml(context.leaderboardEntry?.displayStatus || "Waiting")}</p>
+            <p>${escapeHtml(context.feedback.headline)}</p>
           </div>
         </div>
         <div class="shared-round-row-metrics">
@@ -3752,7 +3749,7 @@ function renderHoleEditor(state, round) {
         ? `
           <details class="round-secondary-entry" data-persist-key="round-group-entry-${round.id}-${hole.number}">
             <summary>
-              <span>Players / Group</span>
+              <span>Players</span>
               <strong>${secondaryParticipants.length} more ${secondaryParticipants.length === 1 ? "golfer" : "golfers"}</strong>
             </summary>
             <div class="stack-list round-secondary-entry-list">
@@ -3825,7 +3822,7 @@ function renderRoundPlayersDrawer(state, round, group) {
   return `
     <details class="round-secondary-entry" data-persist-key="round-session-${round.id}">
       <summary>
-        <span>Players / Group</span>
+        <span>Players</span>
         <strong>${round.players.length} golfers${inviteCode ? ` / ${inviteCode}` : ""}</strong>
       </summary>
       <div class="stack-list round-secondary-entry-list">
@@ -3843,7 +3840,7 @@ function renderRoundPlayersDrawer(state, round, group) {
         </div>
         <div class="row-actions compact-actions">
           ${inviteCode
-            ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Copy code</button>`
+            ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Invite</button>`
             : `<button class="button secondary" type="button" data-action="host-active-round">Host round</button>`}
           <button class="button subtle" type="button" data-action="nav-view" data-view="community">Room</button>
         </div>
@@ -3860,7 +3857,7 @@ function renderRoundLeaderboardDrawer(state, round) {
   return `
     <details class="round-secondary-entry" data-persist-key="round-leaderboard-${round.id}">
       <summary>
-        <span>Leaderboard</span>
+        <span>Live board</span>
         <strong>${localEntry ? `You #${localEntry.rank}` : leader ? `Leader ${leader.name}` : "Waiting"}</strong>
       </summary>
       <div class="stack-list round-secondary-entry-list">
@@ -3881,7 +3878,7 @@ function renderRoundFinishDrawer(state, round) {
   return `
     <details class="round-secondary-entry" data-persist-key="round-finish-${round.id}">
       <summary>
-        <span>Finish Round</span>
+        <span>Finish</span>
         <strong>${progress.completedHoles}/${round.holes.length} played</strong>
       </summary>
       <div class="stack-list round-secondary-entry-list">
@@ -3890,7 +3887,7 @@ function renderRoundFinishDrawer(state, round) {
           <strong>${canFinish ? escapeHtml(summary.winnerLabel) : "Keep scoring"}</strong>
         </div>
         <div class="finish-actions">
-          <button class="button primary finish-button" type="button" data-action="finish-round" data-round-id="${round.id}" ${canFinish && !saveInProgress ? "" : "disabled"}>${saveInProgress ? "Saving..." : "Finish Round"}</button>
+          <button class="button primary finish-button" type="button" data-action="finish-round" data-round-id="${round.id}" ${canFinish && !saveInProgress ? "" : "disabled"}>${saveInProgress ? "Saving..." : "Finish"}</button>
         </div>
       </div>
     </details>
@@ -4404,13 +4401,12 @@ function renderCommunityView(state) {
           </div>
           <span class="status-pill">${escapeHtml(inviteCode || "No code yet")}</span>
         </div>
-        <p class="body-copy compact-copy">Join by code or pick a nearby game.</p>
       </article>
       <details class="card discovery-card community-section-card" data-persist-key="community-join-options" open>
         <summary class="community-section-summary">
           <div>
             <p class="eyebrow">Join options</p>
-            <h3>Code or quick join</h3>
+            <h3>Join now</h3>
           </div>
           <span>Open</span>
         </summary>
@@ -4420,10 +4416,10 @@ function renderCommunityView(state) {
               Invite code
               <input name="inviteCode" type="text" placeholder="Enter code" />
             </label>
-            <button class="button primary" type="submit">Join round</button>
+            <button class="button primary" type="submit">Join</button>
           </form>
           <div class="row-actions compact-actions community-action-row">
-            ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Copy code</button>` : ""}
+            ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Invite</button>` : ""}
             <button class="button subtle" type="button" data-action="invite-friends">Invite golfer</button>
             ${renderHelpLink("Joining guide", "playing-round", true)}
           </div>
