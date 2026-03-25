@@ -51,8 +51,8 @@ export function normalizeImportedCourseSourceRecord(rawCourse = {}, options = {}
   const normalized = normalizeCourseRecord({
     id: rawCourse?.id || rawCourse?.courseId || "",
     slug: rawCourse?.slug || "",
-    clubName: rawCourse?.clubName || rawCourse?.club || rawCourse?.name || "",
-    courseName: rawCourse?.courseName || rawCourse?.name || rawCourse?.clubName || "",
+    clubName: rawCourse?.clubName || rawCourse?.club || rawCourse?.name || rawCourse?.displayName || "",
+    courseName: rawCourse?.courseName || rawCourse?.name || rawCourse?.clubName || rawCourse?.displayName || "",
     displayName: rawCourse?.displayName || "",
     address: rawCourse?.address || rawCourse?.addressLine1 || "",
     city: rawCourse?.city || "",

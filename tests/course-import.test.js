@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { createCourseRoundTemplateRecord, getDefaultCourseTeeBoxRecord } from "../src/domain/course-models.js";
 import { normalizeImportedCourseSourceRecord, normalizeImportedCourseSourceRecords } from "../src/services/course-normalization.js";
 import { dedupeCanonicalCourseRecords } from "../src/services/course-deduplication.js";
 import { buildUsCourseImportCatalog, findNearbyUsCourseImportCatalog, searchUsCourseImportCatalog } from "../src/services/course-import/us-course-import-service.js";
@@ -119,5 +120,31 @@ describe("course import pipeline", () => {
     expect(searched[0].id).toBe("golden-nugget-lake-charles");
     expect(nearby[0].id).toBe("golden-nugget-lake-charles");
     expect(nearby[0].nearbyDistanceMiles).toBeLessThan(1);
+  });
+
+  it("creates a playable fallback tee when imported data only has course location fields", () => {
+    const course = normalizeImportedCourseSourceRecord({
+      id: "public-course-only",
+      displayName: "Public Course Only",
+      city: "Austin",
+      state: "TX",
+      latitude: 30.2672,
+      longitude: -97.7431,
+      holesCount: 18,
+    }, {
+      providerId: "imported-us-course-database",
+      source: "public-open-data-import",
+    });
+
+    const teeBox = getDefaultCourseTeeBoxRecord(course);
+    const template = createCourseRoundTemplateRecord({
+      course,
+      teeBox,
+      holeCount: 18,
+    });
+
+    expect(teeBox.name).toBe("Default");
+    expect(template.holes).toHaveLength(18);
+    expect(template.courseName).toBe("Public Course Only");
   });
 });

@@ -139,12 +139,19 @@ export function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-da
 }
 
 export function getDefaultCourseTeeBoxRecord(course) {
-  return course?.teeBoxes?.[0] ? cloneData(course.teeBoxes[0]) : null;
+  if (course?.teeBoxes?.[0]) {
+    return cloneData(course.teeBoxes[0]);
+  }
+
+  return normalizeCourseTeeBoxRecord({
+    id: "default",
+    name: "Default",
+  }, 0);
 }
 
 export function findCourseTeeBoxRecord(course, teeId = "") {
   if (!course?.teeBoxes?.length) {
-    return null;
+    return getDefaultCourseTeeBoxRecord(course);
   }
 
   const selected = course.teeBoxes.find((teeBox) => teeBox.id === teeId) || course.teeBoxes[0];

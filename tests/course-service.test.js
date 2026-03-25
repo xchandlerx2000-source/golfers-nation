@@ -25,10 +25,10 @@ describe("course service", () => {
     const results = searchCourses("Lake Charles", { limit: 8 });
 
     expect(results[0].id).toBe("golden-nugget-lake-charles");
-    expect(results[0].providerId).toBe("imported-us-course-database");
     expect(results[0].teeBoxes.length).toBeGreaterThan(0);
     expect(results[0].metadata.featured).toBe(true);
     expect(results[0].slug).toBeTruthy();
+    expect(results.some((course) => course.providerId === "imported-us-course-database")).toBe(true);
   });
 
   it("finds nearby courses from seeded coordinates", () => {
@@ -49,6 +49,16 @@ describe("course service", () => {
     expect(template.holes).toHaveLength(9);
     expect(template.selectedHoleCount).toBe(9);
     expect(template.totalPar).toBe(template.holes.reduce((sum, hole) => sum + hole.par, 0));
+  });
+
+  it("builds a fallback round template from imported nationwide records without tee metadata", () => {
+    const course = getCourseById("contraband-bayou-golf-club-at-l-auberge-du-lac-lake-charles-la");
+    const template = buildRoundTemplate(course.id, "", { holeCount: 9 });
+
+    expect(course.providerId).toBe("imported-us-course-database");
+    expect(template.teeBoxName).toBe("Default");
+    expect(template.holes).toHaveLength(9);
+    expect(template.courseName).toContain("Contraband Bayou");
   });
 
   it("keeps manual templates available when no provider data is selected", () => {
