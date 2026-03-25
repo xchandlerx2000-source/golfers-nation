@@ -133,7 +133,7 @@ export function showRuntimeRecoveryScreen(root, {
       <article class="boot-recovery-card" role="alert">
         <p class="eyebrow">Golfers Nation</p>
         <h1>This screen hit a problem.</h1>
-        <p class="body-copy">Golfers Nation is still on this device, but the current screen failed to render safely. Retry this screen, jump back to Play, or reload the app.</p>
+        <p class="body-copy">Golfers Nation is still on this device, but the current screen failed to render safely. Retry this screen, jump back to Home, or reload the app.</p>
         <div class="boot-recovery-detail">
           <strong>${detail.stageLabel}</strong>
           <span>${detail.message}</span>
@@ -146,7 +146,7 @@ export function showRuntimeRecoveryScreen(root, {
         ` : ""}
         <div class="boot-recovery-actions">
           <button type="button" class="button button-primary" data-runtime-action="retry">Retry screen</button>
-          <button type="button" class="button button-secondary" data-runtime-action="home">Go to Play</button>
+          <button type="button" class="button button-secondary" data-runtime-action="home">Go to Home</button>
           <button type="button" class="button subtle" data-runtime-action="reload">Reload app</button>
         </div>
       </article>

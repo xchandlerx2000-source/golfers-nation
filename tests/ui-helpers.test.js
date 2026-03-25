@@ -164,8 +164,8 @@ describe("ui helpers", () => {
     expect(markup).toContain("Join Game");
     expect(markup).toContain('data-action="open-community-join"');
     expect(markup).toContain("Active Game");
-    expect(markup).toContain("Course Assist");
-    expect(markup).toContain("Confirm course");
+    expect(markup).not.toContain("Course Assist");
+    expect(markup).not.toContain("Confirm course");
   });
 
   it("renders the seeded course picker inside round setup", () => {
@@ -577,10 +577,25 @@ describe("ui helpers", () => {
     expect(markup).toContain('id="tab-round"');
     expect(markup).toContain('id="tab-community"');
     expect(markup).toContain('id="tab-settings"');
-    expect(markup).toContain('data-tab="play"');
+    expect(markup).toContain('data-tab="home"');
     expect(markup).toContain('data-tab="score"');
-    expect(markup).toContain("Play");
+    expect(markup).toContain("Home");
     expect(markup).toContain("Score");
     expect(markup).toContain("Profile");
+  });
+
+  it("renders testing tools inside app settings", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "settings";
+    state.session.settingsDestination = "app";
+    state.session.settingsSection = "testing";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Developer tools");
+    expect(markup).toContain("Reset local app data");
+    expect(markup).toContain("Clear cached app");
   });
 });

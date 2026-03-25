@@ -12,6 +12,7 @@ import {
 import {
   applyAppearanceToDocument,
   applyShellModeToDocument,
+  clearAppShellCaches,
   createNoopRealtimeSession,
   getInstallEnvironment,
   previewAppearanceFromForm,
@@ -106,6 +107,7 @@ import {
 
 function mapTabToView(tab) {
   switch (tab) {
+    case "home":
     case "play":
       return "home";
     case "score":
@@ -2624,6 +2626,20 @@ export function bootstrapApp({
       }
 
       renderStartupShell(root, "Resetting local app data and reopening Golfers Nation.");
+      if (locationRef && typeof locationRef.reload === "function") {
+        locationRef.reload();
+      }
+      return;
+    }
+
+    if (action === "clear-cached-app") {
+      try {
+        await clearAppShellCaches();
+      } catch (error) {
+        console.warn("[Golfers Nation] Failed to clear cached app shell.", error);
+      }
+
+      renderStartupShell(root, "Clearing cached app shell and reopening Golfers Nation.");
       if (locationRef && typeof locationRef.reload === "function") {
         locationRef.reload();
       }

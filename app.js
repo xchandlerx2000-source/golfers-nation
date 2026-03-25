@@ -10663,6 +10663,7 @@ const APP_SETTINGS_SECTIONS = [
   { id: "account", label: "Account" },
   { id: "appearance", label: "Appearance" },
   { id: "integrations", label: "Integrations" },
+  { id: "testing", label: "Testing" },
 ];
 
 const NAV_ICONS = {
@@ -10717,7 +10718,7 @@ const NAV_ICONS = {
 };
 
 const PRIMARY_NAV_TABS = [
-  { id: "home", label: "Play", iconId: "home" },
+  { id: "home", label: "Home", iconId: "home" },
   { id: "round", label: "Score", iconId: "round" },
   { id: "community", label: "Community", iconId: "community" },
   { id: "settings", label: "Profile", iconId: "settings" },
@@ -11205,9 +11206,9 @@ function renderNav(state) {
     const isActive = navActiveView === view.id;
     const activeClass = isActive ? "is-active active" : "";
     const tabId = view.id === "home"
-      ? "play"
+      ? "home"
       : view.id === "round"
-        ? "score"
+          ? "score"
         : view.id === "community"
           ? "community"
           : "profile";
@@ -11269,12 +11270,12 @@ function renderAppShellHeader(state, activeRound, subscription) {
   const viewId = state.session.activeView || "home";
   const firstName = state.currentUser.name?.split(" ")[0] || "Golfer";
   const settingsDestination = getSettingsDestination(state);
-  let viewLabel = "Play";
+  let viewLabel = "Home";
   let headerClass = "app-header-card--utility";
 
-  if (viewId === "home") {
-    headerClass = "app-header-card--home";
-    viewLabel = "Play";
+    if (viewId === "home") {
+      headerClass = "app-header-card--home";
+      viewLabel = "Home";
   } else if (viewId === "round") {
     headerClass = "app-header-card--round";
     viewLabel = "Score";
@@ -11310,7 +11311,7 @@ function renderAppShellHeader(state, activeRound, subscription) {
           type="button"
           data-action="nav-view"
           data-view="home"
-          aria-label="Go to Play"
+          aria-label="Go to Home"
         >
           GN
         </button>
@@ -11827,36 +11828,6 @@ function getCurrentUserRelationshipCounts(state) {
   };
 }
 
-function renderPlayCourseAssistCard(state, activeRound) {
-  const roundSetup = getRoundSetup(state);
-  const discovery = getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {});
-  const selectedCourse = discovery.selectedCourse;
-  const locationStatus = state.session?.nearby?.locationPermission === "granted"
-    ? "Detected"
-    : "Find course";
-  const actionLabel = selectedCourse ? "Confirm course" : "Find course";
-  const actionName = selectedCourse ? "nav-view" : "detect-nearby-courses";
-  const actionValue = selectedCourse ? "round" : "";
-
-  return `
-    <article class="card play-screen-card play-compact-card play-course-card">
-      <div class="section-heading section-heading--compact">
-        <div>
-          <p class="eyebrow">Course Assist</p>
-          <h3>${escapeHtml(selectedCourse?.displayName || selectedCourse?.name || "Find course")}</h3>
-        </div>
-        <span class="status-pill">${escapeHtml(locationStatus)}</span>
-      </div>
-      ${selectedCourse ? `<p class="play-active-copy">${escapeHtml(`${selectedCourse.city}, ${selectedCourse.state}`)}</p>` : ""}
-      <div class="row-actions compact-actions">
-        <button class="button secondary" type="button" data-action="${actionName}" ${actionValue ? `data-view="${actionValue}"` : ""}>
-          ${actionLabel}
-        </button>
-      </div>
-    </article>
-  `;
-}
-
 function renderNearbyPlayerRows(nearbyPlayers) {
   if (!nearbyPlayers.length) {
     return `
@@ -12139,9 +12110,10 @@ function getDefaultSettingsSectionId(destination = "landing") {
 
 function getSelectedSettingsSectionId(state, destination = "landing") {
   const rawSelectedId = state.session?.settingsSection || "";
-  const selectedId = destination === "app" && (rawSelectedId === "spotify" || rawSelectedId === "app-support")
-    ? "integrations"
-    : rawSelectedId;
+  const selectedId = destination === "app"
+    && (rawSelectedId === "spotify" || rawSelectedId === "app-support" || rawSelectedId === "developer-tools")
+      ? (rawSelectedId === "developer-tools" ? "testing" : "integrations")
+      : rawSelectedId;
   const sections = getSettingsSectionsForDestination(destination);
   if (sections.some((section) => section.id === selectedId)) {
     return selectedId;
@@ -12163,7 +12135,7 @@ function getSettingsDestinationCopy(destination = "landing") {
     return {
       title: "App Settings",
       eyebrow: "How you use the app",
-      description: "Appearance, account, support, and integrations.",
+      description: "Appearance, account, integrations, and testing tools.",
     };
   }
 
@@ -12425,6 +12397,7 @@ function renderSettingsPanelsForDestination(state, destination) {
     appearance: renderAppearanceSettingsCard(state),
     social: renderSocialSettingsCard(state),
     integrations: renderIntegrationsSettingsCard(state),
+    testing: renderTestingSettingsCard(state),
   };
 
   return getSettingsSectionsForDestination(destination)
@@ -12666,6 +12639,52 @@ function renderIntegrationsSettingsCard(state) {
         </label>
         <button class="button primary" type="submit">Send tester feedback</button>
       </form>
+    </article>
+  `;
+}
+
+function renderTestingSettingsCard(state) {
+  const crashLog = state.session?.crashLog || {
+    count: 0,
+    lastCrashAt: "",
+    latestStage: "",
+    entries: [],
+  };
+
+  return `
+    <article class="card settings-card" data-settings-card="testing">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Testing</p>
+          <h3>Developer tools</h3>
+        </div>
+      </div>
+      <div class="stack-list settings-support-list">
+        <article class="settings-support-panel">
+          <span class="mini-label">Local reset</span>
+          <strong>Reset app data on this device</strong>
+          <p class="body-copy compact-copy">Clear saved local state and reopen the app cleanly for testing.</p>
+          <div class="row-actions compact-actions">
+            <button class="button secondary" type="button" data-action="reset-local-data">Reset local app data</button>
+          </div>
+        </article>
+        <article class="settings-support-panel">
+          <span class="mini-label">Cached shell</span>
+          <strong>Clear cached app</strong>
+          <p class="body-copy compact-copy">Clear cached shell files and reload the current build.</p>
+          <div class="row-actions compact-actions">
+            <button class="button secondary" type="button" data-action="clear-cached-app">Clear cached app</button>
+          </div>
+        </article>
+        <article class="settings-support-panel">
+          <span class="mini-label">Crash logs</span>
+          <strong>${crashLog.count ? `${crashLog.count} recent ${crashLog.count === 1 ? "entry" : "entries"}` : "No recent crashes"}</strong>
+          <p class="body-copy compact-copy">${escapeHtml(crashLog.latestStage ? `Latest stage: ${crashLog.latestStage}` : "Open Integrations for copied reports and crash detail history.")}</p>
+          <div class="row-actions compact-actions">
+            <button class="button subtle" type="button" data-action="set-settings-section" data-destination="app" data-section="integrations">View debug logs</button>
+          </div>
+        </article>
+      </div>
     </article>
   `;
 }
@@ -13134,7 +13153,6 @@ function renderHomeView(state) {
     <section class="play-screen">
       ${renderPlayActiveGameCard(state, activeRound)}
       ${renderPrimaryActions(state, activeRound)}
-      ${renderPlayCourseAssistCard(state, activeRound)}
     </section>
   `;
 }
@@ -16013,7 +16031,7 @@ function showRuntimeRecoveryScreen(root, {
       <article class="boot-recovery-card" role="alert">
         <p class="eyebrow">Golfers Nation</p>
         <h1>This screen hit a problem.</h1>
-        <p class="body-copy">Golfers Nation is still on this device, but the current screen failed to render safely. Retry this screen, jump back to Play, or reload the app.</p>
+        <p class="body-copy">Golfers Nation is still on this device, but the current screen failed to render safely. Retry this screen, jump back to Home, or reload the app.</p>
         <div class="boot-recovery-detail">
           <strong>${detail.stageLabel}</strong>
           <span>${detail.message}</span>
@@ -16026,7 +16044,7 @@ function showRuntimeRecoveryScreen(root, {
         ` : ""}
         <div class="boot-recovery-actions">
           <button type="button" class="button button-primary" data-runtime-action="retry">Retry screen</button>
-          <button type="button" class="button button-secondary" data-runtime-action="home">Go to Play</button>
+          <button type="button" class="button button-secondary" data-runtime-action="home">Go to Home</button>
           <button type="button" class="button subtle" data-runtime-action="reload">Reload app</button>
         </div>
       </article>
@@ -16324,6 +16342,7 @@ function createProductPlatform({
 // ---- src/main.js ----
 function mapTabToView(tab) {
   switch (tab) {
+    case "home":
     case "play":
       return "home";
     case "score":
@@ -18841,6 +18860,20 @@ function bootstrapApp({
       }
 
       renderStartupShell(root, "Resetting local app data and reopening Golfers Nation.");
+      if (locationRef && typeof locationRef.reload === "function") {
+        locationRef.reload();
+      }
+      return;
+    }
+
+    if (action === "clear-cached-app") {
+      try {
+        await clearAppShellCaches();
+      } catch (error) {
+        console.warn("[Golfers Nation] Failed to clear cached app shell.", error);
+      }
+
+      renderStartupShell(root, "Clearing cached app shell and reopening Golfers Nation.");
       if (locationRef && typeof locationRef.reload === "function") {
         locationRef.reload();
       }

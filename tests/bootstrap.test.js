@@ -701,7 +701,7 @@ describe("bootstrap app", () => {
     }, { reason: "test-runtime-render-failure" });
 
     expect(document.body.textContent).toContain("This screen hit a problem.");
-    expect(document.body.textContent).toContain("Go to Play");
+    expect(document.body.textContent).toContain("Go to Home");
 
     result.destroy();
   });
