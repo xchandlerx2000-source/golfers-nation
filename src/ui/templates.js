@@ -1402,6 +1402,56 @@ function renderPlayNearbyGamesCard(state) {
   `;
 }
 
+function renderPlayCourseAssistCard(state, activeRound) {
+  const roundSetup = getRoundSetup(state);
+  const discovery = getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {});
+  const nearbyCourses = discovery.nearbyCourses.slice(0, 3);
+  const selectedCourse = discovery.selectedCourse;
+  const locationStatus = state.session?.nearby?.locationPermission === "granted"
+    ? "Location on"
+    : state.session?.nearby?.locationPermission === "denied"
+      ? "Location off"
+      : "Location optional";
+
+  return `
+    <article class="card play-screen-card play-compact-card play-course-card">
+      <div class="section-heading section-heading--compact">
+        <div>
+          <p class="eyebrow">Course Assist</p>
+          <h3>${escapeHtml(selectedCourse?.name || discovery.nearbyCopy.title)}</h3>
+        </div>
+        <span class="status-pill">${escapeHtml(locationStatus)}</span>
+      </div>
+      <p class="play-active-copy">${escapeHtml(selectedCourse ? `${selectedCourse.city}, ${selectedCourse.state}` : discovery.nearbyCopy.detail)}</p>
+      ${nearbyCourses.length
+        ? `
+          <div class="play-nearby-row" aria-label="Nearby courses">
+            ${nearbyCourses.map((course) => `
+              <article class="play-nearby-card play-nearby-card--course">
+                <div class="play-nearby-card-copy">
+                  <strong>${escapeHtml(course.name)}</strong>
+                  <p>${escapeHtml(course.nearbyDistanceLabel || `${course.city}, ${course.state}`)}</p>
+                </div>
+              </article>
+            `).join("")}
+          </div>
+        `
+        : ""}
+      <div class="row-actions compact-actions">
+        <button class="button secondary" type="button" data-action="detect-nearby-courses">
+          ${state.session?.nearby?.locationPermission === "granted" ? "Refresh nearby" : "Find courses"}
+        </button>
+        <button class="button subtle" type="button" data-action="nav-view" data-view="round">Choose course</button>
+      </div>
+      ${renderNearbyStrategyPanel(getNearbyDiscoveryState(state).strategy, {
+        compact: true,
+        includeActions: true,
+        activeRound,
+      })}
+    </article>
+  `;
+}
+
 function renderNearbyPlayerRows(nearbyPlayers) {
   if (!nearbyPlayers.length) {
     return `
@@ -2757,11 +2807,7 @@ function renderHomeView(state) {
     <section class="play-screen">
       ${renderPlayActiveGameCard(state, activeRound)}
       ${renderPrimaryActions(state, activeRound)}
-      <div class="play-screen-grid">
-        ${renderPlayNearbyPlayersCard(state)}
-        ${renderPlayNearbyGamesCard(state)}
-      </div>
-      ${renderPlayFriendsCard(state)}
+      ${renderPlayCourseAssistCard(state, activeRound)}
     </section>
   `;
 }
@@ -4007,7 +4053,6 @@ function renderRoundView(state) {
     return `
       <section class="view-grid round-grid round-grid-start">
         ${renderCreateRoundCard(state, null)}
-        ${renderJoinRoundQuickCard(state, { showNearby: true, compact: true })}
       </section>
     `;
   }
@@ -4467,142 +4512,105 @@ function renderCommunityView(state) {
         <div class="section-heading">
           <div>
             <p class="eyebrow">Community</p>
-            <h3>Join fast and keep golfers visible</h3>
+            <h3>Discover golfers and join rounds fast</h3>
           </div>
           <span class="status-pill">${escapeHtml(inviteCode || "No code yet")}</span>
         </div>
-        <p class="body-copy">Use nearby discovery when the group is already around you, or fall back to invite code when someone texts it over. Both paths open straight into the same shared round flow.</p>
-        <div class="community-primary-actions">
+        <p class="body-copy compact-copy">Join with a code, find active golfers, or jump into nearby hosted rounds.</p>
+        <div class="community-compact-badges">
+          <span class="status-pill">Code fallback</span>
+          <span class="status-pill">Nearby games</span>
+          <span class="status-pill">Player cards</span>
+        </div>
+      </article>
+      <details class="card discovery-card community-section-card" data-persist-key="community-join-options" open>
+        <summary class="community-section-summary">
+          <div>
+            <p class="eyebrow">Join options</p>
+            <h3>Code or quick join</h3>
+          </div>
+          <span>Open</span>
+        </summary>
+        <div class="community-section-body">
           <form class="inline-form round-join-form community-join-form" data-form="join-code">
             <label class="inline-grow">
-              Join by invite code
+              Invite code
               <input name="inviteCode" type="text" placeholder="Enter code" />
             </label>
             <button class="button primary" type="submit">Join round</button>
           </form>
           <div class="row-actions compact-actions community-action-row">
-            <button class="button secondary" type="button" data-action="host-active-round" ${activeRound ? "" : "disabled"}>Host active round</button>
             ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Copy code</button>` : ""}
-            <button class="button subtle" type="button" data-action="invite-friends">Invite a golfer</button>
+            <button class="button subtle" type="button" data-action="invite-friends">Invite golfer</button>
+            ${renderHelpLink("Joining guide", "playing-round", true)}
           </div>
         </div>
-        ${renderNearbyStrategyPanel(nearby.strategy, { includeActions: true, activeRound })}
-      </article>
-      <article class="card">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Live room</p>
-            <h3>Current shared round</h3>
-          </div>
-        </div>
-        ${activeRound
-          ? `
-            <div class="summary-grid compact">
-              <article>
-                <span>Round</span>
-                <strong>${escapeHtml(activeRound.courseName)}</strong>
-              </article>
-              <article>
-                <span>Mode</span>
-                <strong>${escapeHtml(getGameModeLabel(activeRound.mode))}</strong>
-              </article>
-              <article>
-                <span>Invite</span>
-                <strong>${escapeHtml(inviteCode || "Not live yet")}</strong>
-              </article>
-              <article>
-                <span>Sync</span>
-                <strong>${escapeHtml(activeRound.sync.label)}</strong>
-              </article>
-            </div>
-          `
-          : `
-            <div class="empty-state onboarding-state">
-              <strong>No live room yet.</strong>
-              <p>Start a round if you are the first golfer, or join by code if someone else already opened the round.</p>
-              <div class="row-actions empty-state-actions">
-                <button class="button primary" type="button" data-action="nav-view" data-view="round">Start round</button>
-                ${renderHelpLink("Joining and hosting guide", "playing-round", true)}
-              </div>
-            </div>`}
-      </article>
-      ${activeRound
-        ? `
-          <article class="card">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">Group golfers</p>
-                <h3>Who is in this round</h3>
-              </div>
-            </div>
-            <p class="body-copy compact-copy">Tap any golfer to open their public competitive card. The selected card stays below so you can compare the group without losing your place.</p>
-            <div class="participant-preview-row">
-              ${activeRound.players.map((player) => `
-                <button class="player-preview-pill" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(player.profileId || "")}">
-                  ${renderAvatarChip(getProfileForPlayer(state, player)?.publicProfile.avatarLabel || player.avatarLabel)}
-                  <span>${escapeHtml(player.name)}</span>
-                </button>
-              `).join("")}
-            </div>
-          </article>
-        `
-        : ""}
-      <article class="card discovery-card">
-        <div class="section-heading">
+      </details>
+      <details class="card discovery-card community-section-card" data-persist-key="community-nearby-players" open>
+        <summary class="community-section-summary">
           <div>
             <p class="eyebrow">Nearby players</p>
-            <h3>Public golfers active now</h3>
+            <h3>Active golfers now</h3>
           </div>
+          <span>${nearbyPlayers.length}</span>
+        </summary>
+        <div class="community-section-body">
+          ${renderNearbyPlayerRows(nearbyPlayers)}
         </div>
-        ${renderNearbyPlayerRows(nearbyPlayers)}
-      </article>
-      <article class="card discovery-card">
-        <div class="section-heading">
+      </details>
+      <details class="card discovery-card community-section-card" data-persist-key="community-nearby-games" open>
+        <summary class="community-section-summary">
           <div>
             <p class="eyebrow">Nearby games</p>
-            <h3>Active hosted rounds</h3>
+            <h3>Hosted rounds to join</h3>
           </div>
+          <span>${nearbyGames.length}</span>
+        </summary>
+        <div class="community-section-body">
+          ${nearbyGames.length
+            ? renderNearbyRoundRows(nearbyGames.slice(0, 4))
+            : `
+              <div class="empty-state compact-empty-state">
+                <strong>No nearby rounds yet.</strong>
+                <p>Invite code join stays ready any time.</p>
+              </div>
+            `}
         </div>
-        ${nearbyGames.length
-          ? renderNearbyRoundRows(nearbyGames.slice(0, 4))
-          : `
-            <div class="empty-state compact-empty-state">
-              <strong>No nearby rounds yet.</strong>
-              <p>Host the active round or keep invite code join as the reliable fallback.</p>
-            </div>
-          `}
-      </article>
-      <article class="card discovery-card">
-        <div class="section-heading">
+      </details>
+      <details class="card discovery-card community-section-card" data-persist-key="community-friends">
+        <summary class="community-section-summary">
           <div>
             <p class="eyebrow">Friends</p>
-            <h3>Friends and repeat golfers</h3>
+            <h3>People you golf with</h3>
           </div>
+          <span>${friendRows.length || "Open"}</span>
+        </summary>
+        <div class="community-section-body">
+          ${friendRows.length
+            ? `
+              <div class="stack-list compact-stack play-list">
+                ${friendRows.map((friend) => `
+                  <article class="list-row play-list-row">
+                    <div>
+                      <strong>${escapeHtml(friend.displayName)}</strong>
+                      <p>${escapeHtml(friend.statusLabel)}</p>
+                    </div>
+                    <div class="list-metrics">
+                      ${friend.canJoin ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${friend.inviteCode}">Join</button>` : ""}
+                      <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(friend.profileId)}">View</button>
+                    </div>
+                  </article>
+                `).join("")}
+              </div>
+            `
+            : `
+              <div class="empty-state compact-empty-state">
+                <strong>No friend activity yet.</strong>
+                <p>Follow golfers here to make repeat rounds faster.</p>
+              </div>
+            `}
         </div>
-        ${friendRows.length
-          ? `
-            <div class="stack-list compact-stack play-list">
-              ${friendRows.map((friend) => `
-                <article class="list-row play-list-row">
-                  <div>
-                    <strong>${escapeHtml(friend.displayName)}</strong>
-                    <p>${escapeHtml(friend.statusLabel)}</p>
-                  </div>
-                  <div class="list-metrics">
-                    ${friend.canJoin ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${friend.inviteCode}">Join</button>` : ""}
-                    <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(friend.profileId)}">View card</button>
-                  </div>
-                </article>
-              `).join("")}
-            </div>
-          `
-          : `
-            <div class="empty-state compact-empty-state">
-              <strong>No friend activity yet.</strong>
-              <p>Follow or add golfers and their live availability will stay easier to find here.</p>
-            </div>
-          `}
-      </article>
+      </details>
       <article class="card discovery-card">
         <div class="section-heading">
           <div>
@@ -4628,19 +4636,19 @@ function renderCommunityView(state) {
       <article class="card card-span-2">
         <div class="summary-grid compact">
           <article>
-            <span>Fallback path</span>
+            <span>Fallback</span>
             <strong>Join by code</strong>
           </article>
           <article>
             <span>Fast path</span>
-            <strong>Discover nearby</strong>
+            <strong>Nearby games</strong>
           </article>
           <article>
-            <span>Player visibility</span>
-            <strong>Tap to view cards</strong>
+            <span>Player cards</span>
+            <strong>Tap to compare</strong>
           </article>
         </div>
-        <p class="body-copy compact-copy">Community is now built around fast joining, visible golfers, and easy shared-round confidence. Invite codes stay ready anytime nearby discovery is not enough.</p>
+        <p class="body-copy compact-copy">Community keeps joining and discovery in one place so Score can stay focused on setup and scoring.</p>
         <div class="row-actions empty-state-actions">
           ${renderHelpLink("Shared round guide", "playing-round", true)}
         </div>

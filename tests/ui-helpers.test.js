@@ -163,7 +163,8 @@ describe("ui helpers", () => {
     expect(markup).toContain("Start Round");
     expect(markup).toContain("Join Game");
     expect(markup).toContain("Active Game");
-    expect(markup).toContain("Nearby Players");
+    expect(markup).toContain("Course Assist");
+    expect(markup).toContain("Choose course");
   });
 
   it("renders the seeded course picker inside round setup", () => {
@@ -269,7 +270,7 @@ describe("ui helpers", () => {
     expect(markup).toMatch(/id="tab-settings"[\s\S]*?aria-selected="true"/);
   });
 
-  it("renders the community hub with nearby players and nearby games cards", () => {
+  it("renders the community hub with grouped join and discovery sections", () => {
     const state = createDefaultState();
     state.auth.status = "authenticated";
     state.auth.activeUserId = state.currentUser.id;
@@ -277,10 +278,11 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Join fast and keep golfers visible");
+    expect(markup).toContain("Discover golfers and join rounds fast");
+    expect(markup).toContain("Join options");
     expect(markup).toContain("Nearby players");
     expect(markup).toContain("Nearby games");
-    expect(markup).toContain("Nearby detection");
+    expect(markup).not.toContain("Live room");
   });
 
   it("opens the profile tab as the main account/settings home", () => {
@@ -405,7 +407,7 @@ describe("ui helpers", () => {
     expect(markup).toContain("crash-123");
   });
 
-  it("disables community sync controls when there is no active round", () => {
+  it("keeps join and nearby discovery available in community without an active round", () => {
     const state = createDefaultState();
     const created = createEmailAccount(state, {
       displayName: "No Round Yet",
@@ -419,9 +421,9 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain('data-action="host-active-round" disabled');
-    expect(markup).toContain("Location assist");
-    expect(markup).toContain("Nearby sync mode");
+    expect(markup).toContain('data-form="join-code"');
+    expect(markup).toContain("Nearby games");
+    expect(markup).not.toContain("Live room");
   });
 
   it("disables finishing a round before any hole has been scored", () => {

@@ -762,10 +762,14 @@ body[data-app-shell-mode="standalone"] .content-shell {
   display: flex;
   align-items: baseline;
   gap: 8px;
+  min-width: 0;
 }
 
 .top-title {
   font-size: 0.98rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .top-view-label {
@@ -814,6 +818,7 @@ body[data-app-shell-mode="standalone"] .content-shell {
   gap: 12px;
   align-items: center;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .app-header-context--utility,
@@ -874,8 +879,14 @@ body[data-app-shell-mode="standalone"] .content-shell {
     var(--button-secondary-bg);
   color: var(--text);
   min-height: 50px;
+  min-width: 50px;
   flex-shrink: 0;
+  justify-content: center;
   transition: transform var(--motion-standard), border-color var(--motion-standard), background var(--motion-standard);
+}
+
+.top-right.account-trigger {
+  margin-left: auto;
 }
 
 .account-trigger-copy {
@@ -4171,6 +4182,12 @@ button:disabled {
   gap: 14px;
 }
 
+.community-compact-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .community-primary-actions {
   display: grid;
   gap: 10px;
@@ -4178,6 +4195,36 @@ button:disabled {
 
 .community-action-row {
   gap: 8px;
+}
+
+.community-section-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.community-section-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.community-section-summary::-webkit-details-marker {
+  display: none;
+}
+
+.community-section-summary span:last-child {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+}
+
+.community-section-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 14px 14px;
 }
 
 .community-grid .discovery-card {
@@ -5650,12 +5697,12 @@ body {
   gap: 6px;
   padding: 8px;
   border-radius: 18px;
-  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  border: 1px solid rgba(var(--accent-rgb), 0.26);
   background:
-    linear-gradient(180deg, rgba(var(--accent-rgb), 0.1), rgba(255, 255, 255, 0.03)),
-    color-mix(in srgb, var(--surface) 92%, transparent);
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(18px);
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.08), rgba(0, 0, 0, 0.08)),
+    rgba(12, 17, 14, 0.96);
+  box-shadow: 0 18px 34px rgba(4, 7, 6, 0.42);
+  backdrop-filter: blur(16px);
 }
 
 .settings-destination-panel {
@@ -5674,7 +5721,7 @@ body {
   padding: 12px;
   border: 0;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   text-align: left;
 }
@@ -5765,6 +5812,11 @@ body {
   padding: 9px 10px;
   margin-bottom: 0;
   border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 248, 236, 0.04), rgba(255, 248, 236, 0.01)),
+    color-mix(in srgb, var(--surface) 95%, transparent);
+  box-shadow: var(--shadow-soft);
 }
 
 .play-screen-grid {
@@ -5800,6 +5852,12 @@ body {
 
 .play-active-card {
   gap: 6px;
+}
+
+.play-course-card .nearby-strategy-card {
+  margin-top: 2px;
+  padding: 10px;
+  border-radius: 12px;
 }
 
 .play-active-strip-meta {
@@ -5867,7 +5925,9 @@ body {
   padding: 9px;
   border-radius: 12px;
   border: 1px solid var(--line-soft);
-  background: rgba(255, 255, 255, 0.03);
+  background:
+    linear-gradient(180deg, rgba(255, 248, 236, 0.05), rgba(255, 248, 236, 0.02)),
+    color-mix(in srgb, var(--surface-soft) 94%, transparent);
 }
 
 .play-nearby-card-copy {
