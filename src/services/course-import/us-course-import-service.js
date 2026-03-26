@@ -75,6 +75,25 @@ function getImportedCourseMatchScore(course = {}, normalizedQuery = "") {
   return buildImportedCourseSearchText(course).includes(normalizedQuery) ? 120 : -1;
 }
 
+function getImportedCourseReadinessRank(course = {}) {
+  const readinessTier = String(course?.metadata?.readinessTier || "").toLowerCase();
+  switch (readinessTier) {
+    case "rich-round-ready":
+      return 3;
+    case "basic-round-ready":
+      return 2;
+    case "discovery-ready":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function getImportedCourseConfidenceScore(course = {}) {
+  const numericScore = Number(course?.metadata?.matchConfidence);
+  return Number.isFinite(numericScore) ? numericScore : 0;
+}
+
 function sortImportedCourseCatalog(left = {}, right = {}) {
   const leftPriority = left?.metadata?.priority ?? 100;
   const rightPriority = right?.metadata?.priority ?? 100;
@@ -92,6 +111,18 @@ function sortImportedCourseCatalog(left = {}, right = {}) {
   const rightDistance = Number.isFinite(right?.nearbyDistanceMiles) ? right.nearbyDistanceMiles : Number.POSITIVE_INFINITY;
   if (leftDistance !== rightDistance) {
     return leftDistance - rightDistance;
+  }
+
+  const leftReadinessRank = getImportedCourseReadinessRank(left);
+  const rightReadinessRank = getImportedCourseReadinessRank(right);
+  if (leftReadinessRank !== rightReadinessRank) {
+    return rightReadinessRank - leftReadinessRank;
+  }
+
+  const leftConfidenceScore = getImportedCourseConfidenceScore(left);
+  const rightConfidenceScore = getImportedCourseConfidenceScore(right);
+  if (leftConfidenceScore !== rightConfidenceScore) {
+    return rightConfidenceScore - leftConfidenceScore;
   }
 
   return String(left?.displayName || left?.name || "").localeCompare(String(right?.displayName || right?.name || ""));

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
 
 import { createCourseRoundTemplateRecord, getDefaultCourseTeeBoxRecord } from "../src/domain/course-models.js";
 import { normalizeImportedCourseSourceRecord, normalizeImportedCourseSourceRecords } from "../src/services/course-normalization.js";
 import { dedupeCanonicalCourseRecords } from "../src/services/course-deduplication.js";
 import { buildUsCourseImportCatalog, findNearbyUsCourseImportCatalog, searchUsCourseImportCatalog } from "../src/services/course-import/us-course-import-service.js";
+import { getCourseCatalogManifest } from "../src/services/course-catalog-loader.js";
 
 describe("course import pipeline", () => {
   it("normalizes imported provider rows into canonical course records", () => {
@@ -39,6 +41,13 @@ describe("course import pipeline", () => {
     expect(course.displayName).toBe("Torrey Pines - South");
     expect(course.postalCode).toBe("92037");
     expect(course.metadata.qualityFlags.hasCoordinates).toBe(true);
+    expect(course.metadata.discoveryReady).toBe(true);
+    expect(course.metadata.basicRoundReady).toBe(true);
+    expect(course.metadata.richRoundReady).toBe(true);
+    expect(course.metadata.readinessTier).toBe("rich-round-ready");
+    expect(course.metadata.qualityFlags.hasRealTeeData).toBe(true);
+    expect(course.metadata.qualityFlags.hasRealHoleData).toBe(true);
+    expect(course.metadata.qualityFlags.hasRealRatingSlope).toBe(true);
     expect(course.metadata.providerCourseId).toBe("tp-south-1");
   });
 
@@ -82,6 +91,7 @@ describe("course import pipeline", () => {
     expect(deduped).toHaveLength(1);
     expect(deduped[0].address).toBe("1700 17 Mile Dr");
     expect(deduped[0].metadata.qualityFlags.hasCoordinates).toBe(true);
+    expect(deduped[0].metadata.readinessTier).toBe("basic-round-ready");
     expect(deduped[0].teeBoxes.length).toBeGreaterThan(0);
   });
 
@@ -146,5 +156,55 @@ describe("course import pipeline", () => {
     expect(teeBox.name).toBe("Default");
     expect(template.holes).toHaveLength(18);
     expect(template.courseName).toBe("Public Course Only");
+    expect(course.metadata.discoveryReady).toBe(true);
+    expect(course.metadata.basicRoundReady).toBe(true);
+    expect(course.metadata.richRoundReady).toBe(false);
+    expect(course.metadata.readinessTier).toBe("basic-round-ready");
+    expect(course.metadata.qualityFlags.hasRealTeeData).toBe(false);
+    expect(course.metadata.qualityFlags.usesFallbackTeeData).toBe(true);
+    expect(course.metadata.qualityFlags.usesFallbackHoleData).toBe(true);
+  });
+
+  it("emits runtime discovery and detail-shard assets for the imported catalog", async () => {
+    const manifest = getCourseCatalogManifest();
+    const nearbyIndexPath = `${process.cwd()}\\${manifest.nearbyIndexPath.replace(/\//g, "\\")}`;
+    const discoveryIndexPath = `${process.cwd()}\\${manifest.discoveryIndexPath.replace(/\//g, "\\")}`;
+    const firstShardPath = `${process.cwd()}\\${manifest.detailShards[0].path.replace(/\//g, "\\")}`;
+    const reconciliationReportPath = `${process.cwd()}\\data\\course\\reconciliation-report.json`;
+    const adminOverridesPath = `${process.cwd()}\\data\\course\\admin-overrides.json`;
+
+    const nearbyIndex = JSON.parse(await readFile(nearbyIndexPath, "utf8"));
+    const discoveryIndex = JSON.parse(await readFile(discoveryIndexPath, "utf8"));
+    const firstShard = JSON.parse(await readFile(firstShardPath, "utf8"));
+    const reconciliationReport = JSON.parse(await readFile(reconciliationReportPath, "utf8"));
+    const adminOverrides = JSON.parse(await readFile(adminOverridesPath, "utf8"));
+
+    expect(manifest.assetVersion).toMatch(/^[a-f0-9]{12}$/);
+    expect(manifest.nearbyIndexPath).toContain("nearby-index.json");
+    expect(nearbyIndex.recordCount).toBeGreaterThan(0);
+    expect(nearbyIndex.recordCount).toBeLessThanOrEqual(manifest.recordCount);
+    expect(nearbyIndex.courses[0].detailShard).toBeTruthy();
+    expect(discoveryIndex.recordCount).toBe(manifest.recordCount);
+    expect(manifest.qualitySummary.readinessTiers["basic-round-ready"]).toBeGreaterThan(0);
+    expect(manifest.qualitySummary.readinessTiers["rich-round-ready"]).toBeGreaterThan(0);
+    expect(manifest.qualitySummary.confidenceTiers.medium).toBeGreaterThan(0);
+    expect(manifest.qualitySummary.hasRealTeeData).toBeGreaterThan(0);
+    expect(manifest.qualitySummary.hasRealHoleData).toBeGreaterThan(0);
+    expect(manifest.qualitySummary.hasRealRatingSlope).toBeGreaterThan(0);
+    expect(typeof manifest.reconciliationSummary.overriddenRecords).toBe("number");
+    expect(typeof manifest.reconciliationSummary.reviewedRecords).toBe("number");
+    expect(discoveryIndex.courses[0].detailShard).toBeTruthy();
+    expect(Array.isArray(discoveryIndex.courses[0].holes)).toBe(false);
+    expect(discoveryIndex.courses[0].metadata.readinessTier).toBeTruthy();
+    expect(typeof discoveryIndex.courses[0].metadata.matchConfidence).toBe("number");
+    expect(firstShard.recordCount).toBeGreaterThan(0);
+    expect(firstShard.courses[0].holes).toBeTruthy();
+    expect(reconciliationReport.assetVersion).toBe(manifest.assetVersion);
+    expect(reconciliationReport.recordCount).toBe(manifest.recordCount);
+    expect(reconciliationReport.overrideSummary).toBeTruthy();
+    expect(reconciliationReport.reviewQueueSummary).toBeTruthy();
+    expect(adminOverrides.assetVersion).toBe(manifest.assetVersion);
+    expect(Array.isArray(adminOverrides.rows)).toBe(true);
+    expect(typeof adminOverrides.overrideCount).toBe("number");
   });
 });

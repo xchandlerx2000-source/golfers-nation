@@ -2176,6 +2176,33 @@ function renderTestingSettingsCard(state) {
     latestStage: "",
     entries: [],
   };
+  const adminReview = state.course?.adminReview || {};
+  const reportStatus = adminReview.reportStatus || "idle";
+  const overridesStatus = adminReview.overridesStatus || "idle";
+  const selectedQueue = adminReview.selectedQueue || "high";
+  const report = adminReview.report || null;
+  const overrides = adminReview.overrides || null;
+  const queueSummary = report?.reviewQueueSummary?.priority || {};
+  const queueCounts = {
+    high: Number(queueSummary.high || 0),
+    medium: Number(queueSummary.medium || 0),
+    low: Number(queueSummary.low || 0),
+    overrides: Number(overrides?.overrideCount || overrides?.rows?.length || 0),
+  };
+  const selectedQueueItems = selectedQueue === "medium"
+    ? (report?.reviewQueue?.mediumPriority || [])
+    : selectedQueue === "low"
+      ? (report?.reviewQueue?.lowPriority || [])
+      : selectedQueue === "overrides"
+        ? (overrides?.rows || [])
+        : (report?.reviewQueue?.highPriority || []);
+  const courseAdminStatusLabel = reportStatus === "loading" || overridesStatus === "loading"
+    ? "Loading review data"
+    : reportStatus === "ready" && overridesStatus === "ready"
+      ? "Review data loaded"
+      : adminReview.lastError
+        ? "Review data unavailable"
+        : "Review data not loaded";
 
   return `
     <article class="card settings-card" data-settings-card="testing">
@@ -2209,6 +2236,87 @@ function renderTestingSettingsCard(state) {
           <div class="row-actions compact-actions">
             <button class="button subtle" type="button" data-action="set-settings-section" data-destination="app" data-section="integrations">View debug logs</button>
           </div>
+        </article>
+        <article class="settings-support-panel">
+          <span class="mini-label">Course admin</span>
+          <strong>${escapeHtml(courseAdminStatusLabel)}</strong>
+          <p class="body-copy compact-copy">
+            ${report?.generatedAt
+              ? `Asset ${escapeHtml(report.assetVersion || "")} / ${escapeHtml(formatDateTime(report.generatedAt))}`
+              : escapeHtml(adminReview.lastError || "Load the reconciliation report and override snapshot for internal course-quality review.")}
+          </p>
+          <div class="row-actions compact-actions">
+            <button class="button secondary" type="button" data-action="load-course-admin-review">${report ? "Refresh review data" : "Load review data"}</button>
+          </div>
+          ${report || overrides ? `
+            <div class="summary-grid compact">
+              <article>
+                <span>High queue</span>
+                <strong>${queueCounts.high}</strong>
+              </article>
+              <article>
+                <span>Medium queue</span>
+                <strong>${queueCounts.medium}</strong>
+              </article>
+              <article>
+                <span>Low queue</span>
+                <strong>${queueCounts.low}</strong>
+              </article>
+              <article>
+                <span>Override rows</span>
+                <strong>${queueCounts.overrides}</strong>
+              </article>
+            </div>
+            <div class="row-actions compact-actions">
+              ${[
+                ["high", "High"],
+                ["medium", "Medium"],
+                ["low", "Low"],
+                ["overrides", "Overrides"],
+              ].map(([id, label]) => `
+                <button
+                  class="button ${selectedQueue === id ? "primary" : "subtle"}"
+                  type="button"
+                  data-action="set-course-admin-queue"
+                  data-queue="${id}"
+                >
+                  ${escapeHtml(label)}
+                </button>
+              `).join("")}
+            </div>
+            <div class="stack-list settings-support-list">
+              ${selectedQueueItems.length ? selectedQueueItems.slice(0, 8).map((entry) => {
+                if (selectedQueue === "overrides") {
+                  return `
+                    <article class="list-row large">
+                      <div>
+                        <strong>${escapeHtml(entry.courseId || "Unknown course")}</strong>
+                        <p>${escapeHtml(entry.reviewStatus || "pending")}${entry.reviewNotes ? ` / ${escapeHtml(entry.reviewNotes)}` : ""}</p>
+                      </div>
+                      <span>${escapeHtml(Array.isArray(entry.overrideFields) ? entry.overrideFields.join(", ") : "")}</span>
+                    </article>
+                  `;
+                }
+
+                return `
+                  <article class="list-row large">
+                    <div>
+                      <strong>${escapeHtml(entry.displayName || entry.id || "Unknown course")}</strong>
+                      <p>${escapeHtml([entry.city, entry.state].filter(Boolean).join(", "))}${entry.reasons?.length ? ` / ${escapeHtml(entry.reasons.slice(0, 3).join(", "))}` : ""}</p>
+                    </div>
+                    <span>${escapeHtml(entry.priority || selectedQueue)}</span>
+                  </article>
+                `;
+              }).join("") : `
+                <article class="list-row large">
+                  <div>
+                    <strong>No items</strong>
+                    <p>No rows in this queue right now.</p>
+                  </div>
+                </article>
+              `}
+            </div>
+          ` : ""}
         </article>
       </div>
     </article>
@@ -2794,11 +2902,170 @@ function renderGameModePicker(state) {
   `;
 }
 
+function getCourseReadinessPresentation(course = {}, { loading = false } = {}) {
+  if (loading) {
+    return {
+      label: "Loading",
+      note: "Loading full course detail",
+    };
+  }
+
+  const readinessTier = String(course?.metadata?.readinessTier || "").toLowerCase();
+  if (readinessTier === "rich-round-ready") {
+    return {
+      label: "Rich details",
+      note: "Real tee and hole data",
+    };
+  }
+
+  if (readinessTier === "basic-round-ready") {
+    return {
+      label: "Quick setup",
+      note: "Default tee if full detail is missing",
+    };
+  }
+
+  return {
+    label: "Course ready",
+    note: "Playable round available",
+  };
+}
+
+function renderCourseReadinessBadge(course = {}, options = {}) {
+  const presentation = getCourseReadinessPresentation(course, options);
+  return `<span class="status-pill">${escapeHtml(presentation.label)}</span>`;
+}
+
+function renderCourseSelectionLine(course = {}, teeBox = null, options = {}) {
+  const presentation = getCourseReadinessPresentation(course, options);
+  if (options?.loading) {
+    return escapeHtml(presentation.note);
+  }
+
+  const teeName = String(teeBox?.name || "Primary tee").trim();
+  const totalYardage = Number(teeBox?.totalYardage);
+  const totalPar = Number(teeBox?.totalPar);
+  const parts = [teeName];
+
+  if (Number.isFinite(totalYardage) && totalYardage > 0) {
+    parts.push(`${totalYardage} yds`);
+  }
+
+  if (Number.isFinite(totalPar) && totalPar > 0) {
+    parts.push(`Par ${totalPar}`);
+  }
+
+  parts.push(presentation.note);
+  return escapeHtml(parts.join(" / "));
+}
+
+function getRoundSetupDiscovery(state, roundSetup = getRoundSetup(state)) {
+  return getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {}, {
+    rounds: state.rounds,
+  });
+}
+
+function getCourseHoleCountOptions(course = {}) {
+  return [9, 18]
+    .filter((count) => count <= Number(course?.holesCount || 18))
+    .concat(
+      Number(course?.holesCount || 18) > 0 && ![9, 18].includes(Number(course?.holesCount || 18))
+        ? [Number(course.holesCount)]
+        : []
+    );
+}
+
+function renderCourseResultCards(courses = [], options = {}) {
+  const selectedCourseId = String(options.selectedCourseId || "");
+  const courseDetailStatus = String(options.courseDetailStatus || "idle");
+  const detailCourseId = String(options.detailCourseId || "");
+
+  return courses.map((course) => {
+    const featuredTee = getDefaultCourseTeeBox(course);
+    const isSelected = course.id === selectedCourseId;
+    const isHydrating = courseDetailStatus === "loading" && detailCourseId === course.id;
+    return `
+      <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-course-provider-id="${escapeHtml(course.providerId || "")}" data-tee-box-id="${featuredTee?.id || ""}" ${isHydrating ? "disabled" : ""}>
+        <div class="course-result-copy">
+          <strong>${escapeHtml(course.displayName || course.name)}</strong>
+          <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
+        </div>
+        <div class="course-result-meta">
+          ${renderCourseReadinessBadge(course, { loading: isHydrating })}
+          <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
+          <span>${isHydrating ? "Loading" : `${featuredTee?.totalYardage || "--"} yds`}</span>
+        </div>
+      </button>
+    `;
+  }).join("");
+}
+
+function renderSelectedCourseSetupCard(course, teeBox, roundSetup = {}, options = {}) {
+  if (!course || !teeBox) {
+    return "";
+  }
+
+  const holeCountOptions = getCourseHoleCountOptions(course);
+  return `
+    <article class="course-selected-card" data-selected-course="true">
+      <div class="course-selected-copy">
+        <span class="mini-label">Selected</span>
+        <strong>${escapeHtml(course.displayName || course.name)}</strong>
+        <div class="tag-row">
+          ${renderCourseReadinessBadge(course)}
+        </div>
+        <p>${renderCourseSelectionLine(course, teeBox, options)}</p>
+      </div>
+      <div class="split-inputs course-selected-actions">
+        <label>
+          Tee
+          <select name="selectedTeeBoxId" form="create-round-form" data-course-tee-select="true">
+            ${course.teeBoxes.map((courseTeeBox) => `
+              <option value="${courseTeeBox.id}" ${courseTeeBox.id === teeBox.id ? "selected" : ""}>
+                ${escapeHtml(courseTeeBox.name)} / ${courseTeeBox.totalYardage} yds
+              </option>
+            `).join("")}
+          </select>
+        </label>
+        <label>
+          Holes
+          <select name="selectedHoleCount" form="create-round-form" data-course-hole-count-select="true">
+            ${holeCountOptions.map((count) => `
+              <option value="${count}" ${count === roundSetup.selectedHoleCount ? "selected" : ""}>${count}</option>
+            `).join("")}
+          </select>
+        </label>
+      </div>
+    </article>
+  `;
+}
+
+function renderCourseSuggestionSection(title = "", courses = [], options = {}) {
+  if (!Array.isArray(courses) || !courses.length) {
+    return "";
+  }
+
+  return `
+    <section class="stack-list">
+      <div class="section-copy compact-section-copy">
+        <strong>${escapeHtml(title)}</strong>
+      </div>
+      <div class="course-results-list course-results-list--compact">
+        ${renderCourseResultCards(courses, options)}
+      </div>
+    </section>
+  `;
+}
+
 function renderCoursePicker(state) {
   const roundSetup = getRoundSetup(state);
-  const discovery = getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {});
+  const discovery = getRoundSetupDiscovery(state, roundSetup);
+  const courseCatalogStatus = String(state.course?.catalogStatus || "idle");
+  const courseDetailStatus = String(state.course?.detailStatus || "idle");
+  const detailCourseId = String(state.course?.detailCourseId || "");
   const {
     searchResults,
+    recentCourses,
     selectedCourse,
     selectedTeeBox,
     nearbyCourses,
@@ -2806,86 +3073,61 @@ function renderCoursePicker(state) {
   const courseMethod = String(roundSetup.courseMethod || "").trim();
   const suggestedCourse = nearbyCourses[0] || null;
   const suggestedTeeBox = suggestedCourse ? getDefaultCourseTeeBox(suggestedCourse) : null;
-  const holeCountOptions = [9, 18]
-    .filter((count) => count <= Number(selectedCourse?.holesCount || 18))
-    .concat(
-      Number(selectedCourse?.holesCount || 18) > 0 && ![9, 18].includes(Number(selectedCourse?.holesCount || 18))
-        ? [Number(selectedCourse.holesCount)]
-        : []
-    );
+  const recentSuggestionCourses = recentCourses.slice(0, 4);
+  const nearbySuggestionCourses = suggestedCourse
+    ? nearbyCourses.filter((course) => course.id !== suggestedCourse.id).slice(0, 4)
+    : nearbyCourses.slice(0, 4);
 
   const renderSearchResultsSection = (queryOverride = roundSetup.courseQuery) => {
     const effectiveRoundSetup = {
       ...roundSetup,
       courseQuery: String(queryOverride || ""),
     };
-    const effectiveDiscovery = getRoundSetupDiscoveryState(effectiveRoundSetup, state.session?.nearby || {});
+    const effectiveDiscovery = getRoundSetupDiscovery(state, effectiveRoundSetup);
     const effectiveSelectedCourse = effectiveDiscovery.selectedCourse;
     const effectiveSelectedTeeBox = effectiveDiscovery.selectedTeeBox;
-    const effectiveHoleCountOptions = [9, 18]
-      .filter((count) => count <= Number(effectiveSelectedCourse?.holesCount || 18))
-      .concat(
-        Number(effectiveSelectedCourse?.holesCount || 18) > 0 && ![9, 18].includes(Number(effectiveSelectedCourse?.holesCount || 18))
-          ? [Number(effectiveSelectedCourse.holesCount)]
-          : []
-      );
+    const hasNationwideResults = effectiveDiscovery.showNationwideSearch && effectiveDiscovery.searchResults.length > 0;
+    const hasSuggestions = effectiveDiscovery.recentCourses.length > 0 || effectiveDiscovery.nearbyCourses.length > 0;
 
     return `
-      <div class="course-results-list course-results-list--compact">
-        ${effectiveDiscovery.searchResults.length
-          ? effectiveDiscovery.searchResults.slice(0, 6).map((course) => {
-              const featuredTee = getDefaultCourseTeeBox(course);
-              const isSelected = course.id === effectiveSelectedCourse?.id;
-              return `
-                <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
-                  <div class="course-result-copy">
-                    <strong>${escapeHtml(course.displayName || course.name)}</strong>
-                    <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
-                  </div>
-                  <div class="course-result-meta">
-                    <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
-                    <span>${featuredTee?.totalYardage || "--"} yds</span>
-                  </div>
-                </button>
-              `;
-            }).join("")
-          : `
-            <div class="empty-state compact-empty-state">
-              <strong>No course match</strong>
-            </div>
-          `}
-      </div>
-      ${effectiveSelectedCourse && effectiveSelectedTeeBox
+      ${effectiveDiscovery.showNationwideSearch
         ? `
-          <article class="course-selected-card" data-selected-course="true">
-            <div class="course-selected-copy">
-              <span class="mini-label">Selected</span>
-              <strong>${escapeHtml(effectiveSelectedCourse.displayName || effectiveSelectedCourse.name)}</strong>
-              <p>${escapeHtml(effectiveSelectedTeeBox.name)} / ${effectiveSelectedTeeBox.totalYardage} yds / Par ${effectiveSelectedTeeBox.totalPar}</p>
-            </div>
-            <div class="split-inputs course-selected-actions">
-              <label>
-                Tee
-                <select name="selectedTeeBoxId" form="create-round-form" data-course-tee-select="true">
-                  ${effectiveSelectedCourse.teeBoxes.map((teeBox) => `
-                    <option value="${teeBox.id}" ${teeBox.id === effectiveSelectedTeeBox.id ? "selected" : ""}>
-                      ${escapeHtml(teeBox.name)} / ${teeBox.totalYardage} yds
-                    </option>
-                  `).join("")}
-                </select>
-              </label>
-              <label>
-                Holes
-                <select name="selectedHoleCount" form="create-round-form" data-course-hole-count-select="true">
-                  ${effectiveHoleCountOptions.map((count) => `
-                    <option value="${count}" ${count === effectiveRoundSetup.selectedHoleCount ? "selected" : ""}>${count}</option>
-                  `).join("")}
-                </select>
-              </label>
-            </div>
-          </article>
+          <div class="course-results-list course-results-list--compact">
+            ${hasNationwideResults
+              ? renderCourseResultCards(effectiveDiscovery.searchResults.slice(0, 6), {
+                  selectedCourseId: effectiveSelectedCourse?.id,
+                  courseDetailStatus,
+                  detailCourseId,
+                })
+              : `
+                <div class="empty-state compact-empty-state">
+                  <strong>${courseCatalogStatus === "loading" ? "Loading courses" : "No course match"}</strong>
+                </div>
+              `}
+          </div>
         `
-        : ""}
+        : `
+          <div class="stack-list">
+            ${renderCourseSuggestionSection("Recent courses", effectiveDiscovery.recentCourses.slice(0, 4), {
+              selectedCourseId: effectiveSelectedCourse?.id,
+              courseDetailStatus,
+              detailCourseId,
+            })}
+            ${renderCourseSuggestionSection("Nearby courses", effectiveDiscovery.nearbyCourses.slice(0, 4), {
+              selectedCourseId: effectiveSelectedCourse?.id,
+              courseDetailStatus,
+              detailCourseId,
+            })}
+            ${hasSuggestions
+              ? ""
+              : `
+                <div class="empty-state compact-empty-state">
+                  <strong>Type to search nationwide</strong>
+                </div>
+              `}
+          </div>
+        `}
+      ${renderSelectedCourseSetupCard(effectiveSelectedCourse, effectiveSelectedTeeBox, effectiveRoundSetup)}
       <div class="row-actions compact-actions">
         <button class="button subtle" type="button" data-action="back-course-methods">Back</button>
       </div>
@@ -2910,6 +3152,10 @@ function renderCoursePicker(state) {
             <div class="course-selected-copy">
               <span class="mini-label">Suggested</span>
               <strong>${escapeHtml(suggestedCourse.displayName || suggestedCourse.name)}</strong>
+              <div class="tag-row">
+                ${renderCourseReadinessBadge(suggestedCourse)}
+              </div>
+              <p>${renderCourseSelectionLine(suggestedCourse, suggestedTeeBox)}</p>
             </div>
           </article>
           <div class="stack-list round-setup-start-actions">
@@ -2923,6 +3169,16 @@ function renderCoursePicker(state) {
               Skip for now
             </button>
           </div>
+          ${renderCourseSuggestionSection("Recent courses", recentSuggestionCourses, {
+            selectedCourseId: selectedCourse?.id,
+            courseDetailStatus,
+            detailCourseId,
+          })}
+          ${renderCourseSuggestionSection("Nearby courses", nearbySuggestionCourses, {
+            selectedCourseId: selectedCourse?.id,
+            courseDetailStatus,
+            detailCourseId,
+          })}
         </div>
       `;
     }
@@ -2944,6 +3200,16 @@ function renderCoursePicker(state) {
             Skip for now
           </button>
         </div>
+        ${renderCourseSuggestionSection("Recent courses", recentSuggestionCourses, {
+          selectedCourseId: selectedCourse?.id,
+          courseDetailStatus,
+          detailCourseId,
+        })}
+        ${renderCourseSuggestionSection("Nearby courses", nearbyCourses.slice(0, 4), {
+          selectedCourseId: selectedCourse?.id,
+          courseDetailStatus,
+          detailCourseId,
+        })}
       </div>
     `;
   }
@@ -2960,12 +3226,19 @@ function renderCoursePicker(state) {
             <div class="course-selected-copy">
               <span class="mini-label">Suggested course</span>
               <strong>${escapeHtml(suggestedCourse.displayName || suggestedCourse.name)}</strong>
-              <p>${escapeHtml(suggestedTeeBox.name)} / ${suggestedTeeBox.totalYardage} yds / Par ${suggestedTeeBox.totalPar}</p>
+              <div class="tag-row">
+                ${renderCourseReadinessBadge(suggestedCourse, {
+                  loading: courseDetailStatus === "loading" && detailCourseId === suggestedCourse.id,
+                })}
+              </div>
+              <p>${renderCourseSelectionLine(suggestedCourse, suggestedTeeBox, {
+                loading: courseDetailStatus === "loading" && detailCourseId === suggestedCourse.id,
+              })}</p>
             </div>
           </article>
           <div class="stack-list round-setup-start-actions">
-            <button class="button primary" type="button" data-action="confirm-course-choice" data-course-id="${suggestedCourse.id}" data-tee-box-id="${suggestedTeeBox.id}">
-              Confirm Course
+            <button class="button primary" type="button" data-action="confirm-course-choice" data-course-id="${suggestedCourse.id}" data-course-provider-id="${escapeHtml(suggestedCourse.providerId || "")}" data-tee-box-id="${suggestedTeeBox.id}" ${(courseDetailStatus === "loading" && detailCourseId === suggestedCourse.id) ? "disabled" : ""}>
+              ${(courseDetailStatus === "loading" && detailCourseId === suggestedCourse.id) ? "Loading course" : "Confirm Course"}
             </button>
             <button class="button secondary" type="button" data-action="search-another-course">
               Search Another Course
@@ -3048,78 +3321,59 @@ function renderCoursePicker(state) {
 
 export function renderCourseSearchResults(state, queryOverride = "") {
   const roundSetup = getRoundSetup(state);
+  const courseCatalogStatus = String(state.course?.catalogStatus || "idle");
+  const courseDetailStatus = String(state.course?.detailStatus || "idle");
+  const detailCourseId = String(state.course?.detailCourseId || "");
   const effectiveRoundSetup = {
     ...roundSetup,
     courseMethod: "search",
     courseQuery: String(queryOverride || ""),
   };
-  const discovery = getRoundSetupDiscoveryState(effectiveRoundSetup, state.session?.nearby || {});
+  const discovery = getRoundSetupDiscovery(state, effectiveRoundSetup);
   const selectedCourse = discovery.selectedCourse;
   const selectedTeeBox = discovery.selectedTeeBox;
-  const holeCountOptions = [9, 18]
-    .filter((count) => count <= Number(selectedCourse?.holesCount || 18))
-    .concat(
-      Number(selectedCourse?.holesCount || 18) > 0 && ![9, 18].includes(Number(selectedCourse?.holesCount || 18))
-        ? [Number(selectedCourse.holesCount)]
-        : []
-    );
+  const hasNationwideResults = discovery.showNationwideSearch && discovery.searchResults.length > 0;
+  const hasSuggestions = discovery.recentCourses.length > 0 || discovery.nearbyCourses.length > 0;
 
   return `
-    <div class="course-results-list course-results-list--compact">
-      ${discovery.searchResults.length
-        ? discovery.searchResults.slice(0, 6).map((course) => {
-            const featuredTee = getDefaultCourseTeeBox(course);
-            const isSelected = course.id === selectedCourse?.id;
-            return `
-              <button class="course-result-card ${isSelected ? "is-selected" : ""}" type="button" data-action="select-course" data-course-id="${course.id}" data-tee-box-id="${featuredTee?.id || ""}">
-                <div class="course-result-copy">
-                  <strong>${escapeHtml(course.displayName || course.name)}</strong>
-                  <p>${escapeHtml(course.city)}, ${escapeHtml(course.state)}</p>
-                </div>
-                <div class="course-result-meta">
-                  <span>${escapeHtml(featuredTee?.name || "Primary tee")}</span>
-                  <span>${featuredTee?.totalYardage || "--"} yds</span>
-                </div>
-              </button>
-            `;
-          }).join("")
-        : `
-          <div class="empty-state compact-empty-state">
-            <strong>No course match</strong>
-          </div>
-        `}
-    </div>
-    ${selectedCourse && selectedTeeBox
+    ${discovery.showNationwideSearch
       ? `
-        <article class="course-selected-card" data-selected-course="true">
-          <div class="course-selected-copy">
-            <span class="mini-label">Selected</span>
-            <strong>${escapeHtml(selectedCourse.displayName || selectedCourse.name)}</strong>
-            <p>${escapeHtml(selectedTeeBox.name)} / ${selectedTeeBox.totalYardage} yds / Par ${selectedTeeBox.totalPar}</p>
-          </div>
-          <div class="split-inputs course-selected-actions">
-            <label>
-              Tee
-              <select name="selectedTeeBoxId" form="create-round-form" data-course-tee-select="true">
-                ${selectedCourse.teeBoxes.map((teeBox) => `
-                  <option value="${teeBox.id}" ${teeBox.id === selectedTeeBox.id ? "selected" : ""}>
-                    ${escapeHtml(teeBox.name)} / ${teeBox.totalYardage} yds
-                  </option>
-                `).join("")}
-              </select>
-            </label>
-            <label>
-              Holes
-              <select name="selectedHoleCount" form="create-round-form" data-course-hole-count-select="true">
-                ${holeCountOptions.map((count) => `
-                  <option value="${count}" ${count === effectiveRoundSetup.selectedHoleCount ? "selected" : ""}>${count}</option>
-                `).join("")}
-              </select>
-            </label>
-          </div>
-        </article>
+        <div class="course-results-list course-results-list--compact">
+          ${hasNationwideResults
+            ? renderCourseResultCards(discovery.searchResults.slice(0, 6), {
+                selectedCourseId: selectedCourse?.id,
+                courseDetailStatus,
+                detailCourseId,
+              })
+            : `
+              <div class="empty-state compact-empty-state">
+                <strong>${courseCatalogStatus === "loading" ? "Loading courses" : "No course match"}</strong>
+              </div>
+            `}
+        </div>
       `
-      : ""}
+      : `
+        <div class="stack-list">
+          ${renderCourseSuggestionSection("Recent courses", discovery.recentCourses.slice(0, 4), {
+            selectedCourseId: selectedCourse?.id,
+            courseDetailStatus,
+            detailCourseId,
+          })}
+          ${renderCourseSuggestionSection("Nearby courses", discovery.nearbyCourses.slice(0, 4), {
+            selectedCourseId: selectedCourse?.id,
+            courseDetailStatus,
+            detailCourseId,
+          })}
+          ${hasSuggestions
+            ? ""
+            : `
+              <div class="empty-state compact-empty-state">
+                <strong>Type to search nationwide</strong>
+              </div>
+            `}
+        </div>
+      `}
+    ${renderSelectedCourseSetupCard(selectedCourse, selectedTeeBox, effectiveRoundSetup)}
     <div class="row-actions compact-actions">
       <button class="button subtle" type="button" data-action="back-course-methods">Back</button>
     </div>
@@ -3137,7 +3391,7 @@ function renderCreateRoundCard(state, activeRound) {
   const playerValue = activeRound
     ? activeRound.players.map((player) => player.name).join(", ")
     : String(roundSetup.players || state.currentUser.name || "").trim() || state.currentUser.name;
-  const discovery = getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {});
+  const discovery = getRoundSetupDiscovery(state, roundSetup);
   const selectedCourse = discovery.selectedCourse;
   const selectedTeeBox = discovery.selectedTeeBox;
   const manualCourse = buildManualRoundTemplate(

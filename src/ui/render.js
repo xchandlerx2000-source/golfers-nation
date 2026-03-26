@@ -1,4 +1,5 @@
 import { createDefaultState } from "../state/default-state.js";
+import { getDefaultCourseAdminReviewState } from "../state/course-state.js";
 import { renderAppTemplate } from "./templates.js";
 
 function getActiveRound(state) {
@@ -300,6 +301,9 @@ function normalizeLocalSettingsState(localUiState = {}, state = {}) {
 function applyLocalUiOverrides(state = {}, localUiState = {}) {
   const nextState = {
     ...state,
+    course: {
+      ...(state?.course || {}),
+    },
     session: {
       ...(state?.session || {}),
     },
@@ -320,6 +324,14 @@ function applyLocalUiOverrides(state = {}, localUiState = {}) {
     const settingsState = normalizeLocalSettingsState(localUiState, nextState);
     nextState.session.settingsDestination = settingsState.destination;
     nextState.session.settingsSection = settingsState.section;
+  }
+
+  if (localUiState.courseAdminReview) {
+    nextState.course.adminReview = {
+      ...getDefaultCourseAdminReviewState(),
+      ...(nextState.course?.adminReview || {}),
+      ...(localUiState.courseAdminReview || {}),
+    };
   }
 
   return nextState;
@@ -440,14 +452,18 @@ export function createRenderer(root) {
   const scrollPositions = new Map();
   let lastRenderedView = null;
   let pendingScrollRestore = 0;
+  let lastSourceState = RENDER_FALLBACK_STATE;
   const localUiState = {
     appMenuOpen: false,
     settingsDestination: null,
     settingsSection: null,
     roundSetupFieldDrafts: {},
+    courseAdminReview: getDefaultCourseAdminReviewState(),
   };
 
   function updateLocalUi(patch = {}) {
+    let shouldRerender = false;
+
     if (Object.prototype.hasOwnProperty.call(patch, "appMenuOpen")) {
       localUiState.appMenuOpen = Boolean(patch.appMenuOpen);
       applyLocalAppMenuUi(root, localUiState.appMenuOpen);
@@ -476,6 +492,19 @@ export function createRenderer(root) {
         ...(patch.roundSetupFieldDrafts || {}),
       };
     }
+
+    if (Object.prototype.hasOwnProperty.call(patch, "courseAdminReview")) {
+      localUiState.courseAdminReview = {
+        ...getDefaultCourseAdminReviewState(),
+        ...(localUiState.courseAdminReview || {}),
+        ...(patch.courseAdminReview || {}),
+      };
+      shouldRerender = true;
+    }
+
+    if (shouldRerender) {
+      render(lastSourceState, { reason: "course-admin-local" });
+    }
   }
 
   function closeTransientUi() {
@@ -490,10 +519,14 @@ export function createRenderer(root) {
       roundSetupFieldDrafts: {
         ...(localUiState.roundSetupFieldDrafts || {}),
       },
+      courseAdminReview: {
+        ...(localUiState.courseAdminReview || {}),
+      },
     };
   }
 
   function render(state, meta = {}) {
+    lastSourceState = state || RENDER_FALLBACK_STATE;
     const renderableState = getRenderableState(state);
     const nextView = renderableState.session?.activeView || "home";
     const sameView = lastRenderedView === nextView;

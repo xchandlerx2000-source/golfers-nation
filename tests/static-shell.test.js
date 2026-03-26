@@ -42,9 +42,11 @@ describe("static app shell", () => {
     expect(manifest.start_url).toBe("/");
     expect(manifest.scope).toBe("/");
     expect(manifest.icons.every((icon) => icon.src.startsWith("/icons/"))).toBe(true);
-    expect(serviceWorker).toContain('const CACHE_NAME = "golfers-nation-shell-v8"');
+    expect(serviceWorker).toContain('const CACHE_NAME = "golfers-nation-shell-v9"');
+    expect(serviceWorker).toContain('const COURSE_CACHE_NAME = "golfers-nation-course-v1"');
     expect(serviceWorker).toContain('"/app.js"');
     expect(serviceWorker).toContain('"/runtime-config.js"');
+    expect(serviceWorker).toContain('"/data/course/"');
   });
 
   it("includes an HTML-level cached-shell recovery path if app.js never starts", () => {

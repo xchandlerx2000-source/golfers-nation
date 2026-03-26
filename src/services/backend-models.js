@@ -205,6 +205,55 @@ export function toBackendTournamentRecord(tournament, userId = null) {
   };
 }
 
+export function toBackendCourseOverrideRecord(override = {}, userId = null) {
+  if (!override) {
+    return null;
+  }
+
+  return {
+    id: override.id || override.courseId || override.canonicalCourseId || null,
+    canonical_course_id: override.courseId || override.canonicalCourseId || override.id || null,
+    submitted_by_user_id: userId,
+    source: override.source || override.metadata?.source || "admin-course-overrides",
+    source_type: override.sourceType || override.metadata?.sourceType || "course-admin-override",
+    review_status: override.reviewStatus || override.metadata?.reviewStatus || "approved",
+    review_notes: override.reviewNotes || override.metadata?.reviewNotes || "",
+    quality_issues: cloneData(override.qualityIssues || override.metadata?.qualityIssues || []),
+    override_fields: cloneData(override.metadata?.adminOverrideFields || []),
+    override_payload: cloneData(override),
+    updated_at: toIsoTimestamp(Date.now()),
+  };
+}
+
+export function toBackendCourseReconciliationRecord(course = {}) {
+  if (!course?.id) {
+    return null;
+  }
+
+  return {
+    id: course.id,
+    canonical_course_id: course.id,
+    display_name: course.displayName || course.name || "",
+    city: course.city || null,
+    state: course.state || null,
+    provider_id: course.providerId || null,
+    readiness_tier: course.metadata?.readinessTier || "incomplete",
+    confidence_tier: course.metadata?.confidenceTier || "low",
+    match_confidence: typeof course.metadata?.matchConfidence === "number" ? course.metadata.matchConfidence : 0,
+    completeness_score: typeof course.metadata?.completenessScore === "number" ? course.metadata.completenessScore : 0,
+    has_real_tee_data: Boolean(course.metadata?.qualityFlags?.hasRealTeeData),
+    has_real_hole_data: Boolean(course.metadata?.qualityFlags?.hasRealHoleData),
+    has_real_rating_slope: Boolean(course.metadata?.qualityFlags?.hasRealRatingSlope),
+    uses_fallback_tee_data: Boolean(course.metadata?.qualityFlags?.usesFallbackTeeData),
+    uses_fallback_hole_data: Boolean(course.metadata?.qualityFlags?.usesFallbackHoleData),
+    admin_override_applied: Boolean(course.metadata?.adminOverrideApplied),
+    admin_review_status: course.metadata?.adminReviewStatus || "",
+    quality_issues: cloneData(course.metadata?.qualityIssues || []),
+    source_history: cloneData(course.metadata?.sourceHistory || []),
+    updated_at: toIsoTimestamp(Date.now()),
+  };
+}
+
 export function toBackendGearRecord(item, userId = null) {
   if (!item) {
     return null;

@@ -19,6 +19,8 @@ const COURSE_PROVIDERS = [
   placesCourseProvider,
   mockCourseProvider,
 ];
+const SEARCH_CACHE = new Map();
+const NEARBY_CACHE = new Map();
 
 function getProviders({ includeScaffolded = true, includeTestingProviders = false } = {}) {
   return COURSE_PROVIDERS.filter((provider) => {
@@ -38,6 +40,29 @@ function getCourseKey(course = {}) {
   return course.id || `${course.name || ""}:${course.city || ""}:${course.state || ""}:${course.providerId || ""}`;
 }
 
+function getCourseReadinessRank(course = {}) {
+  const readinessTier = String(course?.metadata?.readinessTier || "").toLowerCase();
+  switch (readinessTier) {
+    case "rich-round-ready":
+      return 3;
+    case "basic-round-ready":
+      return 2;
+    case "discovery-ready":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function getCourseConfidenceScore(course = {}) {
+  const numericScore = Number(course?.metadata?.matchConfidence);
+  return Number.isFinite(numericScore) ? numericScore : 0;
+}
+
+function normalizeCourseSearchQuery(value = "") {
+  return String(value || "").trim();
+}
+
 function sortCourses(left = {}, right = {}) {
   const leftPriority = left?.metadata?.priority ?? 100;
   const rightPriority = right?.metadata?.priority ?? 100;
@@ -55,6 +80,18 @@ function sortCourses(left = {}, right = {}) {
   const rightDistance = Number.isFinite(right?.nearbyDistanceMiles) ? right.nearbyDistanceMiles : Number.POSITIVE_INFINITY;
   if (leftDistance !== rightDistance) {
     return leftDistance - rightDistance;
+  }
+
+  const leftReadinessRank = getCourseReadinessRank(left);
+  const rightReadinessRank = getCourseReadinessRank(right);
+  if (leftReadinessRank !== rightReadinessRank) {
+    return rightReadinessRank - leftReadinessRank;
+  }
+
+  const leftConfidenceScore = getCourseConfidenceScore(left);
+  const rightConfidenceScore = getCourseConfidenceScore(right);
+  if (leftConfidenceScore !== rightConfidenceScore) {
+    return rightConfidenceScore - leftConfidenceScore;
   }
 
   return String(left?.name || "").localeCompare(String(right?.name || ""));
@@ -86,6 +123,57 @@ function collectCourses(methodName, args = [], options = {}) {
   ).sort(sortCourses);
 }
 
+function getSearchCacheKey(query = "", options = {}) {
+  return JSON.stringify({
+    q: normalizeCourseSearchQuery(query).toLowerCase(),
+    limit: Number(options.limit || 10),
+    includeScaffolded: options.includeScaffolded !== false,
+    includeTestingProviders: Boolean(options.includeTestingProviders),
+  });
+}
+
+function getNearbyCacheKey(lat, lng, options = {}) {
+  return JSON.stringify({
+    lat: Number(lat),
+    lng: Number(lng),
+    limit: Number(options.limit || 6),
+    radiusMiles: Number(options.radiusMiles || 50),
+    includeScaffolded: options.includeScaffolded !== false,
+    includeTestingProviders: Boolean(options.includeTestingProviders),
+  });
+}
+
+function getRecentRoundSetupCourses(rounds = [], limit = 4, options = {}) {
+  const recentRounds = Array.isArray(rounds)
+    ? rounds
+      .filter((round) => round?.status === "completed" || round?.status === "active")
+      .sort((left, right) => (right?.updatedAt || right?.completedAt || right?.createdAt || 0) - (left?.updatedAt || left?.completedAt || left?.createdAt || 0))
+    : [];
+  const recentCourses = [];
+  const seen = new Set();
+
+  recentRounds.forEach((round) => {
+    if (recentCourses.length >= limit) {
+      return;
+    }
+
+    const courseId = String(round?.courseId || "").trim();
+    if (!courseId || seen.has(courseId)) {
+      return;
+    }
+
+    const course = getCourseById(courseId, options);
+    if (!course) {
+      return;
+    }
+
+    seen.add(courseId);
+    recentCourses.push(course);
+  });
+
+  return recentCourses;
+}
+
 export function getCourseProviderCatalog() {
   return getProviders().map((provider) => ({
     id: provider.id,
@@ -95,16 +183,31 @@ export function getCourseProviderCatalog() {
 
 export function searchCourses(query = "", options = {}) {
   const limit = Number(options.limit || 10);
-  return collectCourses("searchCourses", [query, { limit }], options).slice(0, limit);
+  const normalizedQuery = normalizeCourseSearchQuery(query);
+  const cacheKey = getSearchCacheKey(normalizedQuery, { ...options, limit });
+  if (SEARCH_CACHE.has(cacheKey)) {
+    return SEARCH_CACHE.get(cacheKey);
+  }
+
+  const results = collectCourses("searchCourses", [normalizedQuery, { limit }], options).slice(0, limit);
+  SEARCH_CACHE.set(cacheKey, results);
+  return results;
 }
 
 export function findNearbyCourses(lat, lng, options = {}) {
   const limit = Number(options.limit || 6);
-  return collectCourses(
+  const cacheKey = getNearbyCacheKey(lat, lng, { ...options, limit });
+  if (NEARBY_CACHE.has(cacheKey)) {
+    return NEARBY_CACHE.get(cacheKey);
+  }
+
+  const results = collectCourses(
     "findNearbyCourses",
     [lat, lng, { limit, radiusMiles: Number(options.radiusMiles || 50) }],
     options
   ).slice(0, limit);
+  NEARBY_CACHE.set(cacheKey, results);
+  return results;
 }
 
 export function getCourseById(courseId = "", options = {}) {
@@ -236,12 +339,17 @@ function getNearbyCourseDiscoveryCopy(nearbyState = {}, nearbyCourses = []) {
 
 export function getRoundSetupDiscoveryState(roundSetup = {}, nearbyState = {}, options = {}) {
   const setup = getCourseRoundSetupState(roundSetup);
+  const normalizedQuery = normalizeCourseSearchQuery(setup.courseQuery);
+  const recentCourses = getRecentRoundSetupCourses(options.rounds, Number(options.recentLimit || 4), options);
   const selectedCourse = setup.selectedCourseId ? getCourseById(setup.selectedCourseId, options) : null;
   const selectedTeeBox = selectedCourse
     ? findCourseTeeBox(selectedCourse, setup.selectedTeeBoxId || getDefaultCourseTeeBox(selectedCourse)?.id || "")
     : null;
-  const searchResults = getProviderRoundSetupCourses(setup.courseQuery, setup.courseQuery ? 10 : 8, options);
-  const quickPicks = setup.courseQuery ? [] : getProviderCourseQuickPicks(4, options);
+  const shouldShowNationwideSearch = setup.courseMethod === "search" && Boolean(normalizedQuery);
+  const searchResults = shouldShowNationwideSearch
+    ? getProviderRoundSetupCourses(normalizedQuery, 10, options)
+    : [];
+  const quickPicks = [];
   const nearbyCourses = nearbyState?.coordinates
     ? findNearbyCourses(
         Number(nearbyState.coordinates.latitude || 0),
@@ -257,7 +365,9 @@ export function getRoundSetupDiscoveryState(roundSetup = {}, nearbyState = {}, o
     selectedTeeBox,
     searchResults,
     quickPicks,
+    recentCourses,
     nearbyCourses,
     nearbyCopy,
+    showNationwideSearch: shouldShowNationwideSearch,
   };
 }

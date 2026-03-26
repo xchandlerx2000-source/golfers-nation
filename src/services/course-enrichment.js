@@ -1,12 +1,15 @@
-function normalizeMergeValue(value = "") {
-  return String(value || "").trim().toLowerCase();
+import { cloneData } from "../utils/formatters.js";
+
+function normalizeCourseKeyValue(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function slugifyMergeValue(value = "") {
-  return normalizeMergeValue(value).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-}
-
-function mergeUniqueValues(...valueLists) {
+function mergeUniqueCourseValues(...valueLists) {
   const seen = new Set();
   const merged = [];
 
@@ -28,82 +31,286 @@ function mergeUniqueValues(...valueLists) {
   return merged;
 }
 
-function getRawCourseMergeKey(course = {}) {
-  const id = slugifyMergeValue(course?.id || course?.slug || "");
-  if (id) {
-    return id;
+function buildCourseIdentityLabel(row = {}) {
+  const displayName = String(row?.displayName || "").trim();
+  if (displayName) {
+    return displayName;
   }
 
-  const displayName = slugifyMergeValue(course?.displayName || course?.courseName || course?.clubName || course?.name || "");
-  const city = slugifyMergeValue(course?.city || "");
-  const state = slugifyMergeValue(course?.state || "");
-  return [displayName, city, state].filter(Boolean).join(":");
+  return [row?.clubName, row?.courseName, row?.name]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ");
 }
 
-function pickPreferredValue(primaryValue, fallbackValue) {
-  if (primaryValue === null || primaryValue === undefined || primaryValue === "") {
-    return fallbackValue;
+function buildCourseIdKey(row = {}) {
+  const idCandidate = row?.providerCourseId
+    || row?.externalIds?.providerCourseId
+    || row?.id
+    || row?.slug
+    || "";
+  const normalized = normalizeCourseKeyValue(idCandidate);
+  return normalized || "";
+}
+
+function buildCourseLocationKey(row = {}) {
+  const identity = normalizeCourseKeyValue(buildCourseIdentityLabel(row));
+  const city = normalizeCourseKeyValue(row?.city || "");
+  const state = normalizeCourseKeyValue(row?.state || "");
+  return [identity, city, state].filter(Boolean).join("|");
+}
+
+function pickFirstNonEmptyString(...values) {
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (normalized) {
+      return normalized;
+    }
   }
 
-  return primaryValue;
+  return "";
 }
 
-function mergeRawCourseRows(baseCourse = {}, enrichmentCourse = {}) {
-  const mergedMetadata = {
-    ...(enrichmentCourse?.metadata || {}),
-    ...(baseCourse?.metadata || {}),
-    enrichmentSource: enrichmentCourse?.source || enrichmentCourse?.metadata?.source || "",
-    enrichmentSourceType: enrichmentCourse?.sourceType || enrichmentCourse?.metadata?.sourceType || "",
-    enrichmentApplied: true,
-    sourceHistory: mergeUniqueValues(
-      baseCourse?.metadata?.sourceHistory || [],
-      enrichmentCourse?.metadata?.sourceHistory || [],
-      [baseCourse?.source || ""],
-      [enrichmentCourse?.source || ""]
+function pickFirstDefinedValue(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function pickFirstNumericValue(...values) {
+  for (const value of values) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+  }
+
+  return null;
+}
+
+function pickFirstPositiveNumericValue(...values) {
+  for (const value of values) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric;
+    }
+  }
+
+  return 0;
+}
+
+function hasMeaningfulValue(value) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  if (typeof value === "string") {
+    return Boolean(value.trim());
+  }
+
+  return true;
+}
+
+function getTeeRows(row = {}) {
+  if (Array.isArray(row?.teeBoxes)) {
+    return row.teeBoxes;
+  }
+
+  if (Array.isArray(row?.tees)) {
+    return row.tees;
+  }
+
+  return [];
+}
+
+function getTeeDataScore(row = {}) {
+  const teeRows = getTeeRows(row);
+  if (!teeRows.length) {
+    return 0;
+  }
+
+  let score = 1;
+  if (teeRows.some((teeBox) => Array.isArray(teeBox?.holes) && teeBox.holes.length)) {
+    score += 2;
+  }
+
+  if (teeRows.some((teeBox) => hasMeaningfulValue(teeBox?.rating) || hasMeaningfulValue(teeBox?.slope))) {
+    score += 1;
+  }
+
+  return score;
+}
+
+function getPreferredTeeRows(baseRow = {}, enrichmentRow = {}) {
+  return getTeeDataScore(enrichmentRow) > getTeeDataScore(baseRow)
+    ? cloneData(getTeeRows(enrichmentRow))
+    : cloneData(getTeeRows(baseRow));
+}
+
+function getEnrichmentPriority(row = {}) {
+  const explicitPriority = Number(row?.metadata?.enrichmentPriority);
+  if (Number.isFinite(explicitPriority)) {
+    return explicitPriority;
+  }
+
+  return getTeeDataScore(row) > 0 ? 300 : 100;
+}
+
+function buildMergedExternalIds(baseRow = {}, enrichmentRow = {}) {
+  return {
+    ...cloneData(enrichmentRow?.externalIds || {}),
+    ...cloneData(baseRow?.externalIds || {}),
+  };
+}
+
+function buildMergedMetadata(baseRow = {}, enrichmentRow = {}, matchMeta = {}) {
+  return {
+    ...cloneData(baseRow?.metadata || {}),
+    ...cloneData(enrichmentRow?.metadata || {}),
+    enrichmentApplied: Boolean(enrichmentRow && matchMeta?.matchType),
+    enrichmentMatchType: matchMeta?.matchType || "",
+    enrichmentMatchConfidence: Number(matchMeta?.matchConfidence || 0),
+    sourceHistory: mergeUniqueCourseValues(
+      baseRow?.metadata?.sourceHistory || [],
+      enrichmentRow?.metadata?.sourceHistory || [],
+      [baseRow?.source || ""],
+      [enrichmentRow?.source || ""]
     ),
   };
+}
+
+function mergeImportedCourseRow(baseRow = {}, enrichmentRow = {}, matchMeta = {}) {
+  const mergedTeeBoxes = getPreferredTeeRows(baseRow, enrichmentRow);
+  const mergedTees = cloneData(mergedTeeBoxes);
 
   return {
-    ...enrichmentCourse,
-    ...baseCourse,
-    id: baseCourse?.id || enrichmentCourse?.id || "",
-    slug: baseCourse?.slug || enrichmentCourse?.slug || "",
-    clubName: pickPreferredValue(baseCourse?.clubName, enrichmentCourse?.clubName),
-    courseName: pickPreferredValue(baseCourse?.courseName, enrichmentCourse?.courseName),
-    displayName: pickPreferredValue(baseCourse?.displayName, enrichmentCourse?.displayName),
-    address: pickPreferredValue(baseCourse?.address, enrichmentCourse?.address),
-    city: pickPreferredValue(baseCourse?.city, enrichmentCourse?.city),
-    state: pickPreferredValue(baseCourse?.state, enrichmentCourse?.state),
-    postalCode: pickPreferredValue(baseCourse?.postalCode, enrichmentCourse?.postalCode),
-    latitude: pickPreferredValue(baseCourse?.latitude, enrichmentCourse?.latitude),
-    longitude: pickPreferredValue(baseCourse?.longitude, enrichmentCourse?.longitude),
-    holesCount: pickPreferredValue(baseCourse?.holesCount, enrichmentCourse?.holesCount),
-    architect: pickPreferredValue(baseCourse?.architect, enrichmentCourse?.architect),
-    opened: pickPreferredValue(baseCourse?.opened, enrichmentCourse?.opened),
-    courseType: pickPreferredValue(baseCourse?.courseType, enrichmentCourse?.courseType),
-    teeBoxes: Array.isArray(baseCourse?.teeBoxes) && baseCourse.teeBoxes.length
-      ? baseCourse.teeBoxes
-      : (Array.isArray(enrichmentCourse?.teeBoxes) ? enrichmentCourse.teeBoxes : []),
-    aliases: mergeUniqueValues(baseCourse?.aliases || [], enrichmentCourse?.aliases || []),
-    searchTerms: mergeUniqueValues(baseCourse?.searchTerms || [], enrichmentCourse?.searchTerms || []),
-    keywords: mergeUniqueValues(baseCourse?.keywords || [], enrichmentCourse?.keywords || []),
-    externalIds: {
-      ...(enrichmentCourse?.externalIds || {}),
-      ...(baseCourse?.externalIds || {}),
-    },
-    metadata: mergedMetadata,
+    ...cloneData(baseRow),
+    id: pickFirstNonEmptyString(baseRow?.id, enrichmentRow?.id),
+    slug: pickFirstNonEmptyString(baseRow?.slug, enrichmentRow?.slug),
+    clubName: pickFirstNonEmptyString(baseRow?.clubName, enrichmentRow?.clubName, baseRow?.name, enrichmentRow?.name),
+    courseName: pickFirstNonEmptyString(baseRow?.courseName, enrichmentRow?.courseName, baseRow?.clubName, enrichmentRow?.clubName),
+    displayName: pickFirstNonEmptyString(baseRow?.displayName, enrichmentRow?.displayName, baseRow?.courseName, enrichmentRow?.courseName),
+    address: pickFirstNonEmptyString(
+      enrichmentRow?.address,
+      enrichmentRow?.addressLine1,
+      baseRow?.address,
+      baseRow?.addressLine1
+    ),
+    city: pickFirstNonEmptyString(baseRow?.city, enrichmentRow?.city),
+    state: pickFirstNonEmptyString(baseRow?.state, enrichmentRow?.state),
+    stateName: pickFirstNonEmptyString(baseRow?.stateName, enrichmentRow?.stateName, baseRow?.state, enrichmentRow?.state),
+    postalCode: pickFirstNonEmptyString(
+      enrichmentRow?.postalCode,
+      enrichmentRow?.zip,
+      baseRow?.postalCode,
+      baseRow?.zip
+    ),
+    country: pickFirstNonEmptyString(baseRow?.country, enrichmentRow?.country, "USA"),
+    region: pickFirstNonEmptyString(baseRow?.region, enrichmentRow?.region),
+    latitude: pickFirstNumericValue(baseRow?.latitude, baseRow?.lat, enrichmentRow?.latitude, enrichmentRow?.lat),
+    longitude: pickFirstNumericValue(baseRow?.longitude, baseRow?.lng, enrichmentRow?.longitude, enrichmentRow?.lng),
+    holesCount: pickFirstPositiveNumericValue(
+      enrichmentRow?.holesCount,
+      enrichmentRow?.holeCount,
+      baseRow?.holesCount,
+      baseRow?.holeCount,
+      18
+    ),
+    teeBoxes: mergedTeeBoxes,
+    tees: mergedTees,
+    aliases: mergeUniqueCourseValues(baseRow?.aliases || [], enrichmentRow?.aliases || []),
+    searchTerms: mergeUniqueCourseValues(
+      baseRow?.searchTerms || [],
+      enrichmentRow?.searchTerms || [],
+      baseRow?.keywords || [],
+      enrichmentRow?.keywords || []
+    ),
+    keywords: mergeUniqueCourseValues(
+      baseRow?.keywords || [],
+      enrichmentRow?.keywords || [],
+      baseRow?.searchTerms || [],
+      enrichmentRow?.searchTerms || []
+    ),
+    featured: Boolean(baseRow?.featured || enrichmentRow?.featured),
+    featuredNote: pickFirstNonEmptyString(baseRow?.featuredNote, enrichmentRow?.featuredNote),
+    priority: Math.min(Number(baseRow?.priority ?? 100), Number(enrichmentRow?.priority ?? 100)),
+    architect: pickFirstNonEmptyString(enrichmentRow?.architect, baseRow?.architect),
+    opened: pickFirstDefinedValue(enrichmentRow?.opened, baseRow?.opened),
+    courseType: pickFirstNonEmptyString(enrichmentRow?.courseType, baseRow?.courseType, "course"),
+    source: pickFirstNonEmptyString(baseRow?.source, enrichmentRow?.source, "imported-course-catalog"),
+    sourceType: pickFirstNonEmptyString(baseRow?.sourceType, enrichmentRow?.sourceType, "bulk-import"),
+    providerLabel: pickFirstNonEmptyString(baseRow?.providerLabel, enrichmentRow?.providerLabel),
+    providerCourseId: pickFirstNonEmptyString(
+      baseRow?.providerCourseId,
+      enrichmentRow?.providerCourseId,
+      baseRow?.externalIds?.providerCourseId,
+      enrichmentRow?.externalIds?.providerCourseId,
+      baseRow?.id,
+      enrichmentRow?.id
+    ),
+    externalIds: buildMergedExternalIds(baseRow, enrichmentRow),
+    metadata: buildMergedMetadata(baseRow, enrichmentRow, matchMeta),
+  };
+}
+
+function buildEnrichmentLookup(rows = []) {
+  const byId = new Map();
+  const byLocation = new Map();
+
+  rows.forEach((row) => {
+    const idKey = buildCourseIdKey(row);
+    const locationKey = buildCourseLocationKey(row);
+
+    if (idKey) {
+      const matches = byId.get(idKey) || [];
+      matches.push(row);
+      byId.set(idKey, matches);
+    }
+
+    if (locationKey) {
+      const matches = byLocation.get(locationKey) || [];
+      matches.push(row);
+      byLocation.set(locationKey, matches);
+    }
+  });
+
+  return {
+    byId,
+    byLocation,
   };
 }
 
 export function mergeImportedCourseRowsWithEnrichment(baseRows = [], enrichmentRows = []) {
-  const enrichmentByKey = new Map(
-    enrichmentRows
-      .map((row) => [getRawCourseMergeKey(row), row])
-      .filter(([key]) => Boolean(key))
-  );
+  if (!Array.isArray(baseRows) || !baseRows.length) {
+    return [];
+  }
+
+  if (!Array.isArray(enrichmentRows) || !enrichmentRows.length) {
+    return cloneData(baseRows);
+  }
+
+  const lookup = buildEnrichmentLookup(enrichmentRows);
 
   return baseRows.map((baseRow) => {
-    const enrichment = enrichmentByKey.get(getRawCourseMergeKey(baseRow));
-    return enrichment ? mergeRawCourseRows(baseRow, enrichment) : baseRow;
+    const idKey = buildCourseIdKey(baseRow);
+    const locationKey = buildCourseLocationKey(baseRow);
+    const idMatches = idKey ? (lookup.byId.get(idKey) || []) : [];
+    const locationMatches = locationKey ? (lookup.byLocation.get(locationKey) || []) : [];
+    const matchedRows = [...idMatches, ...locationMatches]
+      .filter((row, index, rows) => rows.findIndex((candidate) => candidate === row) === index)
+      .sort((left, right) => getEnrichmentPriority(left) - getEnrichmentPriority(right));
+
+    if (!matchedRows.length) {
+      return cloneData(baseRow);
+    }
+
+    return matchedRows.reduce((mergedRow, enrichmentRow) => mergeImportedCourseRow(mergedRow, enrichmentRow, {
+      matchType: idMatches.includes(enrichmentRow) ? "id" : "location",
+      matchConfidence: idMatches.includes(enrichmentRow) ? 0.99 : 0.92,
+    }), cloneData(baseRow));
   });
 }

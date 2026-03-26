@@ -53,6 +53,10 @@ describe("course enrichment pipeline", () => {
     expect(normalized.metadata.clubhousePhone).toBe("555-111-2222");
     expect(normalized.metadata.greensType).toBe("Bent Grass");
     expect(normalized.metadata.enrichmentApplied).toBe(true);
+    expect(normalized.metadata.enrichmentMatchType).toBe("id");
+    expect(normalized.metadata.enrichmentMatchConfidence).toBeCloseTo(0.99, 2);
+    expect(normalized.metadata.sourceHistory).toContain("public-us-golf-courses");
+    expect(normalized.metadata.sourceHistory).toContain("seanconeys-us-golf-courses");
   });
 
   it("does not add unmatched enrichment rows into the nearby/search base catalog", () => {
@@ -115,5 +119,65 @@ describe("course enrichment pipeline", () => {
     expect(normalized.teeBoxes).toHaveLength(1);
     expect(normalized.teeBoxes[0].slope).toBe(132);
     expect(normalized.teeBoxes[0].rating).toBe(72.1);
+    expect(normalized.metadata.richRoundReady).toBe(true);
+    expect(normalized.metadata.readinessTier).toBe("rich-round-ready");
+    expect(normalized.metadata.qualityFlags.hasRealTeeData).toBe(true);
+    expect(normalized.metadata.qualityFlags.hasRealHoleData).toBe(true);
+    expect(normalized.metadata.qualityFlags.hasRealRatingSlope).toBe(true);
+  });
+
+  it("applies layered enrichment so scoring detail can override a sparse public enrichment row", () => {
+    const merged = mergeImportedCourseRowsWithEnrichment([
+      {
+        id: "layered-course-sample",
+        displayName: "Layered Course",
+        city: "Austin",
+        state: "TX",
+        latitude: 30.2672,
+        longitude: -97.7431,
+      },
+    ], [
+      {
+        id: "layered-course-sample",
+        displayName: "Layered Course",
+        city: "Austin",
+        state: "TX",
+        address: "100 Fairway Dr",
+        source: "public-golf-enrichment",
+        sourceType: "public-golf-enrichment",
+      },
+      {
+        id: "layered-course-sample",
+        displayName: "Layered Course",
+        city: "Austin",
+        state: "TX",
+        source: "curated-scoring-detail-enrichment",
+        sourceType: "scoring-detail-enrichment",
+        metadata: {
+          enrichmentPriority: 300,
+        },
+        teeBoxes: [
+          {
+            id: "black",
+            name: "Black",
+            slope: 141,
+            rating: 74.2,
+            holes: [{ number: 1, par: 4, yards: 430 }],
+          },
+        ],
+      },
+    ]);
+
+    const normalized = normalizeImportedCourseSourceRecord(merged[0], {
+      providerId: "imported-us-course-database",
+      source: "imported-course-catalog",
+      sourceType: "bulk-import",
+    });
+
+    expect(normalized.address).toBe("100 Fairway Dr");
+    expect(normalized.teeBoxes).toHaveLength(1);
+    expect(normalized.metadata.sourceHistory).toContain("public-golf-enrichment");
+    expect(normalized.metadata.sourceHistory).toContain("curated-scoring-detail-enrichment");
+    expect(normalized.metadata.richRoundReady).toBe(true);
   });
 });

@@ -48,6 +48,9 @@ function buildImportedCourseSourceMeta(rawCourse = {}, options = {}) {
 
 export function normalizeImportedCourseSourceRecord(rawCourse = {}, options = {}) {
   const providerId = options.providerId || rawCourse?.providerId || "imported-us-course-database";
+  const rawTeeBoxes = Array.isArray(rawCourse?.tees) && rawCourse.tees.length
+    ? rawCourse.tees
+    : (Array.isArray(rawCourse?.teeBoxes) ? rawCourse.teeBoxes : []);
   const normalized = normalizeCourseRecord({
     id: rawCourse?.id || rawCourse?.courseId || "",
     slug: rawCourse?.slug || "",
@@ -64,7 +67,7 @@ export function normalizeImportedCourseSourceRecord(rawCourse = {}, options = {}
     latitude: rawCourse?.latitude ?? rawCourse?.lat ?? null,
     longitude: rawCourse?.longitude ?? rawCourse?.lng ?? null,
     holesCount: rawCourse?.holesCount || rawCourse?.holeCount || 18,
-    teeBoxes: normalizeImportedCourseTeeRows(rawCourse?.tees || rawCourse?.teeBoxes || []),
+    teeBoxes: normalizeImportedCourseTeeRows(rawTeeBoxes),
     aliases: cloneData(rawCourse?.aliases || []),
     keywords: cloneData(rawCourse?.searchTerms || rawCourse?.keywords || []),
     featured: Boolean(rawCourse?.featured),

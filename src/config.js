@@ -5,6 +5,8 @@ export const RUNTIME_CONFIG_GLOBAL = "__GN_RUNTIME_CONFIG__";
 export const FEATURED_COURSE_ID = "golden-nugget-lake-charles";
 export const TESTER_DEFAULT_SUBSCRIPTION_TIER = "premium";
 export const LIVE_ROUND_SESSIONS_TABLE = "live_round_sessions";
+export const COURSE_OVERRIDES_TABLE = "course_overrides";
+export const COURSE_RECONCILIATION_TABLE = "course_reconciliation_queue";
 
 export const AUTH_PROVIDER_OPTIONS = [
   {

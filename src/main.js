@@ -44,6 +44,15 @@ import {
   toggleSpotifyPlayback,
 } from "./integrations/spotify-service.js";
 import {
+  getCourseCatalogCacheState,
+  getCourseCatalogManifest,
+  getCourseNearbyCatalogCacheState,
+} from "./services/course-catalog-loader.js";
+import {
+  loadCourseAdminOverrides,
+  loadCourseReconciliationReport,
+} from "./services/course-admin-loader.js";
+import {
   ensureProfilesForNames,
   refreshProfileSnapshots,
   requestFriendProfile,
@@ -51,7 +60,12 @@ import {
   toggleFollowProfile,
 } from "./services/player-service.js";
 import { createProductPlatform } from "./services/product-platform.js";
-import { buildManualRoundTemplate, buildRoundTemplate } from "./services/course-service.js";
+import { buildManualRoundTemplate, buildRoundTemplate, getCourseById } from "./services/course-service.js";
+import {
+  ensureImportedUsCourseDetailReady,
+  ensureImportedUsCourseDiscoveryReady,
+  ensureImportedUsCourseNearbyReady,
+} from "./services/course-providers/imported-us-course-provider.js";
 import { describeLiveRoomFailure, hostLiveRoundSession, joinLiveRoundSession, publishLiveRoundUpdate } from "./services/realtime-session-service.js";
 import {
   ensureHostedGroupForRound,
@@ -474,6 +488,28 @@ export function bootstrapApp({
     updateLocalUi({ roundSetupFieldDrafts: currentDrafts });
   };
 
+  const getCourseAdminReviewUiState = () => {
+    const localState = getLocalUiState().courseAdminReview || {};
+    return {
+      reportStatus: "idle",
+      overridesStatus: "idle",
+      lastError: "",
+      selectedQueue: "high",
+      report: null,
+      overrides: null,
+      ...localState,
+    };
+  };
+
+  const updateCourseAdminReviewUiState = (updates = {}) => {
+    updateLocalUi({
+      courseAdminReview: {
+        ...getCourseAdminReviewUiState(),
+        ...(updates || {}),
+      },
+    });
+  };
+
   const updateCourseSearchResultsPanel = (query) => {
     const resultsHost = root.querySelector("[data-course-search-results]");
     if (!resultsHost) {
@@ -513,10 +549,188 @@ export function bootstrapApp({
     roundSetupInputTimers.set(timerKey, timerId);
   };
 
+  const syncCourseCatalogState = (updates = {}, reason = "course-catalog-state") => {
+    store.setState((draft) => {
+      draft.course = {
+        ...(draft.course || {}),
+        ...updates,
+      };
+      return draft;
+    }, { reason });
+  };
+
+  const primeCourseDiscoveryCatalog = ({
+    reason = "course-catalog-prime",
+    silent = false,
+  } = {}) => {
+    const cacheState = getCourseCatalogCacheState();
+    const manifest = getCourseCatalogManifest();
+
+    if (cacheState.status === "ready" || cacheState.status === "loading") {
+      return ensureImportedUsCourseDiscoveryReady()
+        .then((courses) => {
+          if (!silent) {
+            syncCourseCatalogState({
+              catalogStatus: "ready",
+              recordsCount: Number(courses?.length || manifest?.recordCount || 0),
+              lastImportSource: "runtime-course-assets",
+              lastImportAt: manifest?.generatedAt || null,
+              lastError: "",
+            }, `${reason}-ready`);
+          }
+          return courses;
+        })
+        .catch(() => null);
+    }
+
+    if (!silent) {
+      syncCourseCatalogState({
+        catalogStatus: "loading",
+        recordsCount: Number(manifest?.recordCount || 0),
+        lastImportSource: "runtime-course-assets",
+        lastImportAt: manifest?.generatedAt || null,
+        lastError: "",
+      }, `${reason}-loading`);
+    }
+
+    return ensureImportedUsCourseDiscoveryReady()
+      .then((courses) => {
+        if (!silent) {
+          syncCourseCatalogState({
+            catalogStatus: "ready",
+            recordsCount: Number(courses?.length || manifest?.recordCount || 0),
+            lastImportSource: "runtime-course-assets",
+            lastImportAt: manifest?.generatedAt || null,
+            lastError: "",
+          }, `${reason}-ready`);
+        }
+        return courses;
+      })
+      .catch((error) => {
+        if (!silent) {
+          syncCourseCatalogState({
+            catalogStatus: "error",
+            recordsCount: Number(manifest?.recordCount || 0),
+            lastImportSource: "runtime-course-assets",
+            lastImportAt: manifest?.generatedAt || null,
+            lastError: String(error?.message || "Course catalog load failed."),
+          }, `${reason}-error`);
+        }
+        return null;
+      });
+  };
+
+  const primeCourseNearbyCatalog = ({ reason = "course-nearby-prime" } = {}) => {
+    const cacheState = getCourseNearbyCatalogCacheState();
+    const manifest = getCourseCatalogManifest();
+
+    if (cacheState.status === "ready" || cacheState.status === "loading") {
+      return ensureImportedUsCourseNearbyReady()
+        .then((courses) => {
+          syncCourseCatalogState({
+            nearbyStatus: "ready",
+            lastImportSource: "runtime-course-assets",
+            lastImportAt: manifest?.generatedAt || null,
+            lastError: "",
+          }, `${reason}-ready`);
+          return courses;
+        })
+        .catch(() => null);
+    }
+
+    syncCourseCatalogState({
+      nearbyStatus: "loading",
+      lastImportSource: "runtime-course-assets",
+      lastImportAt: manifest?.generatedAt || null,
+      lastError: "",
+    }, `${reason}-loading`);
+
+    return ensureImportedUsCourseNearbyReady()
+      .then((courses) => {
+        syncCourseCatalogState({
+          nearbyStatus: "ready",
+          lastImportSource: "runtime-course-assets",
+          lastImportAt: manifest?.generatedAt || null,
+          lastError: "",
+        }, `${reason}-ready`);
+        return courses;
+      })
+      .catch((error) => {
+        syncCourseCatalogState({
+          nearbyStatus: "error",
+          lastImportSource: "runtime-course-assets",
+          lastImportAt: manifest?.generatedAt || null,
+          lastError: String(error?.message || "Nearby course catalog load failed."),
+        }, `${reason}-error`);
+        return null;
+      });
+  };
+
+  const primeCourseDetailCatalog = (courseId = "", {
+    reason = "course-detail-prime",
+    pendingLabel = "",
+  } = {}) => {
+    const safeCourseId = String(courseId || "").trim();
+    if (!safeCourseId) {
+      return Promise.resolve(null);
+    }
+
+    if (pendingLabel) {
+      store.setState((draft) => {
+        draft.session.pendingLabel = pendingLabel;
+        return draft;
+      }, { reason: `${reason}-pending` });
+    }
+
+    syncCourseCatalogState({
+      detailStatus: "loading",
+      detailCourseId: safeCourseId,
+      lastDetailError: "",
+    }, `${reason}-loading`);
+
+    return ensureImportedUsCourseDetailReady(safeCourseId)
+      .then((course) => {
+        syncCourseCatalogState({
+          catalogStatus: course ? "ready" : "error",
+          detailStatus: course ? "ready" : "error",
+          detailCourseId: safeCourseId,
+          lastError: course ? "" : "Course detail load failed.",
+          lastDetailError: course ? "" : "Course detail load failed.",
+        }, `${reason}-ready`);
+        if (pendingLabel) {
+          store.setState((draft) => {
+            draft.session.pendingLabel = "";
+            return draft;
+          }, { reason: `${reason}-pending-clear` });
+        }
+        return course;
+      })
+      .catch((error) => {
+        syncCourseCatalogState({
+          catalogStatus: "error",
+          detailStatus: "error",
+          detailCourseId: safeCourseId,
+          lastError: String(error?.message || "Course detail load failed."),
+          lastDetailError: String(error?.message || "Course detail load failed."),
+        }, `${reason}-error`);
+        if (pendingLabel) {
+          store.setState((draft) => {
+            draft.session.pendingLabel = "";
+            return draft;
+          }, { reason: `${reason}-pending-clear` });
+        }
+        return null;
+      });
+  };
+
   const renderTab = (tab) => {
     const nextView = mapTabToView(tab);
     if (!nextView) {
       return false;
+    }
+
+    if (nextView === "round" && !store.getState().session?.activeRoundId) {
+      void primeCourseNearbyCatalog({ reason: "nav-round-preload" });
     }
 
     store.setState((draft) => {
@@ -1490,6 +1704,10 @@ export function bootstrapApp({
           return;
         }
 
+        if (actionElement.dataset.view === "round" && !store.getState().session?.activeRoundId) {
+          void primeCourseNearbyCatalog({ reason: "open-round-view" });
+        }
+
       store.setState((draft) => {
         const nextView = actionElement.dataset.view;
         if (nextView === "help") {
@@ -1754,9 +1972,15 @@ export function bootstrapApp({
     }
 
     if (action === "confirm-course-choice") {
+      const courseId = String(actionElement.dataset.courseId || "").trim();
+      const courseProviderId = String(actionElement.dataset.courseProviderId || "").trim();
+      const teeBoxId = String(actionElement.dataset.teeBoxId || "").trim();
+      if (courseId && courseProviderId === "imported-us-course-database") {
+        await primeCourseDetailCatalog(courseId, {
+          reason: "confirm-course-choice",
+        });
+      }
       store.setState((draft) => {
-        const courseId = String(actionElement.dataset.courseId || "").trim();
-        const teeBoxId = String(actionElement.dataset.teeBoxId || "").trim();
         if (courseId) {
           setSelectedCourse(draft, courseId, teeBoxId);
         }
@@ -1767,6 +1991,7 @@ export function bootstrapApp({
     }
 
     if (action === "search-another-course") {
+      void primeCourseNearbyCatalog({ reason: "search-another-course" });
       store.setState((draft) => {
         setRoundSetupField(draft, "courseMethod", "search");
         return draft;
@@ -1775,6 +2000,7 @@ export function bootstrapApp({
     }
 
     if (action === "use-suggested-course") {
+      void primeCourseNearbyCatalog({ reason: "use-suggested-course" });
       store.setState((draft) => {
         setRoundSetupField(draft, "courseMethod", "detected");
         return draft;
@@ -1848,13 +2074,21 @@ export function bootstrapApp({
     }
 
     if (action === "select-course") {
+      const courseId = String(actionElement.dataset.courseId || "").trim();
+      const courseProviderId = String(actionElement.dataset.courseProviderId || "").trim();
+      const teeBoxId = String(actionElement.dataset.teeBoxId || "").trim();
+      if (courseId && courseProviderId === "imported-us-course-database") {
+        await primeCourseDetailCatalog(courseId, {
+          reason: "select-course",
+        });
+      }
       store.setState((draft) => {
         const currentSetup = getRoundSetupState(draft);
         draft.session.roundSetup = {
           ...currentSetup,
           courseMethod: currentSetup.courseMethod || "search",
         };
-        setSelectedCourse(draft, actionElement.dataset.courseId, actionElement.dataset.teeBoxId || "");
+        setSelectedCourse(draft, courseId, teeBoxId);
         return draft;
       }, { reason: "select-course" });
       return;
@@ -2228,6 +2462,7 @@ export function bootstrapApp({
     }
 
     if (action === "detect-nearby-courses") {
+      void primeCourseNearbyCatalog({ reason: "detect-nearby-courses" });
       store.setState((draft) => {
         if (!draft.session.activeRoundId) {
           setRoundSetupField(draft, "courseMethod", "detected");
@@ -2689,6 +2924,47 @@ export function bootstrapApp({
       return;
     }
 
+    if (action === "load-course-admin-review") {
+      updateCourseAdminReviewUiState({
+        reportStatus: "loading",
+        overridesStatus: "loading",
+        lastError: "",
+      });
+
+      const [reportResult, overridesResult] = await Promise.allSettled([
+        loadCourseReconciliationReport({ forceRefresh: true }),
+        loadCourseAdminOverrides({ forceRefresh: true }),
+      ]);
+
+      const lastError = [
+        reportResult.status === "rejected" ? String(reportResult.reason?.message || reportResult.reason || "Course reconciliation report failed to load.") : "",
+        overridesResult.status === "rejected" ? String(overridesResult.reason?.message || overridesResult.reason || "Course admin overrides failed to load.") : "",
+      ].filter(Boolean).join(" ");
+
+      updateCourseAdminReviewUiState({
+        reportStatus: reportResult.status === "fulfilled" ? "ready" : "error",
+        overridesStatus: overridesResult.status === "fulfilled" ? "ready" : "error",
+        report: reportResult.status === "fulfilled" ? reportResult.value : null,
+        overrides: overridesResult.status === "fulfilled" ? overridesResult.value : null,
+        lastError,
+      });
+
+      if (lastError) {
+        store.setState((draft) => {
+          setFeedback(draft, "warning", "Course admin review unavailable", lastError);
+          return draft;
+        }, { reason: "load-course-admin-review-error" });
+      }
+      return;
+    }
+
+    if (action === "set-course-admin-queue") {
+      updateCourseAdminReviewUiState({
+        selectedQueue: String(actionElement.dataset.queue || "high"),
+      });
+      return;
+    }
+
     if (action === "invite-friends") {
       store.setState((draft) => {
         const activeRound = draft.rounds.find((round) => round.id === draft.session.activeRoundId) || null;
@@ -2883,6 +3159,14 @@ export function bootstrapApp({
 
     const nextQuery = String(courseSearchInput.value || "");
     setRoundSetupFieldDraft("courseQuery", nextQuery);
+    if (String(nextQuery || "").trim()) {
+      void primeCourseDiscoveryCatalog({ reason: "course-search-input", silent: true }).then(() => {
+        const latestQuery = String(getLocalUiState().roundSetupFieldDrafts?.courseQuery ?? "");
+        if (latestQuery === nextQuery) {
+          updateCourseSearchResultsPanel(nextQuery);
+        }
+      });
+    }
     updateCourseSearchResultsPanel(nextQuery);
     queueRoundSetupFieldCommit("courseQuery", nextQuery, "course-search-debounced");
   });
@@ -3233,6 +3517,15 @@ export function bootstrapApp({
       const submitter = event.submitter;
       const intent = submitter?.value || getRoundSetupState(store.getState()).intent || "local";
       let hostedRoundId = null;
+      const createRoundSetup = getRoundSetupState(store.getState());
+      const selectedCourseId = String(createRoundSetup.selectedCourseId || data.get("selectedCourseId") || "");
+      const selectedCourseProviderId = String(getCourseById(selectedCourseId)?.providerId || "");
+      if (selectedCourseId && selectedCourseProviderId === "imported-us-course-database") {
+        await primeCourseDetailCatalog(selectedCourseId, {
+          reason: "create-round-detail",
+          pendingLabel: "Loading course setup",
+        });
+      }
 
       store.setState((draft) => {
         const roundSetup = getRoundSetupState(draft);

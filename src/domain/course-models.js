@@ -23,6 +23,227 @@ function normalizeCourseHoleYardage(rawHole) {
   return Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
+function hasMeaningfulValue(value) {
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  if (typeof value === "string") {
+    return Boolean(value.trim());
+  }
+
+  return true;
+}
+
+function isPositiveNumber(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0;
+}
+
+function getRawCourseTeeRows(rawCourse = {}) {
+  if (Array.isArray(rawCourse?.tees)) {
+    return rawCourse.tees;
+  }
+
+  if (Array.isArray(rawCourse?.teeBoxes)) {
+    return rawCourse.teeBoxes;
+  }
+
+  return [];
+}
+
+function getRawCourseHoleRows(rawCourse = {}) {
+  if (Array.isArray(rawCourse?.holes) && rawCourse.holes.length) {
+    return rawCourse.holes;
+  }
+
+  return getRawCourseTeeRows(rawCourse).flatMap((teeBox) => {
+    if (Array.isArray(teeBox?.holes)) {
+      return teeBox.holes;
+    }
+
+    if (Array.isArray(teeBox?.perHole)) {
+      return teeBox.perHole;
+    }
+
+    return [];
+  });
+}
+
+function clampCourseConfidence(value) {
+  return Math.min(0.99, Math.max(0, Number(value || 0)));
+}
+
+function getCourseConfidenceTier(score = 0) {
+  if (score >= 0.9) {
+    return "high";
+  }
+
+  if (score >= 0.75) {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function getCourseSourceConfidence(rawCourse = {}, providerId = "us-course-database") {
+  const sourceHistory = [
+    ...(rawCourse?.metadata?.sourceHistory || []),
+    rawCourse?.metadata?.source || "",
+    rawCourse?.source || "",
+    rawCourse?.metadata?.sourceType || "",
+    rawCourse?.sourceType || "",
+    providerId,
+  ]
+    .map((value) => String(value || "").toLowerCase())
+    .join(" ");
+
+  if (sourceHistory.includes("licensed") || sourceHistory.includes("partner") || sourceHistory.includes("golfapi") || sourceHistory.includes("golfnow")) {
+    return 0.95;
+  }
+
+  if (sourceHistory.includes("seeded")) {
+    return 0.88;
+  }
+
+  if (sourceHistory.includes("public")) {
+    return 0.78;
+  }
+
+  if (sourceHistory.includes("manual")) {
+    return 0.45;
+  }
+
+  if (sourceHistory.includes("import")) {
+    return 0.82;
+  }
+
+  return 0.8;
+}
+
+function getCourseReadinessTier({
+  discoveryReady = false,
+  basicRoundReady = false,
+  richRoundReady = false,
+} = {}) {
+  if (richRoundReady) {
+    return "rich-round-ready";
+  }
+
+  if (basicRoundReady) {
+    return "basic-round-ready";
+  }
+
+  if (discoveryReady) {
+    return "discovery-ready";
+  }
+
+  return "incomplete";
+}
+
+export function deriveCourseCatalogMetadata(rawCourse = {}, providerId = "us-course-database") {
+  const rawTeeRows = getRawCourseTeeRows(rawCourse);
+  const rawHoleRows = getRawCourseHoleRows(rawCourse);
+  const existingQualityFlags = cloneData(rawCourse?.metadata?.qualityFlags || {});
+  const hasAddress = existingQualityFlags.hasAddress ?? Boolean(rawCourse?.address || rawCourse?.addressLine1 || rawCourse?.postalCode || rawCourse?.zip);
+  const hasCoordinates = existingQualityFlags.hasCoordinates ?? (
+    rawCourse?.latitude !== null
+    && rawCourse?.latitude !== undefined
+    && rawCourse?.longitude !== null
+    && rawCourse?.longitude !== undefined
+  );
+  const hasHoleCount = existingQualityFlags.hasHoleCount ?? Boolean(
+    isPositiveNumber(rawCourse?.holesCount)
+    || isPositiveNumber(rawCourse?.holeCount)
+  );
+  const hasTeeData = existingQualityFlags.hasTeeData ?? Boolean(rawTeeRows.length);
+  const hasHoleDetail = existingQualityFlags.hasHoleDetail ?? Boolean(rawHoleRows.length || rawCourse?.holes?.length);
+  const hasRatings = existingQualityFlags.hasRatings ?? rawTeeRows.some((teeBox) => hasMeaningfulValue(teeBox?.rating) || hasMeaningfulValue(teeBox?.slope));
+  const hasRealTeeData = existingQualityFlags.hasRealTeeData ?? Boolean(rawTeeRows.length);
+  const hasRealHoleData = existingQualityFlags.hasRealHoleData ?? Boolean(rawHoleRows.length);
+  const hasRealRatingSlope = existingQualityFlags.hasRealRatingSlope ?? rawTeeRows.some((teeBox) => hasMeaningfulValue(teeBox?.rating) || hasMeaningfulValue(teeBox?.slope));
+  const hasArchitect = Boolean(rawCourse?.architect || rawCourse?.metadata?.architect);
+  const hasYearBuilt = Boolean(rawCourse?.opened || rawCourse?.metadata?.opened);
+  const hasCourseType = Boolean(rawCourse?.courseType || rawCourse?.metadata?.courseType);
+  const hasOperationsMeta = Boolean(
+    rawCourse?.metadata?.clubhousePhone
+    || rawCourse?.metadata?.email
+    || rawCourse?.metadata?.website
+    || rawCourse?.metadata?.season
+    || rawCourse?.metadata?.publicPrivate
+    || rawCourse?.metadata?.annualRounds
+  );
+  const discoveryReady = Boolean(
+    (rawCourse?.displayName || rawCourse?.courseName || rawCourse?.clubName || rawCourse?.name)
+    && (hasCoordinates || (rawCourse?.city && rawCourse?.state))
+  );
+  const basicRoundReady = Boolean(discoveryReady && hasHoleCount);
+  const richRoundReady = Boolean(discoveryReady && hasRealTeeData && hasRealHoleData && hasRealRatingSlope);
+  const sourceHistory = [
+    ...(rawCourse?.metadata?.sourceHistory || []),
+    rawCourse?.metadata?.source || "",
+    rawCourse?.source || "",
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .filter((value, index, values) => values.findIndex((candidate) => candidate.toLowerCase() === value.toLowerCase()) === index);
+  const weightedScore = (
+    (hasAddress ? 1 : 0)
+    + (hasCoordinates ? 2 : 0)
+    + (hasHoleCount ? 1 : 0)
+    + (hasRealTeeData ? 2 : 0)
+    + (hasRealHoleData ? 2 : 0)
+    + (hasRealRatingSlope ? 1.5 : 0)
+    + (hasArchitect ? 0.5 : 0)
+    + (hasYearBuilt ? 0.5 : 0)
+    + (hasCourseType ? 0.5 : 0)
+    + (hasOperationsMeta ? 0.5 : 0)
+  ) / 10.5;
+  const enrichmentConfidence = Number(rawCourse?.metadata?.enrichmentMatchConfidence || 0);
+  let matchConfidence = getCourseSourceConfidence(rawCourse, providerId);
+
+  if (rawCourse?.metadata?.enrichmentApplied && enrichmentConfidence > 0) {
+    matchConfidence = (matchConfidence + enrichmentConfidence) / 2;
+  }
+
+  matchConfidence += Math.min(Math.max(sourceHistory.length - 1, 0) * 0.02, 0.06);
+  matchConfidence += hasCoordinates ? 0.02 : 0;
+  matchConfidence += hasAddress ? 0.02 : 0;
+  matchConfidence += hasRealHoleData ? 0.03 : 0;
+  matchConfidence = clampCourseConfidence(matchConfidence);
+
+  return {
+    gpsReady: hasCoordinates,
+    routingReady: Boolean(rawCourse?.metadata?.routingReady),
+    holeDetailReady: hasHoleDetail,
+    completenessScore: clampCourseConfidence(weightedScore),
+    discoveryReady,
+    basicRoundReady,
+    richRoundReady,
+    readinessTier: getCourseReadinessTier({
+      discoveryReady,
+      basicRoundReady,
+      richRoundReady,
+    }),
+    matchConfidence,
+    confidenceTier: getCourseConfidenceTier(matchConfidence),
+    sourceHistory,
+    qualityFlags: {
+      hasAddress,
+      hasCoordinates,
+      hasHoleCount,
+      hasTeeData,
+      hasRatings,
+      hasHoleDetail,
+      hasRealTeeData,
+      hasRealHoleData,
+      hasRealRatingSlope,
+      usesFallbackTeeData: !hasRealTeeData,
+      usesFallbackHoleData: !hasRealHoleData,
+    },
+  };
+}
+
 export function normalizeCourseHoleRecord(rawHole = {}, fallbackNumber = 1) {
   return {
     number: normalizeCourseHoleNumber(rawHole, fallbackNumber),
@@ -67,19 +288,7 @@ export function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-da
   const keywords = cloneData(rawCourse?.keywords || []);
   const slug = rawCourse?.slug || slugifyCourseValue(rawCourse?.id || `${displayName}-${rawCourse?.city || ""}-${rawCourse?.state || ""}`);
   const postalCode = rawCourse?.postalCode || rawCourse?.zip || "";
-  const hasAddress = Boolean(rawCourse?.address || rawCourse?.addressLine1 || postalCode);
-  const hasCoordinates = rawCourse?.latitude !== null
-    && rawCourse?.latitude !== undefined
-    && rawCourse?.longitude !== null
-    && rawCourse?.longitude !== undefined;
-  const hasTeeData = teeBoxes.length > 0;
-  const hasRatings = teeBoxes.some((teeBox) => teeBox?.rating !== null || teeBox?.slope !== null);
-  const completenessScore = (
-    (hasAddress ? 1 : 0)
-    + (hasCoordinates ? 1 : 0)
-    + (hasTeeData ? 1 : 0)
-    + (hasRatings ? 1 : 0)
-  ) / 4;
+  const catalogMetadata = deriveCourseCatalogMetadata(rawCourse, providerId);
   const metadata = {
     ...cloneData(rawCourse?.metadata || {}),
     providerId,
@@ -96,17 +305,7 @@ export function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-da
     seeded: Boolean(rawCourse?.seeded),
     source: rawCourse?.source || providerId,
     sourceType: rawCourse?.sourceType || rawCourse?.metadata?.sourceType || "seeded-us-database",
-    gpsReady: hasCoordinates,
-    routingReady: Boolean(rawCourse?.metadata?.routingReady),
-    holeDetailReady: holes.length > 0,
-    completenessScore,
-    qualityFlags: {
-      hasAddress,
-      hasCoordinates,
-      hasTeeData,
-      hasRatings,
-      hasHoleDetail: holes.length > 0,
-    },
+    ...catalogMetadata,
     externalIds: cloneData(rawCourse?.externalIds || rawCourse?.metadata?.externalIds || {}),
     providerCourseId: rawCourse?.providerCourseId || rawCourse?.metadata?.providerCourseId || rawCourse?.id || "",
     clubhousePhone: rawCourse?.metadata?.clubhousePhone || "",
@@ -141,7 +340,10 @@ export function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-da
 
 export function getDefaultCourseTeeBoxRecord(course) {
   if (course?.teeBoxes?.[0]) {
-    return cloneData(course.teeBoxes[0]);
+    const teeBox = cloneData(course.teeBoxes[0]);
+    return Array.isArray(teeBox?.holes) && teeBox.holes.length
+      ? teeBox
+      : normalizeCourseTeeBoxRecord(teeBox, 0);
   }
 
   return normalizeCourseTeeBoxRecord({
@@ -156,7 +358,10 @@ export function findCourseTeeBoxRecord(course, teeId = "") {
   }
 
   const selected = course.teeBoxes.find((teeBox) => teeBox.id === teeId) || course.teeBoxes[0];
-  return cloneData(selected);
+  const teeBox = cloneData(selected);
+  return Array.isArray(teeBox?.holes) && teeBox.holes.length
+    ? teeBox
+    : normalizeCourseTeeBoxRecord(teeBox, 0);
 }
 
 function getTemplateHoleCount(requestedCount, availableCount) {

@@ -218,6 +218,12 @@ See `docs/product-foundation.md` for:
 - recommended file structure
 - architectural decisions
 - backend schema suggestion
+
+See `docs/course-quality-admin.md` for:
+
+- manual course override workflow
+- reconciliation report outputs
+- backend-ready course quality table mapping
 - native app migration plan
 - roadmap from MVP to production
 

@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { createGroup, createRound } from "../src/domain/factories.js";
 import { appendRoundAction, applyRoundActionEvent, createRoundActionEvent } from "../src/domain/round-sync.js";
 import { createEmailAccount, loadAccountIntoState } from "../src/services/account-service.js";
+import { loadCourseDiscoveryIndex, loadCourseNearbyIndex } from "../src/services/course-catalog-loader.js";
 import { createDefaultState } from "../src/state/default-state.js";
 import { getFeatureGate, getNextOpenHole, getSyncPresentation, isModeLocked, renderAppTemplate } from "../src/ui/templates.js";
 
@@ -12,6 +13,11 @@ const currentUser = {
 };
 
 describe("ui helpers", () => {
+  beforeAll(async () => {
+    await loadCourseNearbyIndex();
+    await loadCourseDiscoveryIndex();
+  });
+
   it("finds the next incomplete hole after the current selection", () => {
     const round = createRound({
       currentUser,
@@ -242,6 +248,217 @@ describe("ui helpers", () => {
     expect(markup).toContain('name="selectedCourseId" value="pebble-beach-california"');
   });
 
+  it("keeps score setup focused on round creation instead of community join content", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "round";
+    state.rounds = [];
+    state.groups = [];
+    state.session.activeRoundId = null;
+    state.session.roundSetup = {
+      ...state.session.roundSetup,
+      step: "course",
+      courseMethod: "",
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Choose course");
+    expect(markup).toContain("Use My Location");
+    expect(markup).not.toContain("Join now");
+    expect(markup).not.toContain("Nearby players");
+    expect(markup).not.toContain("Nearby games");
+  });
+
+  it("renders nearby and recent course subsets before nationwide search starts", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "round";
+    state.rounds = [
+      {
+        id: "recent-round-1",
+        courseId: "torrey-pines-golf-course-la-jolla-ca",
+        status: "completed",
+        updatedAt: 200,
+      },
+    ];
+    state.groups = [];
+    state.session.activeRoundId = null;
+    state.session.nearby = {
+      ...state.session.nearby,
+      locationPermission: "granted",
+      locationStatus: "ready",
+      coordinates: {
+        latitude: 30.1869,
+        longitude: -93.2754,
+      },
+    };
+    state.session.roundSetup = {
+      ...state.session.roundSetup,
+      step: "course",
+      courseMethod: "search",
+      courseQuery: "",
+      selectedCourseId: "",
+      selectedTeeBoxId: "",
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Recent courses");
+    expect(markup).toContain("Nearby courses");
+    expect(markup).toContain("Torrey Pines Golf Course");
+    expect(markup).toContain("Golden Nugget");
+    expect(markup).not.toContain("Pebble Beach Golf Links");
+  });
+
+  it("renders nearby and recent course subsets on the default choose-course step", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "round";
+    state.rounds = [
+      {
+        id: "recent-round-1",
+        courseId: "torrey-pines-golf-course-la-jolla-ca",
+        status: "completed",
+        updatedAt: 200,
+      },
+    ];
+    state.groups = [];
+    state.session.activeRoundId = null;
+    state.session.nearby = {
+      ...state.session.nearby,
+      locationPermission: "granted",
+      locationStatus: "ready",
+      coordinates: {
+        latitude: 30.1869,
+        longitude: -93.2754,
+      },
+    };
+    state.session.roundSetup = {
+      ...state.session.roundSetup,
+      step: "course",
+      courseMethod: "",
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Suggested");
+    expect(markup).toContain("Recent courses");
+    expect(markup).toContain("Nearby courses");
+    expect(markup).toContain("Use Suggested Course");
+  });
+
+  it("renders the internal course admin review panel in Testing", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "settings";
+    state.session.settingsDestination = "app";
+    state.session.settingsSection = "testing";
+    state.course = {
+      ...(state.course || {}),
+      adminReview: {
+        reportStatus: "ready",
+        overridesStatus: "ready",
+        selectedQueue: "high",
+        lastError: "",
+        report: {
+          generatedAt: "2026-03-26T03:05:57.683Z",
+          assetVersion: "e848499d01e0",
+          reviewQueueSummary: {
+            priority: {
+              high: 12,
+              medium: 4,
+              low: 1,
+            },
+          },
+          reviewQueue: {
+            highPriority: [
+              {
+                id: "course-rich",
+                displayName: "Course Rich",
+                city: "Austin",
+                state: "TX",
+                priority: "high",
+                reasons: ["missing-address", "needs-rich-detail"],
+              },
+            ],
+            mediumPriority: [],
+            lowPriority: [],
+          },
+        },
+        overrides: {
+          overrideCount: 1,
+          rows: [
+            {
+              courseId: "course-rich",
+              reviewStatus: "approved",
+              reviewNotes: "Verified",
+            },
+          ],
+        },
+      },
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Course admin");
+    expect(markup).toContain("Refresh review data");
+    expect(markup).toContain("High queue");
+    expect(markup).toContain("Course Rich");
+  });
+
+  it("marks imported rich-detail courses clearly during round setup", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "round";
+    state.rounds = [];
+    state.groups = [];
+    state.session.activeRoundId = null;
+    state.session.roundSetup = {
+      ...state.session.roundSetup,
+      step: "course",
+      courseMethod: "search",
+      courseQuery: "Torrey Pines Golf Course",
+      selectedCourseId: "torrey-pines-golf-course-la-jolla-ca",
+      selectedTeeBoxId: "torrey-pines-south-south-tournament",
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Rich details");
+    expect(markup).toContain("Real tee and hole data");
+    expect(markup).toContain("Torrey Pines Golf Course");
+  });
+
+  it("marks basic imported courses as quick setup during round setup", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "round";
+    state.rounds = [];
+    state.groups = [];
+    state.session.activeRoundId = null;
+    state.session.roundSetup = {
+      ...state.session.roundSetup,
+      step: "course",
+      courseMethod: "search",
+      courseQuery: "Fireweed Meadows",
+      selectedCourseId: "fireweed-meadows-golf-course-anchor-point-ak",
+      selectedTeeBoxId: "",
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Quick setup");
+    expect(markup).toContain("Default tee if full detail is missing");
+    expect(markup).toContain("Fireweed Meadows");
+  });
+
   it("preloads Golden Nugget for a brand-new golfer's first round", () => {
     const state = createDefaultState();
     const created = createEmailAccount(state, {
@@ -386,6 +603,23 @@ describe("ui helpers", () => {
     expect(markup).toContain("Nearby players");
     expect(markup).toContain("Nearby games");
     expect(markup).not.toContain("Live room");
+  });
+
+  it("keeps Join as the only default-open community section", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "community";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain('data-persist-key="community-join-options" open');
+    expect(markup).toContain('data-persist-key="community-nearby-games"');
+    expect(markup).not.toContain('data-persist-key="community-nearby-games" open');
+    expect(markup).toContain('data-persist-key="community-nearby-players"');
+    expect(markup).not.toContain('data-persist-key="community-nearby-players" open');
+    expect(markup).toContain('data-persist-key="community-friends"');
+    expect(markup).not.toContain('data-persist-key="community-friends" open');
   });
 
   it("opens the profile tab as the main account/settings home", () => {

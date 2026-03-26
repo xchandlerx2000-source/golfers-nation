@@ -1,3 +1,5 @@
+import { deriveCourseCatalogMetadata } from "../domain/course-models.js";
+
 function mergeUniqueCourseValues(...valueLists) {
   const seen = new Set();
   const merged = [];
@@ -24,6 +26,40 @@ function getCourseRecordCompletenessScore(course = {}) {
   return Number(course?.metadata?.completenessScore || 0);
 }
 
+function mergeBooleanFlagMaps(...flagMaps) {
+  const merged = {};
+  const keys = new Set(flagMaps.flatMap((flags) => Object.keys(flags || {})));
+
+  keys.forEach((key) => {
+    const values = flagMaps
+      .map((flags) => flags?.[key])
+      .filter((value) => value !== undefined);
+
+    if (values.length) {
+      merged[key] = values.some(Boolean);
+    }
+  });
+
+  return merged;
+}
+
+function getMergedEnrichmentMatchType(primary = {}, secondary = {}) {
+  const matchTypes = [
+    primary?.metadata?.enrichmentMatchType || "",
+    secondary?.metadata?.enrichmentMatchType || "",
+  ].filter(Boolean);
+
+  if (matchTypes.includes("id")) {
+    return "id";
+  }
+
+  if (matchTypes.includes("location")) {
+    return "location";
+  }
+
+  return "";
+}
+
 function getCanonicalCourseDedupeKey(course = {}) {
   const providerCourseId = String(course?.metadata?.providerCourseId || "").trim();
   if (providerCourseId) {
@@ -41,8 +77,7 @@ export function mergeCanonicalCourseRecords(primary = {}, secondary = {}) {
   const secondaryScore = getCourseRecordCompletenessScore(secondary);
   const preferred = primaryScore >= secondaryScore ? primary : secondary;
   const fallback = preferred === primary ? secondary : primary;
-
-  return {
+  const merged = {
     ...fallback,
     ...preferred,
     aliases: mergeUniqueCourseValues(primary?.aliases || [], secondary?.aliases || []),
@@ -61,7 +96,24 @@ export function mergeCanonicalCourseRecords(primary = {}, secondary = {}) {
         [primary?.metadata?.source || ""],
         [secondary?.metadata?.source || ""]
       ),
-      completenessScore: Math.max(primaryScore, secondaryScore),
+      qualityFlags: mergeBooleanFlagMaps(
+        fallback?.metadata?.qualityFlags || {},
+        preferred?.metadata?.qualityFlags || {}
+      ),
+      enrichmentApplied: Boolean(primary?.metadata?.enrichmentApplied || secondary?.metadata?.enrichmentApplied),
+      enrichmentMatchType: getMergedEnrichmentMatchType(primary, secondary),
+      enrichmentMatchConfidence: Math.max(
+        Number(primary?.metadata?.enrichmentMatchConfidence || 0),
+        Number(secondary?.metadata?.enrichmentMatchConfidence || 0)
+      ),
+    },
+  };
+
+  return {
+    ...merged,
+    metadata: {
+      ...merged.metadata,
+      ...deriveCourseCatalogMetadata(merged, merged.providerId || preferred?.providerId || fallback?.providerId || "us-course-database"),
     },
   };
 }

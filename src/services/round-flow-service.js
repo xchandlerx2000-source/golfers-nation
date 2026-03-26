@@ -1,4 +1,5 @@
 import {
+  findCourseTeeBox,
   getCourseById,
   getDefaultCourseTeeBox,
   getCourseDefaultRoundSetup,
@@ -124,11 +125,12 @@ export function setSelectedCourse(draft, courseId, teeBoxId = "") {
   }
 
   const defaultTee = getDefaultCourseTeeBox(course);
+  const selectedTee = teeBoxId ? findCourseTeeBox(course, teeBoxId) : null;
   draft.session.roundSetup = {
     ...getRoundSetupState(draft),
     courseMethod: getRoundSetupState(draft).courseMethod || "detected",
     selectedCourseId: course.id,
-    selectedTeeBoxId: teeBoxId || defaultTee?.id || "",
+    selectedTeeBoxId: selectedTee?.id || defaultTee?.id || "",
     selectedHoleCount: Math.min(
       Number(getRoundSetupState(draft).selectedHoleCount || course.holesCount || 18),
       Number(course.holesCount || defaultTee?.holes?.length || 18)

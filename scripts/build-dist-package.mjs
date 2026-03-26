@@ -63,6 +63,7 @@ for (const relativePath of filesToCopy) {
 }
 
 await copyDirectory("icons");
+await copyDirectory("data/course");
 
 console.log(`Deploy package written to ${path.relative(projectRoot, distRoot)}`);
 
