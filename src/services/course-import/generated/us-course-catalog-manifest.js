@@ -6,7 +6,7 @@ export const IMPORTED_US_COURSE_CATALOG_MANIFEST = {
   "assetVersion": "3ebaa735347b",
   "providerId": "imported-us-course-database",
   "providerLabel": "Imported U.S. course database",
-  "generatedAt": "2026-03-26T05:45:49.515Z",
+  "generatedAt": "2026-03-26T06:04:49.354Z",
   "recordCount": 16284,
   "sourceCount": 4,
   "qualitySummary": {
