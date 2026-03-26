@@ -50,6 +50,8 @@ export default function ScoreScreen() {
   const createActiveRoundCourseServiceRequest = useAppStore((state) => state.createActiveRoundCourseServiceRequest);
   const liveSyncStatus = useAppStore((state) => state.liveSyncStatus);
   const liveSyncNotice = useAppStore((state) => state.liveSyncNotice);
+  const lastLiveSyncAt = useAppStore((state) => state.lastLiveSyncAt);
+  const refreshLiveRound = useAppStore((state) => state.refreshLiveRound);
   const [score, setScore] = useState(4);
   const [openSection, setOpenSection] = useState("");
 
@@ -109,6 +111,9 @@ export default function ScoreScreen() {
     .filter((hole) => hole.strokes !== null)
     .slice(-9);
   const roundDetailsSummary = activeRound.teeBox || activeRound.weather || "Round details";
+  const connectionSummary = activeRound.inviteCode
+    ? `${activeRound.inviteCode} | ${liveSyncStatus === "connected" ? "Connected" : liveSyncStatus === "connecting" ? "Connecting" : liveSyncStatus === "retry-needed" ? "Retry needed" : "Saved on this phone"}`
+    : "This round stays on this phone";
 
   return (
     <Screen>
@@ -179,6 +184,33 @@ export default function ScoreScreen() {
           ))
         ) : (
           <Text style={styles.sectionCopy}>Scores start showing here as soon as the card is underway.</Text>
+        )}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Connection"
+        summary={connectionSummary}
+        open={openSection === "connection"}
+        onToggle={() => setOpenSection((value) => (value === "connection" ? "" : "connection"))}
+      >
+        <DetailRow label="Room" value={activeRound.inviteCode || "Local round"} />
+        <DetailRow label="Sync" value={activeRound.sync?.label || "Offline-first"} />
+        <DetailRow label="Status" value={liveSyncStatus === "connected" ? "Connected" : liveSyncStatus === "connecting" ? "Connecting" : liveSyncStatus === "retry-needed" ? "Retry needed" : "Saved on this phone"} />
+        <DetailRow label="Last sync" value={lastLiveSyncAt ? new Date(lastLiveSyncAt).toLocaleTimeString() : "--"} />
+        {liveSyncNotice ? <Text style={styles.sectionCopy}>{liveSyncNotice}</Text> : null}
+        {activeRound.inviteCode ? (
+          <>
+            <AppButton
+              label="Refresh Live Round"
+              variant="secondary"
+              onPress={() => {
+                void refreshLiveRound(true);
+              }}
+            />
+            <AppButton label="Open Lobby" variant="secondary" onPress={() => router.push("/round/lobby")} />
+          </>
+        ) : (
+          <Text style={styles.sectionCopy}>This round is stored locally until you start a live room.</Text>
         )}
       </CollapsibleSection>
 

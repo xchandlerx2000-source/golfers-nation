@@ -26,6 +26,9 @@ export default function StatsScreen() {
   const roundSummaries = useAppStore((state) => state.getCompletedRoundSummaries());
   const partners = buildFrequentPartners(completedRounds, currentUser?.id || "");
   const latestRound = roundSummaries[0] || null;
+  const latestSummary = latestRound?.summary || {};
+  const latestTotals = latestSummary.localTotals || {};
+  const latestInsights = Array.isArray(latestSummary.roundInsights) ? latestSummary.roundInsights.slice(0, 3) : [];
 
   return (
     <Screen scroll>
@@ -47,6 +50,30 @@ export default function StatsScreen() {
               {new Date(latestRound.completedAt).toLocaleDateString()} / {latestRound.scoreLabel} / {latestRound.holesPlayed} holes
             </Text>
             <Text style={styles.copy}>Winner: {latestRound.winnerLabel}</Text>
+            <View style={styles.metricGrid}>
+              <MetricCard
+                label="Fairways"
+                value={`${latestTotals.fairwaysHit || 0}/${latestTotals.fairwayOpportunities || 0}`}
+                detail="In play off the tee"
+              />
+              <MetricCard
+                label="GIR"
+                value={`${latestTotals.greensHit || 0}/${latestTotals.girOpportunities || 0}`}
+                detail="Reached in regulation"
+              />
+              <MetricCard
+                label="Putts"
+                value={latestTotals.averagePutts ? latestTotals.averagePutts.toFixed(1) : "--"}
+                detail="Average putts"
+              />
+            </View>
+            {latestInsights.length ? (
+              <View style={styles.stack}>
+                {latestInsights.map((insight) => (
+                  <Text key={insight} style={styles.featureRow}>{insight}</Text>
+                ))}
+              </View>
+            ) : null}
             <AppButton label="Open Summary" variant="secondary" onPress={() => router.push(`/round/summary/${latestRound.id}`)} />
           </View>
         ) : (
@@ -95,6 +122,15 @@ export default function StatsScreen() {
         ) : (
           <Text style={styles.empty}>Your round archive builds automatically from finished rounds.</Text>
         )}
+      </Card>
+
+      <Card>
+        <Text style={styles.sectionTitle}>Help and Support</Text>
+        <Text style={styles.copy}>Use help for quick answers and support for tester feedback or rollout issues.</Text>
+        <View style={styles.actions}>
+          <AppButton label="Open Help" variant="secondary" onPress={() => router.push("/help")} />
+          <AppButton label="Open Support" variant="secondary" onPress={() => router.push("/support")} />
+        </View>
       </Card>
 
       <View style={styles.actions}>
@@ -189,6 +225,17 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
+  },
+  featureRow: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surfaceMuted,
   },
   actions: {
     gap: spacing.md,

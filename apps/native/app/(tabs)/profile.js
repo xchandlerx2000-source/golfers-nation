@@ -1,5 +1,5 @@
-import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import {
   formatCourseRequestTypeLabel,
@@ -10,8 +10,12 @@ import { AppButton } from "../../src/components/AppButton";
 import { Card } from "../../src/components/Card";
 import { Screen } from "../../src/components/Screen";
 import { SectionHeader } from "../../src/components/SectionHeader";
-import { getNativeRuntimeConfig } from "../../src/lib/runtime-config";
-import { colors, spacing } from "../../src/theme";
+import {
+  formatProfileVisibilityLabel,
+  formatSubscriptionLabel,
+  normalizeCurrentUser,
+} from "../../src/lib/account-state";
+import { colors, radii, spacing } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
 function InfoRow({ label, value }) {
@@ -23,23 +27,64 @@ function InfoRow({ label, value }) {
   );
 }
 
+function FormField({ label, value, onChangeText, placeholder, keyboardType = "default", multiline = false }) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <TextInput
+        multiline={multiline}
+        keyboardType={keyboardType}
+        placeholder={placeholder}
+        placeholderTextColor={colors.textMuted}
+        style={[styles.input, multiline ? styles.inputMultiline : null]}
+        value={value}
+        onChangeText={onChangeText}
+      />
+    </View>
+  );
+}
+
 export default function ProfileScreen() {
-  const currentUser = useAppStore((state) => state.currentUser);
+  const rawCurrentUser = useAppStore((state) => state.currentUser);
+  const activeRound = useAppStore((state) => state.activeRound);
   const authMode = useAppStore((state) => state.authMode);
   const sessionRestoredFrom = useAppStore((state) => state.sessionRestoredFrom);
-  const authHealthStatus = useAppStore((state) => state.authHealthStatus);
-  const sessionExpiresAt = useAppStore((state) => state.sessionExpiresAt);
-  const activeRound = useAppStore((state) => state.activeRound);
   const completedRoundStats = useAppStore((state) => state.getCompletedRoundStats());
   const socialCircle = useAppStore((state) => state.getSocialCircle());
   const communityFeed = useAppStore((state) => state.getCommunityFeed());
   const teeTimeRequests = useAppStore((state) => state.teeTimeRequests);
   const courseServiceRequests = useAppStore((state) => state.courseServiceRequests);
   const signOut = useAppStore((state) => state.signOut);
-  const runtimeConfig = getNativeRuntimeConfig();
-  const formattedExpiry = sessionExpiresAt
-    ? new Date(Number(sessionExpiresAt) * 1000).toLocaleString()
-    : "Not set";
+  const updateCurrentUserProfile = useAppStore((state) => state.updateCurrentUserProfile);
+
+  const currentUser = normalizeCurrentUser(rawCurrentUser || {});
+  const [formState, setFormState] = useState({
+    displayName: currentUser.displayName,
+    city: currentUser.city,
+    homeCourse: currentUser.homeCourse,
+    handicap: currentUser.handicap === null ? "" : String(currentUser.handicap),
+    bio: currentUser.bio,
+    seasonGoal: currentUser.seasonGoal,
+  });
+
+  useEffect(() => {
+    setFormState({
+      displayName: currentUser.displayName,
+      city: currentUser.city,
+      homeCourse: currentUser.homeCourse,
+      handicap: currentUser.handicap === null ? "" : String(currentUser.handicap),
+      bio: currentUser.bio,
+      seasonGoal: currentUser.seasonGoal,
+    });
+  }, [
+    currentUser.bio,
+    currentUser.city,
+    currentUser.displayName,
+    currentUser.handicap,
+    currentUser.homeCourse,
+    currentUser.seasonGoal,
+  ]);
+
   const recentRequests = [
     ...teeTimeRequests.map((request) => ({
       id: request.id,
@@ -55,46 +100,95 @@ export default function ProfileScreen() {
       meta: formatCourseRequestTypeLabel(request.requestType),
       createdAt: Number(request.updatedAt || request.createdAt || 0),
     })),
-  ]
-    .sort((left, right) => right.createdAt - left.createdAt)
-    .slice(0, 5);
+  ].sort((left, right) => right.createdAt - left.createdAt).slice(0, 5);
+
   const friendCount = socialCircle.filter((entry) => entry.isFriend).length;
   const followingCount = socialCircle.filter((entry) => entry.isFollowed).length;
 
   return (
     <Screen scroll>
-      <SectionHeader title="Profile" subtitle="Identity, account status, and settings access." />
+      <SectionHeader title="Profile" subtitle="Identity, golf settings, and account status." />
+
       <Card>
-        <Text style={styles.name}>{currentUser?.displayName || "Golfer"}</Text>
-        <Text style={styles.username}>@{currentUser?.username || "golfer"}</Text>
+        <Text style={styles.name}>{currentUser.displayName}</Text>
+        <Text style={styles.username}>@{currentUser.username}</Text>
         <Text style={styles.meta}>
-          {currentUser?.homeCourse || "Home course not set"} / Handicap {currentUser?.handicap ?? "--"}
+          {currentUser.homeCourse || "Home course not set"} / Handicap {currentUser.handicap ?? "--"}
         </Text>
+      </Card>
+
+      <Card>
+        <Text style={styles.sectionTitle}>Identity</Text>
+        <FormField
+          label="Display name"
+          value={formState.displayName}
+          onChangeText={(value) => setFormState((state) => ({ ...state, displayName: value }))}
+          placeholder="Your name"
+        />
+        <FormField
+          label="City"
+          value={formState.city}
+          onChangeText={(value) => setFormState((state) => ({ ...state, city: value }))}
+          placeholder="Home city"
+        />
+        <FormField
+          label="Home course"
+          value={formState.homeCourse}
+          onChangeText={(value) => setFormState((state) => ({ ...state, homeCourse: value }))}
+          placeholder="Course you play most"
+        />
+        <FormField
+          label="Handicap"
+          value={formState.handicap}
+          onChangeText={(value) => setFormState((state) => ({ ...state, handicap: value }))}
+          placeholder="9.8"
+          keyboardType="decimal-pad"
+        />
+        <FormField
+          label="Bio"
+          value={formState.bio}
+          onChangeText={(value) => setFormState((state) => ({ ...state, bio: value }))}
+          placeholder="Short golf bio"
+          multiline
+        />
+        <FormField
+          label="Season goal"
+          value={formState.seasonGoal}
+          onChangeText={(value) => setFormState((state) => ({ ...state, seasonGoal: value }))}
+          placeholder="Break 80"
+          multiline
+        />
+        <AppButton
+          label="Save Profile"
+          onPress={async () => {
+            await updateCurrentUserProfile({
+              displayName: formState.displayName,
+              city: formState.city,
+              homeCourse: formState.homeCourse,
+              handicap: formState.handicap,
+              bio: formState.bio,
+              seasonGoal: formState.seasonGoal,
+            });
+          }}
+        />
+      </Card>
+
+      <Card>
+        <Text style={styles.sectionTitle}>Golf Card</Text>
+        <InfoRow label="Rounds" value={String(completedRoundStats.roundsPlayed || 0)} />
+        <InfoRow label="Average" value={completedRoundStats.averageScore ? String(completedRoundStats.averageScore) : "--"} />
+        <InfoRow label="Best" value={completedRoundStats.bestRound ? String(completedRoundStats.bestRound) : "--"} />
+        <InfoRow label="Plan" value={formatSubscriptionLabel(currentUser.subscription)} />
+        <InfoRow label="Visibility" value={formatProfileVisibilityLabel(currentUser.privacy?.profileVisibility)} />
       </Card>
 
       <Card>
         <Text style={styles.sectionTitle}>Account</Text>
         <InfoRow label="Mode" value={authMode === "supabase" ? "Cloud account" : "Local tester"} />
         <InfoRow label="Restore" value={sessionRestoredFrom || "Fresh launch"} />
-        <InfoRow label="Session" value={authHealthStatus || "idle"} />
-        <InfoRow label="Expires" value={formattedExpiry} />
+        <InfoRow label="Email" value={currentUser.email || "Not connected"} />
+        <InfoRow label="Provider" value={currentUser.provider || "email"} />
         <InfoRow label="Round" value={activeRound?.courseName || "No active round"} />
-      </Card>
-
-      <Card>
-        <Text style={styles.sectionTitle}>Golf</Text>
-        <InfoRow label="City" value={currentUser?.city || "Not set"} />
-        <InfoRow label="Home course" value={currentUser?.homeCourse || "Not set"} />
-        <InfoRow label="Handicap" value={currentUser?.handicap ? String(currentUser.handicap) : "--"} />
-        <InfoRow label="Rounds" value={String(completedRoundStats.roundsPlayed || 0)} />
-        <InfoRow label="Average" value={completedRoundStats.averageScore ? String(completedRoundStats.averageScore) : "--"} />
-        <InfoRow label="Best" value={completedRoundStats.bestRound ? String(completedRoundStats.bestRound) : "--"} />
-      </Card>
-
-      <Card>
-        <Text style={styles.sectionTitle}>Build</Text>
-        <InfoRow label="Environment" value={runtimeConfig.appEnv} />
-        <InfoRow label="Channel" value={runtimeConfig.releaseChannel} />
       </Card>
 
       <Card>
@@ -121,13 +215,14 @@ export default function ProfileScreen() {
             ))}
           </View>
         ) : (
-          <Text style={styles.emptyCopy}>No local requests saved yet.</Text>
+          <Text style={styles.emptyCopy}>No request history saved yet.</Text>
         )}
       </Card>
 
       <View style={styles.actions}>
         <AppButton label="View Stats" variant="secondary" onPress={() => router.push("/stats")} />
         <AppButton label="Open Settings" onPress={() => router.push("/settings")} />
+        <AppButton label="Help" variant="secondary" onPress={() => router.push("/help")} />
         <AppButton label="Support" variant="secondary" onPress={() => router.push("/support")} />
         <AppButton
           label="Sign Out"
@@ -162,6 +257,29 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: "800",
     fontSize: 16,
+  },
+  field: {
+    gap: spacing.xs,
+  },
+  fieldLabel: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  input: {
+    minHeight: 50,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    color: colors.text,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: 15,
+  },
+  inputMultiline: {
+    minHeight: 88,
+    textAlignVertical: "top",
   },
   infoRow: {
     flexDirection: "row",

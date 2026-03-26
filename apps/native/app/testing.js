@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
+import { APP_VERSION } from "@golfers-nation/core";
 import { AppButton } from "../src/components/AppButton";
 import { Card } from "../src/components/Card";
 import { Screen } from "../src/components/Screen";
 import { SectionHeader } from "../src/components/SectionHeader";
+import { getNativeRuntimeConfig } from "../src/lib/runtime-config";
 import {
   clearNativeCrashLogEntries,
   getNativeCrashLogSummary,
@@ -22,12 +24,24 @@ function Row({ label, value }) {
 }
 
 export default function TestingScreen() {
+  const runtimeConfig = getNativeRuntimeConfig();
   const revalidateSession = useAppStore((state) => state.revalidateSession);
   const refreshRequestReviewQueue = useAppStore((state) => state.refreshRequestReviewQueue);
   const requestReviewQueue = useAppStore((state) => state.requestReviewQueue);
   const requestReviewQueueStatus = useAppStore((state) => state.requestReviewQueueStatus);
+  const requestReviewQueueNotice = useAppStore((state) => state.requestReviewQueueNotice);
   const liveSyncStatus = useAppStore((state) => state.liveSyncStatus);
+  const liveSyncNotice = useAppStore((state) => state.liveSyncNotice);
   const authHealthStatus = useAppStore((state) => state.authHealthStatus);
+  const authHealthNotice = useAppStore((state) => state.authHealthNotice);
+  const sessionExpiresAt = useAppStore((state) => state.sessionExpiresAt);
+  const lastAuthCheckAt = useAppStore((state) => state.lastAuthCheckAt);
+  const nearbyLocation = useAppStore((state) => state.nearbyLocation);
+  const nearbyLocationStatus = useAppStore((state) => state.nearbyLocationStatus);
+  const nearbyLocationSource = useAppStore((state) => state.nearbyLocationSource);
+  const nearbyLocationNotice = useAppStore((state) => state.nearbyLocationNotice);
+  const refreshNearbyCoursesFromLocation = useAppStore((state) => state.refreshNearbyCoursesFromLocation);
+  const courseResultsSource = useAppStore((state) => state.courseResultsSource);
   const [crashSummary, setCrashSummary] = useState({
     count: 0,
     lastCrashAt: "",
@@ -43,11 +57,37 @@ export default function TestingScreen() {
       <SectionHeader title="Testing" subtitle="Diagnostics and rollout checks." />
 
       <Card>
-        <Text style={styles.title}>Diagnostics</Text>
-        <Row label="Session" value={authHealthStatus || "idle"} />
+        <Text style={styles.title}>Build</Text>
+        <Row label="App version" value={APP_VERSION} />
+        <Row label="Environment" value={runtimeConfig.appEnv} />
+        <Row label="Channel" value={runtimeConfig.releaseChannel} />
+        <Row label="Course source" value={courseResultsSource || "starter"} />
+      </Card>
+
+      <Card>
+        <Text style={styles.title}>Session</Text>
+        <Row label="Session health" value={authHealthStatus || "idle"} />
         <Row label="Live sync" value={liveSyncStatus || "idle"} />
         <Row label="Queue" value={requestReviewQueueStatus || "idle"} />
         <Row label="Queue items" value={String(requestReviewQueue.length)} />
+        <Row label="Session expiry" value={sessionExpiresAt ? new Date(sessionExpiresAt).toLocaleString() : "Not set"} />
+        <Row label="Last auth check" value={lastAuthCheckAt ? new Date(lastAuthCheckAt).toLocaleString() : "Not checked"} />
+        {authHealthNotice ? <Text style={styles.notice}>{authHealthNotice}</Text> : null}
+        {liveSyncNotice ? <Text style={styles.notice}>{liveSyncNotice}</Text> : null}
+        {requestReviewQueueNotice ? <Text style={styles.notice}>{requestReviewQueueNotice}</Text> : null}
+      </Card>
+
+      <Card>
+        <Text style={styles.title}>Location</Text>
+        <Row label="Status" value={nearbyLocationStatus || "idle"} />
+        <Row label="Source" value={nearbyLocationSource || "none"} />
+        <Row
+          label="Coordinates"
+          value={nearbyLocation
+            ? `${nearbyLocation.latitude.toFixed(4)}, ${nearbyLocation.longitude.toFixed(4)}`
+            : "Not saved"}
+        />
+        {nearbyLocationNotice ? <Text style={styles.notice}>{nearbyLocationNotice}</Text> : null}
       </Card>
 
       <Card>
@@ -61,6 +101,13 @@ export default function TestingScreen() {
         <AppButton label="Refresh Session" variant="secondary" onPress={() => revalidateSession()} />
         <AppButton label="Refresh Request Queue" variant="secondary" onPress={() => refreshRequestReviewQueue()} />
         <AppButton
+          label="Refresh Nearby From Phone"
+          variant="secondary"
+          onPress={() => {
+            void refreshNearbyCoursesFromLocation({ requestPermission: true });
+          }}
+        />
+        <AppButton
           label="Clear Crash Logs"
           variant="secondary"
           onPress={async () => {
@@ -72,6 +119,7 @@ export default function TestingScreen() {
             });
           }}
         />
+        <AppButton label="Open Support" variant="secondary" onPress={() => router.push("/support")} />
         <AppButton label="Back to Settings" variant="secondary" onPress={() => router.back()} />
       </View>
     </Screen>
@@ -102,6 +150,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     flexShrink: 1,
     textAlign: "right",
+  },
+  notice: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
   },
   actions: {
     gap: spacing.md,

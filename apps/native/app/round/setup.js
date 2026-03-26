@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { Alert, Linking, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { GAME_MODES, getLatestCourseTeeTimeRequest, getTeeTimeRequestStatusLabel } from "@golfers-nation/core";
@@ -30,6 +30,8 @@ export default function RoundSetupScreen() {
   const courseResults = useAppStore((state) => state.courseResults);
   const courseResultsStatus = useAppStore((state) => state.courseResultsStatus);
   const courseCatalogNotice = useAppStore((state) => state.courseCatalogNotice);
+  const nearbyLocationStatus = useAppStore((state) => state.nearbyLocationStatus);
+  const nearbyLocationNotice = useAppStore((state) => state.nearbyLocationNotice);
   const selectedCourse = useAppStore((state) => state.selectedCourse);
   const teeTimeRequests = useAppStore((state) => state.teeTimeRequests);
   const setCourseQuery = useAppStore((state) => state.setCourseQuery);
@@ -37,10 +39,12 @@ export default function RoundSetupScreen() {
   const setSetupMode = useAppStore((state) => state.setSetupMode);
   const prepareCourseSetup = useAppStore((state) => state.prepareCourseSetup);
   const refreshCourseSearch = useAppStore((state) => state.refreshCourseSearch);
+  const refreshNearbyCoursesFromLocation = useAppStore((state) => state.refreshNearbyCoursesFromLocation);
   const createSelectedCourseTeeTimeRequest = useAppStore((state) => state.createSelectedCourseTeeTimeRequest);
   const startSoloRound = useAppStore((state) => state.startSoloRound);
   const hostLiveRound = useAppStore((state) => state.hostLiveRound);
   const authNotice = useAppStore((state) => state.authNotice);
+  const hasInitializedSearchRef = useRef(false);
 
   const formatCards = useMemo(() => Object.values(GAME_MODES), []);
   const teeTimeAccess = selectedCourse ? getCourseTeeTimeAccess(selectedCourse) : null;
@@ -53,12 +57,22 @@ export default function RoundSetupScreen() {
   }, [prepareCourseSetup]);
 
   useEffect(() => {
+    if (!hasInitializedSearchRef.current) {
+      hasInitializedSearchRef.current = true;
+      return undefined;
+    }
+
     const timeoutId = setTimeout(() => {
-      void refreshCourseSearch();
+      if (String(setup.courseQuery || "").trim()) {
+        void refreshCourseSearch();
+        return;
+      }
+
+      void prepareCourseSetup();
     }, 250);
 
     return () => clearTimeout(timeoutId);
-  }, [refreshCourseSearch, setup.courseQuery]);
+  }, [prepareCourseSetup, refreshCourseSearch, setup.courseQuery]);
 
   return (
     <Screen scroll>
@@ -75,11 +89,21 @@ export default function RoundSetupScreen() {
           value={setup.courseQuery}
           onChangeText={setCourseQuery}
         />
+        <AppButton
+          label={nearbyLocationStatus === "locating" ? "Locating..." : "Use My Location"}
+          variant="secondary"
+          disabled={nearbyLocationStatus === "locating"}
+          onPress={() => {
+            setCourseQuery("");
+            void refreshNearbyCoursesFromLocation({ requestPermission: true, forceResults: true });
+          }}
+        />
         {courseResultsStatus === "loading" || courseResultsStatus === "searching" ? (
           <Text style={styles.statusLine}>
             {courseResultsStatus === "searching" ? "Searching expanded course catalog..." : "Loading nearby course picks..."}
           </Text>
         ) : null}
+        {nearbyLocationNotice ? <Text style={styles.statusLine}>{nearbyLocationNotice}</Text> : null}
         {courseCatalogNotice ? <Text style={styles.notice}>{courseCatalogNotice}</Text> : null}
         <View style={styles.resultsList}>
           {courseResults.map((course) => (

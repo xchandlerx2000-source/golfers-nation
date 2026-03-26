@@ -23,7 +23,9 @@ export default function FinishedRoundScreen() {
       <Card>
         <Text style={styles.eyebrow}>Winner</Text>
         <Text style={styles.winner}>{summary.winnerLabel || "Pending"}</Text>
-        <Text style={styles.meta}>{summary.roundLabel || "Round complete"} • {summary.holesPlayed}/{summary.totalHoles} holes scored</Text>
+        <Text style={styles.meta}>
+          {summary.roundLabel || "Round complete"} / {summary.holesPlayed}/{summary.totalHoles} holes scored
+        </Text>
       </Card>
       <Card>
         <Text style={styles.title}>Standings</Text>
@@ -45,7 +47,11 @@ export default function FinishedRoundScreen() {
         <AppButton
           label="Finish Round"
           onPress={async () => {
-            await finishRound();
+            const completedRound = await finishRound();
+            if (completedRound?.id) {
+              router.replace(`/round/summary/${completedRound.id}`);
+              return;
+            }
             router.replace("/(tabs)/home");
           }}
         />

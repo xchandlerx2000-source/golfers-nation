@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { getCourseTeeTimeAccess } from "../packages/course/src/index.js";
+import {
+  clearCachedNativeLocation,
+  writeCachedNativeLocation,
+} from "../apps/native/src/services/native-location-service.js";
 import { clearNativeAppSession, writeNativeAppSession } from "../apps/native/src/services/native-platform.js";
 import { resetNativeCourseCatalogCache } from "../apps/native/src/services/native-course-service.js";
 import { useAppStore } from "../apps/native/src/store/useAppStore.js";
@@ -8,6 +12,7 @@ import { useAppStore } from "../apps/native/src/store/useAppStore.js";
 describe("native app store", () => {
   beforeEach(async () => {
     await clearNativeAppSession();
+    await clearCachedNativeLocation();
     resetNativeCourseCatalogCache();
     useAppStore.setState({
       bootStatus: "idle",
@@ -31,6 +36,10 @@ describe("native app store", () => {
       courseResultsStatus: "idle",
       courseResultsSource: "starter",
       courseCatalogNotice: "",
+      nearbyLocation: null,
+      nearbyLocationStatus: "idle",
+      nearbyLocationSource: "",
+      nearbyLocationNotice: "",
       selectedCourse: useAppStore.getInitialState().selectedCourse,
       completedRounds: [],
       socialProfiles: useAppStore.getInitialState().socialProfiles,
@@ -66,6 +75,22 @@ describe("native app store", () => {
     expect(useAppStore.getState().signedIn).toBe(true);
     expect(useAppStore.getState().currentUser.displayName).toBe("Persisted Golfer");
     expect(useAppStore.getState().sessionRestoredFrom).toBe("native-storage");
+  });
+
+  it("uses cached device coordinates to show nearby courses in setup", async () => {
+    await writeCachedNativeLocation({
+      latitude: 32.8998,
+      longitude: -117.2432,
+      accuracy: 40,
+      timestamp: Date.now(),
+    });
+
+    const courses = await useAppStore.getState().refreshNearbyCoursesFromLocation();
+
+    expect(courses.length).toBeGreaterThan(0);
+    expect(useAppStore.getState().nearbyLocationStatus).toBe("cached");
+    expect(useAppStore.getState().courseResultsSource).toBe("cached-location-nearby");
+    expect(useAppStore.getState().courseCatalogNotice).toContain("saved on this device");
   });
 
   it("searches the native course catalog fallback and starts a playable round from a real course record", async () => {
@@ -236,5 +261,45 @@ describe("native app store", () => {
 
     expect(preview.isFriend).toBe(true);
     expect(preview.isFollowed).toBe(true);
+  });
+
+  it("updates profile, appearance, and privacy state on the current golfer", async () => {
+    await useAppStore.getState().signInDemo();
+
+    await useAppStore.getState().updateCurrentUserProfile({
+      displayName: "Morgan Reed",
+      city: "Austin",
+      homeCourse: "Pine Oaks",
+      handicap: "7.4",
+      bio: "Weekend match player",
+      seasonGoal: "Break 78",
+    });
+    await useAppStore.getState().updateCurrentUserAppearance({
+      colorMode: "dark",
+      themeId: "midnight",
+      textScale: "large",
+      compactMode: true,
+      contrastMode: "high",
+    });
+    await useAppStore.getState().updateCurrentUserPrivacy({
+      profileVisibility: "private",
+      showHomeCourse: false,
+      showHandicap: false,
+    });
+
+    const currentUser = useAppStore.getState().currentUser;
+
+    expect(currentUser.displayName).toBe("Morgan Reed");
+    expect(currentUser.city).toBe("Austin");
+    expect(currentUser.homeCourse).toBe("Pine Oaks");
+    expect(currentUser.handicap).toBe(7.4);
+    expect(currentUser.bio).toBe("Weekend match player");
+    expect(currentUser.seasonGoal).toBe("Break 78");
+    expect(currentUser.appearance.themeId).toBe("midnight");
+    expect(currentUser.appearance.compactMode).toBe(true);
+    expect(currentUser.appearance.contrastMode).toBe("high");
+    expect(currentUser.privacy.profileVisibility).toBe("private");
+    expect(currentUser.privacy.showHomeCourse).toBe(false);
+    expect(currentUser.privacy.showHandicap).toBe(false);
   });
 });

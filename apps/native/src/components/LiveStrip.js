@@ -16,9 +16,9 @@ export function LiveStrip({
     <View style={styles.wrap}>
       <Text style={[styles.badge, live ? styles.liveBadge : styles.localBadge]}>{state}</Text>
       <Text style={styles.text}>{connection}</Text>
-      <Text style={styles.dot}>•</Text>
+      <Text style={styles.dot}>|</Text>
       <Text style={styles.text}>{players} players</Text>
-      <Text style={styles.dot}>•</Text>
+      <Text style={styles.dot}>|</Text>
       <Text style={styles.text}>{format}</Text>
     </View>
   );
