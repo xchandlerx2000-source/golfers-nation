@@ -63,3 +63,41 @@ export function summarizeCompletedRounds(rounds = [], currentUserId = "") {
     recentRounds: items.slice(0, 8),
   };
 }
+
+export function buildFrequentPartners(rounds = [], currentUserId = "") {
+  const partnerMap = new Map();
+
+  normalizeCompletedRounds(rounds).forEach((round) => {
+    const currentPlayer = (round.players || []).find((player) => player?.userId === currentUserId);
+    if (!currentPlayer) {
+      return;
+    }
+
+    (round.players || []).forEach((player) => {
+      if (!player || player.id === currentPlayer.id) {
+        return;
+      }
+
+      const key = player.profileId || player.userId || player.id;
+      const existing = partnerMap.get(key) || {
+        id: key,
+        name: player.name || player.displayName || "Golfer",
+        rounds: 0,
+        latest: 0,
+      };
+
+      existing.rounds += 1;
+      existing.latest = Math.max(existing.latest, Number(round.completedAt || round.updatedAt || 0));
+      partnerMap.set(key, existing);
+    });
+  });
+
+  return [...partnerMap.values()]
+    .sort((left, right) => right.rounds - left.rounds || right.latest - left.latest)
+    .slice(0, 6);
+}
+
+export function getCompletedRoundSummary(rounds = [], currentUserId = "", roundId = "") {
+  const match = buildCompletedRoundSummaries(rounds, currentUserId).find((item) => item.id === roundId) || null;
+  return match;
+}

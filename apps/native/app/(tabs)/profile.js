@@ -128,6 +128,7 @@ export default function ProfileScreen() {
       <View style={styles.actions}>
         <AppButton label="View Stats" variant="secondary" onPress={() => router.push("/stats")} />
         <AppButton label="Open Settings" onPress={() => router.push("/settings")} />
+        <AppButton label="Support" variant="secondary" onPress={() => router.push("/support")} />
         <AppButton
           label="Sign Out"
           variant="secondary"

@@ -53,6 +53,7 @@ export default function SettingsScreen() {
 
       <View style={styles.actions}>
         <AppButton label="Open Help" onPress={() => router.push("/help")} />
+        <AppButton label="Open Support" variant="secondary" onPress={() => router.push("/support")} />
         <AppButton label="Open Testing" variant="secondary" onPress={() => router.push("/testing")} />
         <AppButton label="Back to Profile" variant="secondary" onPress={() => router.back()} />
         <AppButton
