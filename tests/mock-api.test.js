@@ -72,8 +72,11 @@ describe("nearby discovery scaffolding", () => {
 
     const nearbyPlayers = listNearbyPlayers(state);
 
-    expect(nearbyPlayers[0].profileId).toBe("profile-maya");
+    expect(nearbyPlayers[0].isFriend).toBe(true);
     expect(nearbyPlayers[0].relationshipLabel).toBe("Friend");
+    expect(nearbyPlayers.findIndex((player) => player.isFriend)).toBeLessThan(
+      nearbyPlayers.findIndex((player) => player.isFollowed && !player.isFriend)
+    );
     expect(nearbyPlayers.some((player) => player.profileId === "profile-theo" && player.isFollowed)).toBe(true);
   });
 

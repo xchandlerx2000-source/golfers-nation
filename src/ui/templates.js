@@ -3240,7 +3240,7 @@ function renderGameModePicker(state) {
             <strong>${escapeHtml(mode.label)}</strong>
             <span>${escapeHtml(mode.shortDescription || mode.description || "")}</span>
           </div>
-          ${locked ? `<span class="status-pill">Premium</span>` : active ? `<span class="status-pill">Selected</span>` : ""}
+          ${locked ? `<span class="status-pill">Premium</span>` : ""}
         </button>
       `;
     })
@@ -3257,7 +3257,6 @@ function renderGameModePicker(state) {
       </div>
       <div class="row-actions compact-actions">
         <button class="button subtle" type="button" data-action="round-setup-step" data-direction="-1">Back</button>
-        <button class="button subtle" type="button" data-action="more-round-modes">More Games</button>
       </div>
     </div>
   `;
@@ -3856,11 +3855,11 @@ function renderCreateRoundCard(state, activeRound) {
         <div class="round-choice-grid">
           <button class="round-choice-button is-active" type="submit" name="intent" value="local">
             <strong>Solo Round</strong>
-            <span>Start scoring now</span>
+            <span>Start scoring</span>
           </button>
           <button class="round-choice-button" type="submit" name="intent" value="host">
             <strong>Live Round</strong>
-            <span>Get a code and invite golfers</span>
+            <span>Get code and invite</span>
           </button>
         </div>
         <div class="round-setup-footer">
@@ -3887,10 +3886,10 @@ function renderCreateRoundCard(state, activeRound) {
       <form class="stack-form" data-form="create-round" id="create-round-form">
         <div class="round-setup-wizard">
           <div class="round-setup-wizard-head">
-            <div>
-              <p class="eyebrow">Round setup</p>
-              <h3>Start a live round fast</h3>
-            </div>
+          <div>
+            <p class="eyebrow">Round setup</p>
+            <h3>Start Round</h3>
+          </div>
             ${renderRoundSetupProgress(currentStep)}
           </div>
           ${renderStepBody()}

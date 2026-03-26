@@ -2127,6 +2127,12 @@ export function bootstrapApp({
         setRoundSetupField(draft, "courseMethod", "search");
         return draft;
       }, { reason: "search-another-course" });
+      requestAnimationFrame(() => {
+        const input = root.querySelector("[data-course-search-input]");
+        if (input && typeof input.focus === "function") {
+          input.focus();
+        }
+      });
       return;
     }
 
@@ -3875,7 +3881,9 @@ export function bootstrapApp({
         );
         return draft;
       }, { reason: "join-code" });
-      form.reset();
+      if (store.getState().session.activeView === "round" && store.getState().session.activeRoundId) {
+        form.reset();
+      }
       return;
     }
 

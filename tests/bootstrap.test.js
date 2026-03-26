@@ -785,6 +785,33 @@ describe("bootstrap app", () => {
     result.destroy();
   });
 
+  it("keeps the invite code in place when a join attempt fails", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Join Tester",
+      email: "join-keep@test.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    document.querySelector('[data-action="open-community-join"]').click();
+    const form = document.querySelector('[data-form="join-code"]');
+    const input = form.querySelector('input[name="inviteCode"]');
+    input.value = "BAD123";
+    form.requestSubmit(form.querySelector('button[type="submit"]'));
+
+    expect(result.store.getState().session.feedback.title).toMatch(/join|unavailable/i);
+    expect(input.value).toBe("BAD123");
+
+    result.destroy();
+  });
+
   it("creates a clubhouse post from Community without leaving the tab", () => {
     const state = createDefaultState();
     const created = createEmailAccount(state, {

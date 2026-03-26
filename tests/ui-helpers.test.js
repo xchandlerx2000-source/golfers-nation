@@ -504,7 +504,7 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Start a live round fast");
+    expect(markup).toContain("Start Round");
     expect(markup).toContain("Choose course");
     expect(markup).toContain("Use My Location");
     expect(markup).toContain("Search Course");
