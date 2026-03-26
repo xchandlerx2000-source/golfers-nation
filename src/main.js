@@ -1552,7 +1552,7 @@ export function bootstrapApp({
         draft,
         "success",
         "Account created",
-        `${draft.currentUser.displayName} is signed in with premium tester access, and Golden Nugget is ready as the easiest first course.`
+        `${draft.currentUser.displayName} is signed in with premium tester access. Set a home course if you want quick round setup to recommend it first.`
       );
       return draft;
     }, { reason: "auth-signup-async" });
@@ -2032,9 +2032,8 @@ export function bootstrapApp({
     }
 
     if (action === "use-suggested-course") {
-      void primeCourseNearbyCatalog({ reason: "use-suggested-course" });
       store.setState((draft) => {
-        setRoundSetupField(draft, "courseMethod", "detected");
+        setRoundSetupField(draft, "courseMethod", "profile");
         return draft;
       }, { reason: "use-suggested-course" });
       return;
@@ -3275,7 +3274,7 @@ export function bootstrapApp({
           draft,
           "success",
           "Account created",
-          `${draft.currentUser.displayName} is signed in with premium tester access, and Golden Nugget is ready as the easiest first course.`
+          `${draft.currentUser.displayName} is signed in with premium tester access. Set a home course if you want quick round setup to recommend it first.`
         );
         return draft;
       }, { reason: "auth-signup" });

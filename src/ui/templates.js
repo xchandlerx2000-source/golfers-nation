@@ -2963,6 +2963,7 @@ function renderCourseSelectionLine(course = {}, teeBox = null, options = {}) {
 function getRoundSetupDiscovery(state, roundSetup = getRoundSetup(state)) {
   return getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {}, {
     rounds: state.rounds,
+    currentUser: state.currentUser,
   });
 }
 
@@ -3065,6 +3066,7 @@ function renderCoursePicker(state) {
   const courseDetailStatus = String(state.course?.detailStatus || "idle");
   const detailCourseId = String(state.course?.detailCourseId || "");
   const {
+    homeCourseSuggestion,
     searchResults,
     recentCourses,
     selectedCourse,
@@ -3072,11 +3074,13 @@ function renderCoursePicker(state) {
     nearbyCourses,
   } = discovery;
   const courseMethod = String(roundSetup.courseMethod || "").trim();
-  const suggestedCourse = nearbyCourses[0] || null;
+  const suggestedCourse = homeCourseSuggestion || null;
   const suggestedTeeBox = suggestedCourse ? getDefaultCourseTeeBox(suggestedCourse) : null;
+  const detectedCourse = nearbyCourses[0] || null;
+  const detectedTeeBox = detectedCourse ? getDefaultCourseTeeBox(detectedCourse) : null;
   const recentSuggestionCourses = recentCourses.slice(0, 4);
-  const nearbySuggestionCourses = suggestedCourse
-    ? nearbyCourses.filter((course) => course.id !== suggestedCourse.id).slice(0, 4)
+  const nearbySuggestionCourses = detectedCourse
+    ? nearbyCourses.filter((course) => course.id !== detectedCourse.id).slice(0, 4)
     : nearbyCourses.slice(0, 4);
 
   const renderSearchResultsSection = (queryOverride = roundSetup.courseQuery) => {
@@ -3142,7 +3146,7 @@ function renderCoursePicker(state) {
   };
 
   if (!courseMethod) {
-    if (state.session?.nearby?.locationPermission === "granted" && suggestedCourse && suggestedTeeBox) {
+    if (suggestedCourse && suggestedTeeBox) {
       return `
         <div class="stack-list course-picker-block round-setup-step-card">
           <div class="round-setup-step-head">
@@ -3151,7 +3155,7 @@ function renderCoursePicker(state) {
           </div>
           <article class="course-selected-card">
             <div class="course-selected-copy">
-              <span class="mini-label">Suggested</span>
+              <span class="mini-label">Home course</span>
               <strong>${escapeHtml(suggestedCourse.displayName || suggestedCourse.name)}</strong>
               <div class="tag-row">
                 ${renderCourseReadinessBadge(suggestedCourse)}
@@ -3161,7 +3165,7 @@ function renderCoursePicker(state) {
           </article>
           <div class="stack-list round-setup-start-actions">
             <button class="button primary" type="button" data-action="use-suggested-course">
-              Use Suggested Course
+              Use Home Course
             </button>
             <button class="button secondary" type="button" data-action="search-another-course">
               Search Course
@@ -3215,7 +3219,7 @@ function renderCoursePicker(state) {
     `;
   }
 
-  if (courseMethod === "detected") {
+  if (courseMethod === "profile") {
     if (suggestedCourse && suggestedTeeBox) {
       return `
         <div class="stack-list course-picker-block round-setup-step-card">
@@ -3225,7 +3229,7 @@ function renderCoursePicker(state) {
           </div>
           <article class="course-selected-card" data-selected-course="true">
             <div class="course-selected-copy">
-              <span class="mini-label">Suggested course</span>
+              <span class="mini-label">Home course</span>
               <strong>${escapeHtml(suggestedCourse.displayName || suggestedCourse.name)}</strong>
               <div class="tag-row">
                 ${renderCourseReadinessBadge(suggestedCourse, {
@@ -3240,6 +3244,61 @@ function renderCoursePicker(state) {
           <div class="stack-list round-setup-start-actions">
             <button class="button primary" type="button" data-action="confirm-course-choice" data-course-id="${suggestedCourse.id}" data-course-provider-id="${escapeHtml(suggestedCourse.providerId || "")}" data-tee-box-id="${suggestedTeeBox.id}" ${(courseDetailStatus === "loading" && detailCourseId === suggestedCourse.id) ? "disabled" : ""}>
               ${(courseDetailStatus === "loading" && detailCourseId === suggestedCourse.id) ? "Loading course" : "Confirm Course"}
+            </button>
+            <button class="button secondary" type="button" data-action="search-another-course">
+              Search Another Course
+            </button>
+            <button class="button subtle" type="button" data-action="skip-course-for-now">
+              Skip for now
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="stack-list course-picker-block round-setup-step-card">
+        <div class="round-setup-step-head">
+          <p class="eyebrow">Step 2</p>
+          <h4>Choose course</h4>
+        </div>
+        <div class="stack-list round-setup-start-actions">
+          <button class="button secondary" type="button" data-action="search-another-course">
+            Search Course
+          </button>
+          <button class="button subtle" type="button" data-action="back-course-methods">
+            Back
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (courseMethod === "detected") {
+    if (detectedCourse && detectedTeeBox) {
+      return `
+        <div class="stack-list course-picker-block round-setup-step-card">
+          <div class="round-setup-step-head">
+            <p class="eyebrow">Step 2</p>
+            <h4>Confirm course</h4>
+          </div>
+          <article class="course-selected-card" data-selected-course="true">
+            <div class="course-selected-copy">
+              <span class="mini-label">Suggested course</span>
+              <strong>${escapeHtml(detectedCourse.displayName || detectedCourse.name)}</strong>
+              <div class="tag-row">
+                ${renderCourseReadinessBadge(detectedCourse, {
+                  loading: courseDetailStatus === "loading" && detailCourseId === detectedCourse.id,
+                })}
+              </div>
+              <p>${renderCourseSelectionLine(detectedCourse, detectedTeeBox, {
+                loading: courseDetailStatus === "loading" && detailCourseId === detectedCourse.id,
+              })}</p>
+            </div>
+          </article>
+          <div class="stack-list round-setup-start-actions">
+            <button class="button primary" type="button" data-action="confirm-course-choice" data-course-id="${detectedCourse.id}" data-course-provider-id="${escapeHtml(detectedCourse.providerId || "")}" data-tee-box-id="${detectedTeeBox.id}" ${(courseDetailStatus === "loading" && detailCourseId === detectedCourse.id) ? "disabled" : ""}>
+              ${(courseDetailStatus === "loading" && detailCourseId === detectedCourse.id) ? "Loading course" : "Confirm Course"}
             </button>
             <button class="button secondary" type="button" data-action="search-another-course">
               Search Another Course

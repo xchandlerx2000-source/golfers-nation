@@ -79,10 +79,10 @@ describe("round flow service", () => {
     expect(state.groups[0].id).toBe(group.id);
   });
 
-  it("keeps Golden Nugget as the default round setup entry point", () => {
+  it("starts round setup without a preselected featured course", () => {
     const setup = getDefaultRoundSetup();
 
-    expect(setup.selectedCourseId).toBe("golden-nugget-lake-charles");
-    expect(setup.selectedTeeBoxId).toBeTruthy();
+    expect(setup.selectedCourseId).toBe("");
+    expect(setup.selectedTeeBoxId).toBe("");
   });
 });

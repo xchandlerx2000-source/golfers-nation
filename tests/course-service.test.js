@@ -122,9 +122,28 @@ describe("course service", () => {
       }
     );
 
-    expect(discovery.selectedCourse.id).toBe("golden-nugget-lake-charles");
+    expect(discovery.selectedCourse).toBeNull();
+    expect(discovery.homeCourseSuggestion).toBeNull();
     expect(discovery.nearbyCourses).toHaveLength(0);
     expect(discovery.nearbyCopy.title).toBe("Location is off");
+  });
+
+  it("surfaces a quick-setup suggestion only when the user has a matching home course", () => {
+    const discovery = getRoundSetupDiscoveryState(
+      getCourseDefaultRoundSetup(),
+      {
+        locationPermission: "prompt",
+        locationStatus: "idle",
+        coordinates: null,
+      },
+      {
+        currentUser: {
+          homeCourse: "Pebble Beach Golf Links",
+        },
+      }
+    );
+
+    expect(discovery.homeCourseSuggestion?.displayName || discovery.homeCourseSuggestion?.name).toContain("Pebble Beach");
   });
 
   it("keeps default search discovery focused on recent and nearby subsets until the user types a query", () => {

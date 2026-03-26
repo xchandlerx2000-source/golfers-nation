@@ -729,7 +729,7 @@ export function createDefaultAccountState() {
     tier: "free",
     seededDemo: true,
     city: "Chicago, IL",
-    homeCourse: "The Country Club at Golden Nugget",
+    homeCourse: "",
     handicap: 8.4,
     bio: "Competitive weekend golfer building a better multi-state season.",
     seasonGoal: "Break 80 in three new states",

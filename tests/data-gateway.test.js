@@ -201,7 +201,7 @@ describe("supabase data gateway", () => {
     expect(nextState.currentUser.email).toBe("casey@example.com");
     expect(nextState.rounds).toHaveLength(0);
     expect(nextState.tournaments).toHaveLength(0);
-    expect(nextState.session.roundSetup.selectedCourseId).toBe(FEATURED_COURSE_ID);
+    expect(nextState.session.roundSetup.selectedCourseId).toBe("");
   });
 
   it("preserves a local round when cloud sync is pending instead of overwriting it with stale remote data", async () => {

@@ -4732,7 +4732,7 @@ const IMPORTED_US_COURSE_CATALOG_MANIFEST = {
   "assetVersion": "e848499d01e0",
   "providerId": "imported-us-course-database",
   "providerLabel": "Imported U.S. course database",
-  "generatedAt": "2026-03-26T04:03:56.143Z",
+  "generatedAt": "2026-03-26T04:32:08.058Z",
   "recordCount": 16284,
   "sourceCount": 4,
   "qualitySummary": {
@@ -6007,6 +6007,77 @@ function normalizeCourseSearchQuery(value = "") {
   return String(value || "").trim();
 }
 
+function normalizeCourseMatchKey(value = "") {
+  return normalizeCourseSearchQuery(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getCourseMatchCandidates(course = {}) {
+  return [
+    course.displayName,
+    course.name,
+    course.clubName,
+    course.courseName,
+    ...(Array.isArray(course.aliases) ? course.aliases : []),
+    ...(Array.isArray(course.searchKeywords) ? course.searchKeywords : []),
+  ]
+    .map((value) => normalizeCourseMatchKey(value))
+    .filter(Boolean);
+}
+
+function getCourseHomeMatchScore(homeCourse = "", course = {}) {
+  const normalizedHomeCourse = normalizeCourseMatchKey(homeCourse);
+  if (!normalizedHomeCourse) {
+    return 0;
+  }
+
+  const candidates = getCourseMatchCandidates(course);
+  if (candidates.includes(normalizedHomeCourse)) {
+    return 4;
+  }
+
+  if (candidates.some((candidate) =>
+    candidate.length >= 6
+      && normalizedHomeCourse.length >= 6
+      && (candidate.includes(normalizedHomeCourse) || normalizedHomeCourse.includes(candidate))
+  )) {
+    return 3;
+  }
+
+  const homeTokens = normalizedHomeCourse.split(" ").filter(Boolean);
+  if (
+    homeTokens.length >= 2
+    && candidates.some((candidate) => homeTokens.every((token) => candidate.includes(token)))
+  ) {
+    return 2;
+  }
+
+  return 0;
+}
+
+function findCourseByHomeCourse(homeCourse = "", options = {}) {
+  const normalizedHomeCourse = normalizeCourseMatchKey(homeCourse);
+  if (!normalizedHomeCourse) {
+    return null;
+  }
+
+  const candidates = searchCourses(homeCourse, {
+    ...options,
+    limit: Number(options.homeCourseSearchLimit || 8),
+  });
+  const ranked = candidates
+    .map((course) => ({
+      course,
+      score: getCourseHomeMatchScore(homeCourse, course),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score || sortCourses(left.course, right.course));
+
+  return ranked[0]?.course || null;
+}
+
 function sortCourses(left = {}, right = {}) {
   const leftPriority = left?.metadata?.priority ?? 100;
   const rightPriority = right?.metadata?.priority ?? 100;
@@ -6200,16 +6271,13 @@ function buildManualRoundTemplate(courseName = "", teeBoxName = "", { holeCount 
   });
 }
 function getCourseDefaultRoundSetup() {
-  const featuredCourse = getCourseById(FEATURED_COURSE_ID);
-  const featuredTeeBox = getDefaultCourseTeeBox(featuredCourse);
-
   return {
     step: "course",
     intent: "local",
     courseMethod: "",
     courseQuery: "",
-    selectedCourseId: featuredCourse?.id || "",
-    selectedTeeBoxId: featuredTeeBox?.id || "",
+    selectedCourseId: "",
+    selectedTeeBoxId: "",
     selectedHoleCount: 18,
     mode: "stroke",
     players: "",
@@ -6272,6 +6340,10 @@ function getRoundSetupDiscoveryState(roundSetup = {}, nearbyState = {}, options 
   const setup = getCourseRoundSetupState(roundSetup);
   const normalizedQuery = normalizeCourseSearchQuery(setup.courseQuery);
   const recentCourses = getRecentRoundSetupCourses(options.rounds, Number(options.recentLimit || 4), options);
+  const homeCourseSuggestion = findCourseByHomeCourse(
+    options.currentUser?.homeCourse || options.homeCourse || "",
+    options
+  );
   const selectedCourse = setup.selectedCourseId ? getCourseById(setup.selectedCourseId, options) : null;
   const selectedTeeBox = selectedCourse
     ? findCourseTeeBox(selectedCourse, setup.selectedTeeBoxId || getDefaultCourseTeeBox(selectedCourse)?.id || "")
@@ -6296,6 +6368,7 @@ function getRoundSetupDiscoveryState(roundSetup = {}, nearbyState = {}, options 
     selectedTeeBox,
     searchResults,
     quickPicks,
+    homeCourseSuggestion,
     recentCourses,
     nearbyCourses,
     nearbyCopy,
@@ -7021,7 +7094,7 @@ function createDefaultAccountState() {
     tier: "free",
     seededDemo: true,
     city: "Chicago, IL",
-    homeCourse: "The Country Club at Golden Nugget",
+    homeCourse: "",
     handicap: 8.4,
     bio: "Competitive weekend golfer building a better multi-state season.",
     seasonGoal: "Break 80 in three new states",
@@ -15030,6 +15103,7 @@ function renderCourseSelectionLine(course = {}, teeBox = null, options = {}) {
 function getRoundSetupDiscovery(state, roundSetup = getRoundSetup(state)) {
   return getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {}, {
     rounds: state.rounds,
+    currentUser: state.currentUser,
   });
 }
 
@@ -15132,6 +15206,7 @@ function renderCoursePicker(state) {
   const courseDetailStatus = String(state.course?.detailStatus || "idle");
   const detailCourseId = String(state.course?.detailCourseId || "");
   const {
+    homeCourseSuggestion,
     searchResults,
     recentCourses,
     selectedCourse,
@@ -15139,11 +15214,13 @@ function renderCoursePicker(state) {
     nearbyCourses,
   } = discovery;
   const courseMethod = String(roundSetup.courseMethod || "").trim();
-  const suggestedCourse = nearbyCourses[0] || null;
+  const suggestedCourse = homeCourseSuggestion || null;
   const suggestedTeeBox = suggestedCourse ? getDefaultCourseTeeBox(suggestedCourse) : null;
+  const detectedCourse = nearbyCourses[0] || null;
+  const detectedTeeBox = detectedCourse ? getDefaultCourseTeeBox(detectedCourse) : null;
   const recentSuggestionCourses = recentCourses.slice(0, 4);
-  const nearbySuggestionCourses = suggestedCourse
-    ? nearbyCourses.filter((course) => course.id !== suggestedCourse.id).slice(0, 4)
+  const nearbySuggestionCourses = detectedCourse
+    ? nearbyCourses.filter((course) => course.id !== detectedCourse.id).slice(0, 4)
     : nearbyCourses.slice(0, 4);
 
   const renderSearchResultsSection = (queryOverride = roundSetup.courseQuery) => {
@@ -15209,7 +15286,7 @@ function renderCoursePicker(state) {
   };
 
   if (!courseMethod) {
-    if (state.session?.nearby?.locationPermission === "granted" && suggestedCourse && suggestedTeeBox) {
+    if (suggestedCourse && suggestedTeeBox) {
       return `
         <div class="stack-list course-picker-block round-setup-step-card">
           <div class="round-setup-step-head">
@@ -15218,7 +15295,7 @@ function renderCoursePicker(state) {
           </div>
           <article class="course-selected-card">
             <div class="course-selected-copy">
-              <span class="mini-label">Suggested</span>
+              <span class="mini-label">Home course</span>
               <strong>${escapeHtml(suggestedCourse.displayName || suggestedCourse.name)}</strong>
               <div class="tag-row">
                 ${renderCourseReadinessBadge(suggestedCourse)}
@@ -15228,7 +15305,7 @@ function renderCoursePicker(state) {
           </article>
           <div class="stack-list round-setup-start-actions">
             <button class="button primary" type="button" data-action="use-suggested-course">
-              Use Suggested Course
+              Use Home Course
             </button>
             <button class="button secondary" type="button" data-action="search-another-course">
               Search Course
@@ -15282,7 +15359,7 @@ function renderCoursePicker(state) {
     `;
   }
 
-  if (courseMethod === "detected") {
+  if (courseMethod === "profile") {
     if (suggestedCourse && suggestedTeeBox) {
       return `
         <div class="stack-list course-picker-block round-setup-step-card">
@@ -15292,7 +15369,7 @@ function renderCoursePicker(state) {
           </div>
           <article class="course-selected-card" data-selected-course="true">
             <div class="course-selected-copy">
-              <span class="mini-label">Suggested course</span>
+              <span class="mini-label">Home course</span>
               <strong>${escapeHtml(suggestedCourse.displayName || suggestedCourse.name)}</strong>
               <div class="tag-row">
                 ${renderCourseReadinessBadge(suggestedCourse, {
@@ -15307,6 +15384,61 @@ function renderCoursePicker(state) {
           <div class="stack-list round-setup-start-actions">
             <button class="button primary" type="button" data-action="confirm-course-choice" data-course-id="${suggestedCourse.id}" data-course-provider-id="${escapeHtml(suggestedCourse.providerId || "")}" data-tee-box-id="${suggestedTeeBox.id}" ${(courseDetailStatus === "loading" && detailCourseId === suggestedCourse.id) ? "disabled" : ""}>
               ${(courseDetailStatus === "loading" && detailCourseId === suggestedCourse.id) ? "Loading course" : "Confirm Course"}
+            </button>
+            <button class="button secondary" type="button" data-action="search-another-course">
+              Search Another Course
+            </button>
+            <button class="button subtle" type="button" data-action="skip-course-for-now">
+              Skip for now
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="stack-list course-picker-block round-setup-step-card">
+        <div class="round-setup-step-head">
+          <p class="eyebrow">Step 2</p>
+          <h4>Choose course</h4>
+        </div>
+        <div class="stack-list round-setup-start-actions">
+          <button class="button secondary" type="button" data-action="search-another-course">
+            Search Course
+          </button>
+          <button class="button subtle" type="button" data-action="back-course-methods">
+            Back
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (courseMethod === "detected") {
+    if (detectedCourse && detectedTeeBox) {
+      return `
+        <div class="stack-list course-picker-block round-setup-step-card">
+          <div class="round-setup-step-head">
+            <p class="eyebrow">Step 2</p>
+            <h4>Confirm course</h4>
+          </div>
+          <article class="course-selected-card" data-selected-course="true">
+            <div class="course-selected-copy">
+              <span class="mini-label">Suggested course</span>
+              <strong>${escapeHtml(detectedCourse.displayName || detectedCourse.name)}</strong>
+              <div class="tag-row">
+                ${renderCourseReadinessBadge(detectedCourse, {
+                  loading: courseDetailStatus === "loading" && detailCourseId === detectedCourse.id,
+                })}
+              </div>
+              <p>${renderCourseSelectionLine(detectedCourse, detectedTeeBox, {
+                loading: courseDetailStatus === "loading" && detailCourseId === detectedCourse.id,
+              })}</p>
+            </div>
+          </article>
+          <div class="stack-list round-setup-start-actions">
+            <button class="button primary" type="button" data-action="confirm-course-choice" data-course-id="${detectedCourse.id}" data-course-provider-id="${escapeHtml(detectedCourse.providerId || "")}" data-tee-box-id="${detectedTeeBox.id}" ${(courseDetailStatus === "loading" && detailCourseId === detectedCourse.id) ? "disabled" : ""}>
+              ${(courseDetailStatus === "loading" && detailCourseId === detectedCourse.id) ? "Loading course" : "Confirm Course"}
             </button>
             <button class="button secondary" type="button" data-action="search-another-course">
               Search Another Course
@@ -19805,7 +19937,7 @@ function bootstrapApp({
         draft,
         "success",
         "Account created",
-        `${draft.currentUser.displayName} is signed in with premium tester access, and Golden Nugget is ready as the easiest first course.`
+        `${draft.currentUser.displayName} is signed in with premium tester access. Set a home course if you want quick round setup to recommend it first.`
       );
       return draft;
     }, { reason: "auth-signup-async" });
@@ -20285,9 +20417,8 @@ function bootstrapApp({
     }
 
     if (action === "use-suggested-course") {
-      void primeCourseNearbyCatalog({ reason: "use-suggested-course" });
       store.setState((draft) => {
-        setRoundSetupField(draft, "courseMethod", "detected");
+        setRoundSetupField(draft, "courseMethod", "profile");
         return draft;
       }, { reason: "use-suggested-course" });
       return;
@@ -21528,7 +21659,7 @@ function bootstrapApp({
           draft,
           "success",
           "Account created",
-          `${draft.currentUser.displayName} is signed in with premium tester access, and Golden Nugget is ready as the easiest first course.`
+          `${draft.currentUser.displayName} is signed in with premium tester access. Set a home course if you want quick round setup to recommend it first.`
         );
         return draft;
       }, { reason: "auth-signup" });

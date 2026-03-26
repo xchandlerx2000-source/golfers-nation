@@ -1,4 +1,3 @@
-import { FEATURED_COURSE_ID } from "../config.js";
 import {
   createManualRoundTemplateRecord,
   findCourseTeeBoxRecord,
@@ -61,6 +60,77 @@ function getCourseConfidenceScore(course = {}) {
 
 function normalizeCourseSearchQuery(value = "") {
   return String(value || "").trim();
+}
+
+function normalizeCourseMatchKey(value = "") {
+  return normalizeCourseSearchQuery(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getCourseMatchCandidates(course = {}) {
+  return [
+    course.displayName,
+    course.name,
+    course.clubName,
+    course.courseName,
+    ...(Array.isArray(course.aliases) ? course.aliases : []),
+    ...(Array.isArray(course.searchKeywords) ? course.searchKeywords : []),
+  ]
+    .map((value) => normalizeCourseMatchKey(value))
+    .filter(Boolean);
+}
+
+function getCourseHomeMatchScore(homeCourse = "", course = {}) {
+  const normalizedHomeCourse = normalizeCourseMatchKey(homeCourse);
+  if (!normalizedHomeCourse) {
+    return 0;
+  }
+
+  const candidates = getCourseMatchCandidates(course);
+  if (candidates.includes(normalizedHomeCourse)) {
+    return 4;
+  }
+
+  if (candidates.some((candidate) =>
+    candidate.length >= 6
+      && normalizedHomeCourse.length >= 6
+      && (candidate.includes(normalizedHomeCourse) || normalizedHomeCourse.includes(candidate))
+  )) {
+    return 3;
+  }
+
+  const homeTokens = normalizedHomeCourse.split(" ").filter(Boolean);
+  if (
+    homeTokens.length >= 2
+    && candidates.some((candidate) => homeTokens.every((token) => candidate.includes(token)))
+  ) {
+    return 2;
+  }
+
+  return 0;
+}
+
+function findCourseByHomeCourse(homeCourse = "", options = {}) {
+  const normalizedHomeCourse = normalizeCourseMatchKey(homeCourse);
+  if (!normalizedHomeCourse) {
+    return null;
+  }
+
+  const candidates = searchCourses(homeCourse, {
+    ...options,
+    limit: Number(options.homeCourseSearchLimit || 8),
+  });
+  const ranked = candidates
+    .map((course) => ({
+      course,
+      score: getCourseHomeMatchScore(homeCourse, course),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score || sortCourses(left.course, right.course));
+
+  return ranked[0]?.course || null;
 }
 
 function sortCourses(left = {}, right = {}) {
@@ -267,16 +337,13 @@ export function buildManualRoundTemplate(courseName = "", teeBoxName = "", { hol
 }
 
 export function getCourseDefaultRoundSetup() {
-  const featuredCourse = getCourseById(FEATURED_COURSE_ID);
-  const featuredTeeBox = getDefaultCourseTeeBox(featuredCourse);
-
   return {
     step: "course",
     intent: "local",
     courseMethod: "",
     courseQuery: "",
-    selectedCourseId: featuredCourse?.id || "",
-    selectedTeeBoxId: featuredTeeBox?.id || "",
+    selectedCourseId: "",
+    selectedTeeBoxId: "",
     selectedHoleCount: 18,
     mode: "stroke",
     players: "",
@@ -341,6 +408,10 @@ export function getRoundSetupDiscoveryState(roundSetup = {}, nearbyState = {}, o
   const setup = getCourseRoundSetupState(roundSetup);
   const normalizedQuery = normalizeCourseSearchQuery(setup.courseQuery);
   const recentCourses = getRecentRoundSetupCourses(options.rounds, Number(options.recentLimit || 4), options);
+  const homeCourseSuggestion = findCourseByHomeCourse(
+    options.currentUser?.homeCourse || options.homeCourse || "",
+    options
+  );
   const selectedCourse = setup.selectedCourseId ? getCourseById(setup.selectedCourseId, options) : null;
   const selectedTeeBox = selectedCourse
     ? findCourseTeeBox(selectedCourse, setup.selectedTeeBoxId || getDefaultCourseTeeBox(selectedCourse)?.id || "")
@@ -365,6 +436,7 @@ export function getRoundSetupDiscoveryState(roundSetup = {}, nearbyState = {}, o
     selectedTeeBox,
     searchResults,
     quickPicks,
+    homeCourseSuggestion,
     recentCourses,
     nearbyCourses,
     nearbyCopy,

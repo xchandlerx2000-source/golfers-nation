@@ -345,10 +345,34 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Suggested");
     expect(markup).toContain("Recent courses");
     expect(markup).toContain("Nearby courses");
-    expect(markup).toContain("Use Suggested Course");
+    expect(markup).toContain("Use My Location");
+    expect(markup).not.toContain("Use Home Course");
+  });
+
+  it("shows quick setup only when a saved home course matches a real catalog course", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.currentUser.homeCourse = "Pebble Beach Golf Links";
+    state.session.activeView = "round";
+    state.rounds = [];
+    state.groups = [];
+    state.session.activeRoundId = null;
+    state.session.roundSetup = {
+      ...state.session.roundSetup,
+      step: "course",
+      courseMethod: "",
+      selectedCourseId: "",
+      selectedTeeBoxId: "",
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Home course");
+    expect(markup).toContain("Pebble Beach Golf Links");
+    expect(markup).toContain("Use Home Course");
   });
 
   it("renders the internal course admin review panel in Testing", () => {
@@ -459,7 +483,7 @@ describe("ui helpers", () => {
     expect(markup).toContain("Fireweed Meadows");
   });
 
-  it("preloads Golden Nugget for a brand-new golfer's first round", () => {
+  it("does not preload a quick-setup course for a brand-new golfer without a home course", () => {
     const state = createDefaultState();
     const created = createEmailAccount(state, {
       displayName: "Local Tester",
@@ -480,6 +504,8 @@ describe("ui helpers", () => {
     expect(markup).toContain("Use My Location");
     expect(markup).toContain("Search Course");
     expect(markup).toContain("Step 1 / 3");
+    expect(markup).not.toContain("Use Home Course");
+    expect(markup).not.toContain("Golden Nugget");
   });
 
   it("renders the game mode step with the core golf formats", () => {
