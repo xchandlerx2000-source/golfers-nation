@@ -170,6 +170,9 @@ describe("ui helpers", () => {
     expect(markup).toContain("Start Round");
     expect(markup).toContain("Join Game");
     expect(markup).toContain('data-action="open-community-join"');
+    expect(markup).not.toContain('data-form="join-code"');
+    expect(markup).not.toContain("Nearby players");
+    expect(markup).not.toContain("More ways to connect");
     expect(markup).not.toContain("Active Game");
     expect(markup).not.toContain("Course Assist");
     expect(markup).not.toContain("Confirm course");
@@ -217,9 +220,11 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
+    expect(markup).toContain("Golf circle");
+    expect(markup).toContain("Posts from your golf circle");
     expect(markup).toContain("Friends leaderboard");
     expect(markup).toContain("Challenge");
-    expect(markup).toContain("Join now");
+    expect(markup).toContain("Following");
   });
 
   it("renders the seeded course picker inside round setup", () => {
@@ -524,12 +529,15 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Choose game mode");
-    expect(markup).toContain("Stroke Play");
-    expect(markup).toContain("Match Play");
-    expect(markup).toContain("Scramble");
+    expect(markup).toContain("Pick format");
+    expect(markup).toContain("Strokes");
+    expect(markup).toContain("Holes");
+    expect(markup).toContain("Teams");
     expect(markup).toContain("Skins");
     expect(markup).toContain("Stableford");
+    expect(markup).toContain("Stroke play");
+    expect(markup).toContain("Match play");
+    expect(markup).toContain("Scramble");
   });
 
   it("renders the live round waiting room for a hosted round before scoring starts", () => {
@@ -616,7 +624,7 @@ describe("ui helpers", () => {
     expect(markup).toMatch(/id="tab-settings"[\s\S]*?aria-selected="true"/);
   });
 
-  it("renders the community hub with grouped join and discovery sections", () => {
+  it("renders the community hub with social and live-play sections only", () => {
     const state = createDefaultState();
     state.auth.status = "authenticated";
     state.auth.activeUserId = state.currentUser.id;
@@ -624,10 +632,20 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain("Join and discover");
-    expect(markup).toContain("Join options");
-    expect(markup).toContain("Nearby players");
+    expect(markup).toContain("Golf circle");
+    expect(markup).toContain("Join a live round");
+    expect(markup).toContain('data-form="join-code"');
+    expect(markup).toContain('data-form="create-social-post"');
+    expect(markup).toContain("Posts from your golf circle");
+    expect(markup).toContain("Direct chats");
+    expect(markup).toContain('data-form="send-direct-message"');
+    expect(markup).toContain("Share update");
+    expect(markup).toContain("Following");
     expect(markup).toContain("Nearby games");
+    expect(markup).toContain("Friends");
+    expect(markup).toContain("Friends leaderboard");
+    expect(markup).toContain("Spotlight");
+    expect(markup).not.toContain("Nearby players");
     expect(markup).not.toContain("Live room");
   });
 
@@ -639,11 +657,19 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
-    expect(markup).toContain('data-persist-key="community-join-options" open');
+    expect(markup).toContain('data-persist-key="community-join" open');
+    expect(markup).toContain('data-persist-key="community-feed"');
+    expect(markup).not.toContain('data-persist-key="community-feed" open');
+    expect(markup).toContain('data-persist-key="community-messages"');
+    expect(markup).not.toContain('data-persist-key="community-messages" open');
+    expect(markup).toContain('data-persist-key="community-spotlight"');
+    expect(markup).not.toContain('data-persist-key="community-spotlight" open');
+    expect(markup).toContain('data-persist-key="community-following"');
+    expect(markup).not.toContain('data-persist-key="community-following" open');
     expect(markup).toContain('data-persist-key="community-nearby-games"');
     expect(markup).not.toContain('data-persist-key="community-nearby-games" open');
-    expect(markup).toContain('data-persist-key="community-nearby-players"');
-    expect(markup).not.toContain('data-persist-key="community-nearby-players" open');
+    expect(markup).toContain('data-persist-key="community-ranking"');
+    expect(markup).not.toContain('data-persist-key="community-ranking" open');
     expect(markup).toContain('data-persist-key="community-friends"');
     expect(markup).not.toContain('data-persist-key="community-friends" open');
   });
@@ -805,7 +831,7 @@ describe("ui helpers", () => {
     expect(markup).toContain("crash-123");
   });
 
-  it("keeps join and nearby discovery available in community without an active round", () => {
+  it("keeps community focused on games and friends without an active round", () => {
     const state = createDefaultState();
     const created = createEmailAccount(state, {
       displayName: "No Round Yet",
@@ -819,8 +845,12 @@ describe("ui helpers", () => {
 
     const markup = renderAppTemplate(state);
 
+    expect(markup).toContain("Join a live round");
     expect(markup).toContain('data-form="join-code"');
     expect(markup).toContain("Nearby games");
+    expect(markup).toContain("Friends");
+    expect(markup).toContain("Posts from your golf circle");
+    expect(markup).not.toContain("Nearby players");
     expect(markup).not.toContain("Live room");
   });
 

@@ -1,4 +1,4 @@
-import { createGearItem, createRound, createTournament } from "./domain/factories.js";
+import { createGearItem, createRound, createSocialPost, createTournament } from "./domain/factories.js";
 import {
   appendRoundAction,
   applyRoundActionEvent,
@@ -53,9 +53,12 @@ import {
   loadCourseReconciliationReport,
 } from "./services/course-admin-loader.js";
 import {
+  ensureDirectConversation,
+  markDirectConversationRead,
   ensureProfilesForNames,
   refreshProfileSnapshots,
   requestFriendProfile,
+  sendDirectMessage,
   syncCurrentUserProfile,
   toggleFollowProfile,
 } from "./services/player-service.js";
@@ -538,6 +541,52 @@ export function bootstrapApp({
         ...getCourseAdminReviewUiState(),
         ...(updates || {}),
       },
+    });
+  };
+
+  const openCommunityMessagesUi = ({ conversationId = "", focusInput = false } = {}) => {
+    updateLocalUi({
+      communityConversationId: String(conversationId || ""),
+    });
+
+    const messagesSection = root.querySelector('[data-persist-key="community-messages"]');
+    if (messagesSection) {
+      root.querySelectorAll(".community-section-card[open]").forEach((section) => {
+        if (section !== messagesSection) {
+          section.open = false;
+        }
+      });
+      messagesSection.open = true;
+    }
+
+    requestAnimationFrame(() => {
+      if (focusInput) {
+        const input = root.querySelector("[data-community-message-input]");
+        if (input && typeof input.focus === "function") {
+          input.focus();
+        }
+      }
+    });
+  };
+
+  const openCommunityJoinUi = ({ focusInput = false } = {}) => {
+    const joinSection = root.querySelector('[data-persist-key="community-join"]');
+    if (joinSection) {
+      root.querySelectorAll(".community-section-card[open]").forEach((section) => {
+        if (section !== joinSection) {
+          section.open = false;
+        }
+      });
+      joinSection.open = true;
+    }
+
+    requestAnimationFrame(() => {
+      if (focusInput) {
+        const input = root.querySelector("[data-community-join-input]");
+        if (input && typeof input.focus === "function") {
+          input.focus();
+        }
+      }
     });
   };
 
@@ -1766,9 +1815,10 @@ export function bootstrapApp({
       closeTransientUi();
       store.setState((draft) => {
         setActiveView(draft, "community", "tab");
-        setFeedback(draft, "info", "Join live round", "Enter the code. Score opens right after you join.");
+        setFeedback(draft, "info", "Join live round", "Enter the code here. Score opens right after you join.");
         return draft;
       }, { reason: "open-community-join" });
+      openCommunityJoinUi({ focusInput: true });
       return;
     }
 
@@ -1778,6 +1828,55 @@ export function bootstrapApp({
         openHelpView(draft, actionElement.dataset.section);
         return draft;
       }, { reason: "open-help-section" });
+      return;
+    }
+
+    if (action === "focus-community-composer") {
+      closeTransientUi();
+      store.setState((draft) => {
+        setActiveView(draft, "community", "tab");
+        clearFeedback(draft);
+        return draft;
+      }, { reason: "focus-community-composer" });
+      requestAnimationFrame(() => {
+        const input = root.querySelector("[data-community-composer]");
+        if (input && typeof input.focus === "function") {
+          input.focus();
+        }
+      });
+      return;
+    }
+
+    if (action === "open-direct-message") {
+      closeTransientUi();
+      let conversationId = String(actionElement.dataset.conversationId || "");
+      const profileId = String(actionElement.dataset.profileId || "");
+
+      if (profileId) {
+        store.setState((draft) => {
+          setActiveView(draft, "community", "tab");
+          if (profileId) {
+            draft.session.selectedProfileId = profileId;
+          }
+          const result = ensureDirectConversation(draft, profileId);
+          conversationId = result.conversationId || conversationId;
+          if (conversationId) {
+            markDirectConversationRead(draft, conversationId);
+          }
+          return draft;
+        }, { reason: "open-direct-message" });
+      } else if (conversationId) {
+        store.setState((draft) => {
+          setActiveView(draft, "community", "tab");
+          markDirectConversationRead(draft, conversationId);
+          return draft;
+        }, { reason: "open-direct-message" });
+      }
+
+      openCommunityMessagesUi({
+        conversationId,
+        focusInput: true,
+      });
       return;
     }
 
@@ -2064,7 +2163,7 @@ export function bootstrapApp({
 
     if (action === "more-round-modes") {
       store.setState((draft) => {
-        setFeedback(draft, "info", "More games later", "This build keeps the core golf formats fast. More variants can fit here later.");
+        setFeedback(draft, "info", "More formats later", "This build keeps the core formats fast. More games can slot in here later.");
         return draft;
       }, { reason: "more-round-modes" });
       return;
@@ -2702,20 +2801,18 @@ export function bootstrapApp({
           setFeedback(
             draft,
             "info",
-            result.status === "already-friends" ? "Already friends" : "Friend request already sent",
-            result.status === "already-friends"
-              ? `${profile?.publicProfile?.displayName || "This golfer"} is already in your friend layer.`
-              : `${profile?.publicProfile?.displayName || "This golfer"} already has a pending friend request scaffold.`
+            "Already friends",
+            `${profile?.publicProfile?.displayName || "This golfer"} is already in your golf circle.`
           );
           return draft;
         }
 
-        appendActivity(draft, `${draft.currentUser.displayName} sent a friend request to ${profile?.publicProfile?.displayName || "a golfer"}.`, "profile");
+        appendActivity(draft, `${draft.currentUser.displayName} added ${profile?.publicProfile?.displayName || "a golfer"} as a friend.`, "profile");
         setFeedback(
           draft,
           "success",
-          "Friend request sent",
-          `${profile?.publicProfile?.displayName || "This golfer"} is now on your follow list and ready for future friend acceptance flows.`
+          "Friend added",
+          `${profile?.publicProfile?.displayName || "This golfer"} is now in your golf circle with stats and social updates ready in Community.`
         );
         return draft;
       }, { reason: "request-friend-profile" });
@@ -3497,6 +3594,80 @@ export function bootstrapApp({
       return;
     }
 
+    if (formName === "create-social-post") {
+      const rawMessage = String(data.get("message") || "").trim();
+      const rawLinkUrl = String(data.get("linkUrl") || "").trim();
+      const normalizedLinkUrl = rawLinkUrl && !/^https?:\/\//i.test(rawLinkUrl)
+        ? `https://${rawLinkUrl}`
+        : rawLinkUrl;
+
+      if (!rawMessage) {
+        store.setState((draft) => {
+          setFeedback(draft, "info", "Write a post first", "Add a short golf update before posting to Community.");
+          return draft;
+        }, { reason: "create-social-post-empty" });
+        return;
+      }
+
+      store.setState((draft) => {
+        draft.social = {
+          ...(draft.social || {}),
+          posts: [
+            createSocialPost({
+              authorProfileId: draft.currentUser.profileId,
+              message: rawMessage,
+              linkUrl: normalizedLinkUrl,
+              linkLabel: normalizedLinkUrl ? "Open link" : "",
+              courseName: findRound(draft, draft.session.activeRoundId)?.courseName || "",
+            }),
+            ...((draft.social?.posts || []).filter(Boolean)),
+          ].slice(0, 24),
+        };
+        appendActivity(draft, `${draft.currentUser.displayName} posted to Community.`, "profile");
+        setFeedback(draft, "success", "Post shared", "Your golf circle can see this post in Community.");
+        return draft;
+      }, { reason: "create-social-post" });
+      form.reset();
+      return;
+    }
+
+    if (formName === "send-direct-message") {
+      const conversationId = String(data.get("conversationId") || "").trim();
+      const rawMessage = String(data.get("message") || "").trim();
+
+      if (!rawMessage) {
+        store.setState((draft) => {
+          setFeedback(draft, "info", "Write a message first", "Add a short golf message before sending.");
+          return draft;
+        }, { reason: "send-direct-message-empty" });
+        return;
+      }
+
+      let peerProfileId = "";
+      store.setState((draft) => {
+        const result = sendDirectMessage(draft, conversationId, rawMessage);
+        peerProfileId = result.peerProfileId || "";
+        if (!result.changed) {
+          setFeedback(draft, "warning", "Message unavailable", "This conversation could not be updated right now.");
+          return draft;
+        }
+
+        if (peerProfileId) {
+          draft.session.selectedProfileId = peerProfileId;
+        }
+        draft.session.selectedConversationId = conversationId;
+        appendActivity(draft, `${draft.currentUser.displayName} sent a direct message in Community.`, "profile");
+        clearFeedback(draft);
+        return draft;
+      }, { reason: "send-direct-message" });
+      form.reset();
+      openCommunityMessagesUi({
+        conversationId,
+        focusInput: true,
+      });
+      return;
+    }
+
     if (formName === "submit-tester-feedback") {
       const currentState = store.getState();
       const payload = {
@@ -3632,7 +3803,7 @@ export function bootstrapApp({
         draft.rounds.unshift(round);
         focusRoundView(draft, round.id, draft.currentUser.profileId, setActiveView);
         draft.session.roundScreenMode = intent === "host" ? "lobby" : "score";
-        appendActivity(draft, `${round.courseName} started in ${(GAME_MODES[round.mode]?.label || "Stroke Play").toLowerCase()}.`, "round");
+      appendActivity(draft, `${round.courseName} started in ${(GAME_MODES[round.mode]?.name || "Stroke Play").toLowerCase()}.`, "round");
         setFeedback(
           draft,
           "success",

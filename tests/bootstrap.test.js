@@ -774,12 +774,82 @@ describe("bootstrap app", () => {
       timeoutMs: 50,
     });
 
-    document.querySelector('[data-action="nav-view"][data-view="community"]').click();
+    document.querySelector('[data-action="open-community-join"]').click();
     const form = document.querySelector('[data-form="join-code"]');
     form.requestSubmit(form.querySelector('button[type="submit"]'));
 
+    expect(result.store.getState().session.activeView).toBe("community");
     expect(result.store.getState().session.feedback.title).toBe("Enter an invite code");
     expect(result.store.getState().session.feedback.message).toContain("Ask the host");
+
+    result.destroy();
+  });
+
+  it("creates a clubhouse post from Community without leaving the tab", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Poster",
+      email: "poster@test.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    result.store.setState((draft) => {
+      draft.session.activeView = "community";
+      return draft;
+    }, { reason: "test-open-community-post" });
+
+    const form = document.querySelector('[data-form="create-social-post"]');
+    form.querySelector('textarea[name="message"]').value = "Walking 18 tomorrow. Need one more player.";
+    form.querySelector('input[name="linkUrl"]').value = "example.com/golf";
+    form.requestSubmit(form.querySelector('button[type="submit"]'));
+
+    const currentState = result.store.getState();
+    expect(currentState.social.posts[0].message).toContain("Walking 18 tomorrow");
+    expect(currentState.social.posts[0].linkUrl).toBe("https://example.com/golf");
+    expect(currentState.session.feedback.title).toBe("Post shared");
+    expect(document.body.textContent).toContain("Walking 18 tomorrow. Need one more player.");
+
+    result.destroy();
+  });
+
+  it("opens a direct message thread from Community and sends a message without leaving the tab", async () => {
+    const state = createDefaultState();
+    loadAccountIntoState(state, "user-demo-free");
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    result.store.setState((draft) => {
+      draft.session.activeView = "community";
+      return draft;
+    }, { reason: "test-open-community-messages" });
+
+    document.querySelector('[data-action="open-direct-message"][data-profile-id="profile-maya"]').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(result.store.getState().session.activeView).toBe("community");
+    expect(document.querySelector('[data-form="send-direct-message"]')).not.toBeNull();
+
+    const form = document.querySelector('[data-form="send-direct-message"]');
+    form.querySelector('textarea[name="message"]').value = "Want to play a live round after work?";
+    form.requestSubmit(form.querySelector('button[type="submit"]'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const conversations = result.store.getState().social.conversations || [];
+    expect(conversations.some((conversation) =>
+      (conversation.messages || []).some((message) => message.message === "Want to play a live round after work?")
+    )).toBe(true);
+    expect(document.body.textContent).toContain("Want to play a live round after work?");
 
     result.destroy();
   });

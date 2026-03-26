@@ -326,6 +326,10 @@ function applyLocalUiOverrides(state = {}, localUiState = {}) {
     nextState.session.settingsSection = settingsState.section;
   }
 
+  if (typeof localUiState.communityConversationId === "string") {
+    nextState.session.selectedConversationId = localUiState.communityConversationId;
+  }
+
   if (localUiState.courseAdminReview) {
     nextState.course.adminReview = {
       ...getDefaultCourseAdminReviewState(),
@@ -457,6 +461,7 @@ export function createRenderer(root) {
     appMenuOpen: false,
     settingsDestination: null,
     settingsSection: null,
+    communityConversationId: "",
     roundSetupFieldDrafts: {},
     courseAdminReview: getDefaultCourseAdminReviewState(),
   };
@@ -493,6 +498,11 @@ export function createRenderer(root) {
       };
     }
 
+    if (Object.prototype.hasOwnProperty.call(patch, "communityConversationId")) {
+      localUiState.communityConversationId = String(patch.communityConversationId || "");
+      shouldRerender = true;
+    }
+
     if (Object.prototype.hasOwnProperty.call(patch, "courseAdminReview")) {
       localUiState.courseAdminReview = {
         ...getDefaultCourseAdminReviewState(),
@@ -516,6 +526,7 @@ export function createRenderer(root) {
   function getLocalUiState() {
     return {
       ...localUiState,
+      communityConversationId: localUiState.communityConversationId || "",
       roundSetupFieldDrafts: {
         ...(localUiState.roundSetupFieldDrafts || {}),
       },

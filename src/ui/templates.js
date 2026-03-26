@@ -31,7 +31,18 @@ import {
   getDefaultCourseTeeBox,
   getRoundSetupDiscoveryState,
 } from "../services/course-service.js";
-import { buildCompetitivePreview, buildFriendLeaderboard, buildPlayerComparison, getCurrentProfile, getProfileById, getProfileForPlayer } from "../services/player-service.js";
+import {
+  buildCommunityFeed,
+  buildCompetitivePreview,
+  buildDirectConversationThread,
+  buildDirectMessageInbox,
+  buildFriendLeaderboard,
+  buildPlayerComparison,
+  canDirectMessageProfile,
+  getCurrentProfile,
+  getProfileById,
+  getProfileForPlayer,
+} from "../services/player-service.js";
 import { renderSpotifySettingsPanel } from "./spotify-controls.js";
 import { getPreferredRoundScreenMode } from "../state/round-state.js";
 
@@ -63,9 +74,9 @@ const SCREEN_COPY = {
     description: "Season progress, round summaries, and locked advanced analytics all live in one structured player history.",
   },
   community: {
-    eyebrow: "Group play",
-    title: "Invite rounds, social groups, and tournament entry points without the placeholder feel.",
-    description: "Community keeps live group play and event tools organized, with clear upgrade paths for premium league features.",
+    eyebrow: "Golf circle",
+    title: "Follow golfers, share quick golf updates, and keep live play feeling social.",
+    description: "Community now centers on friends, stats visibility, clubhouse posts, and nearby rounds without pulling scoring off course.",
   },
   premium: {
     eyebrow: "Premium and shop",
@@ -417,7 +428,7 @@ function renderFirstRoundGuide(state, placement) {
           </article>
           <article>
             <strong>2</strong>
-            <p>Confirm the course and press <strong>Start round</strong>.</p>
+            <p>Confirm the course and tap <strong>Start round</strong>.</p>
           </article>
           <article>
             <strong>3</strong>
@@ -425,7 +436,7 @@ function renderFirstRoundGuide(state, placement) {
           </article>
         </div>
         <div class="row-actions">
-          <button class="button primary guided-action" type="button" data-action="nav-view" data-view="round">Start round now</button>
+          <button class="button primary guided-action" type="button" data-action="nav-view" data-view="round">Start Round</button>
           ${renderHelpLink("Open Help Center", "getting-started", true)}
         </div>
       </article>
@@ -442,7 +453,7 @@ function renderFirstRoundGuide(state, placement) {
           </div>
           <span class="status-pill">Keep it simple</span>
         </div>
-        <p class="body-copy compact-copy">For the easiest first round, keep stroke play selected, confirm the course, and tap <strong>Start round</strong>.</p>
+        <p class="body-copy compact-copy">For the easiest first round, keep <strong>Strokes</strong> selected, confirm the course, and tap <strong>Start round</strong>.</p>
       </article>
     `;
   }
@@ -977,6 +988,261 @@ function renderSummarySpotlight(state, summaryRound) {
   `;
 }
 
+function renderCommunityFeedRows(feedPosts) {
+  if (!feedPosts.length) {
+    return `
+      <div class="empty-state compact-empty-state">
+        <strong>No clubhouse posts yet.</strong>
+        <p>Follow golfers on Home or share your first golf update here.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="stack-list compact-stack community-feed-stack">
+      ${feedPosts.map((post) => `
+        <article class="community-post-row">
+          <div class="community-post-head">
+            <div class="community-post-main">
+              ${renderAvatarChip(post.avatarLabel)}
+              <div>
+                <strong>${escapeHtml(post.displayName)}</strong>
+                <p>${escapeHtml(post.relationshipLabel)} / ${post.roundsPlayed ? `${post.roundsPlayed} rounds` : "New golfer"} / ${typeof post.averageScore === "number" ? `${post.averageScore.toFixed(1)} avg` : "No average yet"}</p>
+              </div>
+            </div>
+            <span class="community-post-meta">${escapeHtml(formatDateTime(post.createdAt))}</span>
+          </div>
+          <div class="community-post-body">
+            <p>${escapeHtml(post.message)}</p>
+            ${(post.courseName || post.formLabel || post.homeCourse)
+              ? `<p class="community-post-detail">${escapeHtml([post.courseName, post.formLabel || "", post.homeCourse || ""].filter(Boolean).join(" / "))}</p>`
+              : ""}
+          </div>
+          <div class="list-metrics community-post-actions">
+            <button class="button subtle community-button" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(post.profileId)}">View stats</button>
+            ${post.linkUrl
+              ? `<a class="button secondary community-button" href="${escapeHtml(post.linkUrl)}" target="_blank" rel="noreferrer">Open link</a>`
+              : post.isCurrentUser
+                ? `<span class="status-pill">You</span>`
+                : post.isFriend
+                  ? `<button class="button secondary community-button" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(post.profileId)}">Challenge</button>`
+                  : ""}
+          </div>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderCommunityMessagesSection(state) {
+  const inbox = buildDirectMessageInbox(state);
+  const unreadCount = inbox.reduce((sum, entry) => sum + Number(entry.unreadCount || 0), 0);
+  const selectedConversationId = state.session.selectedConversationId || inbox[0]?.id || "";
+  const activeConversation = buildDirectConversationThread(state, selectedConversationId);
+
+  return `
+    <details class="card discovery-card community-section-card" data-persist-key="community-messages">
+      <summary class="community-section-summary">
+        <div>
+          <p class="eyebrow">Messages</p>
+          <h3>Direct chats</h3>
+        </div>
+        <span>${unreadCount ? `${unreadCount} new` : inbox.length || "Open"}</span>
+      </summary>
+      <div class="community-section-body">
+        ${inbox.length
+          ? `
+            <div class="community-message-layout">
+              <div class="stack-list compact-stack community-message-list">
+                ${inbox.map((conversation) => `
+                  <button
+                    class="community-message-row ${conversation.id === selectedConversationId ? "is-active" : ""}"
+                    type="button"
+                    data-action="open-direct-message"
+                    data-conversation-id="${escapeHtml(conversation.id)}"
+                    data-profile-id="${escapeHtml(conversation.peerProfileId || "")}"
+                  >
+                    <div class="community-message-row-main">
+                      ${renderAvatarChip(conversation.avatarLabel || conversation.displayName)}
+                      <div>
+                        <strong>${escapeHtml(conversation.displayName)}</strong>
+                        <p>${escapeHtml(conversation.relationshipLabel)} / ${escapeHtml(conversation.lastMessagePreview)}</p>
+                      </div>
+                    </div>
+                    <div class="community-message-row-meta">
+                      <span>${escapeHtml(formatRelativeSync(conversation.lastMessageAt))}</span>
+                      ${conversation.unreadCount ? `<span class="status-pill">${conversation.unreadCount}</span>` : ""}
+                    </div>
+                  </button>
+                `).join("")}
+              </div>
+              ${activeConversation
+                ? `
+                  <article class="community-message-thread">
+                    <div class="community-message-thread-head">
+                      <div class="community-connection-main">
+                        ${renderAvatarChip(activeConversation.avatarLabel || activeConversation.displayName, "is-large")}
+                        <div>
+                          <strong>${escapeHtml(activeConversation.displayName)}</strong>
+                          <p>${escapeHtml(activeConversation.username)} / ${escapeHtml(activeConversation.relationshipLabel)}</p>
+                        </div>
+                      </div>
+                      <div class="list-metrics">
+                        <button class="button subtle community-button" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(activeConversation.peerProfileId || "")}">View stats</button>
+                        ${activeConversation.isFriend ? `<button class="button secondary community-button" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(activeConversation.peerProfileId || "")}">Challenge</button>` : ""}
+                      </div>
+                    </div>
+                    <div class="community-message-bubbles">
+                      ${activeConversation.messages.map((message) => `
+                        <article class="community-message-bubble ${message.isCurrentUser ? "is-outbound" : "is-inbound"}">
+                          <p>${escapeHtml(message.message)}</p>
+                          <span>${escapeHtml(message.isCurrentUser ? "You" : message.displayName)} / ${escapeHtml(formatDateTime(message.createdAt))}</span>
+                        </article>
+                      `).join("")}
+                    </div>
+                    <form class="community-message-form" data-form="send-direct-message">
+                      <input type="hidden" name="conversationId" value="${escapeHtml(activeConversation.id)}" />
+                      <label>
+                        Message
+                        <textarea name="message" rows="2" placeholder="Send a quick golf message." data-community-message-input></textarea>
+                      </label>
+                      <div class="row-actions compact-actions">
+                        <button class="button primary community-button" type="submit">Send</button>
+                      </div>
+                    </form>
+                  </article>
+                `
+                : `
+                  <div class="empty-state compact-empty-state">
+                    <strong>Open a thread.</strong>
+                    <p>Pick a golfer from the list to keep golf plans and live-round invites in one place.</p>
+                  </div>
+                `}
+            </div>
+          `
+          : `
+            <div class="empty-state compact-empty-state">
+              <strong>No direct chats yet.</strong>
+              <p>Add a friend or follow a golfer, then start a message from their card.</p>
+            </div>
+          `}
+      </div>
+    </details>
+  `;
+}
+
+function renderCommunityConnectionRows(rows, {
+  emptyTitle,
+  emptyCopy,
+  activityMap = new Map(),
+} = {}) {
+  if (!rows.length) {
+    return `
+      <div class="empty-state compact-empty-state">
+        <strong>${escapeHtml(emptyTitle || "No golfers yet.")}</strong>
+        <p>${escapeHtml(emptyCopy || "Use Home to connect with more golfers.")}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="stack-list compact-stack play-list">
+      ${rows.map((entry) => {
+        const activity = activityMap.get(entry.profileId) || null;
+        const statusLine = activity?.statusLabel
+          || entry.recentFormSummary
+          || entry.formLabel
+          || "Public stats ready";
+        const detailLine = [
+          entry.relationshipLabel,
+          entry.roundsPlayed ? `${entry.roundsPlayed} rounds` : "New golfer",
+          typeof entry.averageScore === "number" ? `${entry.averageScore.toFixed(1)} avg` : null,
+          entry.homeCourse || null,
+        ].filter(Boolean).join(" / ");
+
+        return `
+          <article class="list-row play-list-row">
+            <div class="community-connection-main">
+              ${renderAvatarChip(entry.avatarLabel || entry.displayName)}
+              <div>
+                <strong>${escapeHtml(entry.displayName)}</strong>
+                <p>${escapeHtml(statusLine)}</p>
+                <p class="community-connection-detail">${escapeHtml(detailLine)}</p>
+              </div>
+            </div>
+            <div class="list-metrics">
+              ${activity?.canJoin ? `<button class="button secondary community-button" type="button" data-action="quick-join-code" data-code="${escapeHtml(activity.inviteCode)}">Join</button>` : ""}
+              ${(entry.isFriend || entry.isFollowed) ? `<button class="button secondary community-button" type="button" data-action="open-direct-message" data-profile-id="${escapeHtml(entry.profileId)}">Message</button>` : ""}
+              ${!activity?.canJoin && entry.isFriend ? `<button class="button secondary community-button" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(entry.profileId)}">Challenge</button>` : ""}
+              ${!entry.isFriend && !entry.pendingFriendRequest ? `<button class="button subtle community-button" type="button" data-action="request-friend-profile" data-profile-id="${escapeHtml(entry.profileId)}">Add friend</button>` : ""}
+              ${!entry.isFriend && !entry.isFollowed ? `<button class="button subtle community-button" type="button" data-action="toggle-follow-profile" data-profile-id="${escapeHtml(entry.profileId)}">Follow</button>` : ""}
+              <button class="button subtle community-button" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(entry.profileId)}">View stats</button>
+            </div>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderCommunityProfileSpotlight(state, profileId) {
+  const preview = buildCompetitivePreview(state, profileId, state.currentUser.profileId);
+  if (!preview) {
+    return "";
+  }
+
+  return `
+    <details class="card discovery-card community-section-card" data-persist-key="community-spotlight">
+      <summary class="community-section-summary">
+        <div>
+          <p class="eyebrow">Spotlight</p>
+          <h3>${escapeHtml(preview.displayName)}</h3>
+        </div>
+        <span>${escapeHtml(preview.relationshipLabel)}</span>
+      </summary>
+      <div class="community-section-body">
+        <article class="community-spotlight-card">
+          <div class="community-spotlight-head">
+            <div class="community-connection-main">
+              ${renderAvatarChip(preview.avatarLabel, "is-large")}
+              <div>
+                <strong>${escapeHtml(preview.displayName)}</strong>
+                <p>${escapeHtml(preview.username)} / ${escapeHtml(preview.relationshipLabel)}</p>
+              </div>
+            </div>
+            <div class="list-metrics">
+              <button class="button subtle community-button" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(preview.profileId)}">View stats</button>
+              ${canDirectMessageProfile(state, preview.profileId) ? `<button class="button secondary community-button" type="button" data-action="open-direct-message" data-profile-id="${escapeHtml(preview.profileId)}">Message</button>` : ""}
+              ${!preview.isCurrentUser && !preview.isFriend ? `<button class="button secondary community-button" type="button" data-action="request-friend-profile" data-profile-id="${escapeHtml(preview.profileId)}">Add friend</button>` : ""}
+              ${!preview.isCurrentUser && !preview.isFollowed ? `<button class="button subtle community-button" type="button" data-action="toggle-follow-profile" data-profile-id="${escapeHtml(preview.profileId)}">Follow</button>` : ""}
+              ${!preview.isCurrentUser ? `<button class="button secondary community-button" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(preview.profileId)}">Challenge</button>` : ""}
+            </div>
+          </div>
+          <div class="summary-grid compact">
+            <article>
+              <span>Rounds</span>
+              <strong>${preview.roundsPlayed}</strong>
+            </article>
+            <article>
+              <span>Average</span>
+              <strong>${typeof preview.averageScore === "number" ? preview.averageScore.toFixed(1) : "--"}</strong>
+            </article>
+            <article>
+              <span>Best</span>
+              <strong>${preview.bestRound || "--"}</strong>
+            </article>
+            <article>
+              <span>Form</span>
+              <strong>${escapeHtml(preview.formLabel || "Building")}</strong>
+            </article>
+          </div>
+          <p class="community-spotlight-copy">${escapeHtml(preview.recentFormSummary || "Stats and recent form stay visible here as your golf circle grows.")}</p>
+        </article>
+      </div>
+    </details>
+  `;
+}
+
 function renderAvatarChip(label, sizeClass = "") {
   const source = String(label || "GN").trim();
   const compact = source.length <= 2 && !source.includes(" ")
@@ -1454,6 +1720,106 @@ function renderPlayActiveGameCard(state, activeRound) {
     `;
 }
 
+function renderHomeSupportCards(nearby) {
+  const nearbyPlayers = nearby.players || [];
+
+  return `
+    <div class="stack-list compact-stack">
+      <article class="card discovery-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Join</p>
+            <h3>Join a live round</h3>
+          </div>
+          <span class="status-pill">Enter code</span>
+        </div>
+        <form class="inline-form round-join-form community-join-form" data-form="join-code">
+          <label class="inline-grow">
+            Invite code
+            <input name="inviteCode" type="text" placeholder="Enter code" data-home-join-input />
+          </label>
+          <button class="button primary" type="submit">Join</button>
+        </form>
+        <div class="row-actions compact-actions community-action-row">
+          ${renderHelpLink("Joining guide", "playing-round", true)}
+        </div>
+      </article>
+      <article class="card discovery-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Nearby players</p>
+            <h3>Active golfers now</h3>
+          </div>
+          <span class="status-pill">${nearbyPlayers.length}</span>
+        </div>
+        <div class="community-section-body">
+          ${renderNearbyPlayerRows(nearbyPlayers)}
+        </div>
+      </article>
+      <article class="card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Fallback</p>
+            <h3>More ways to connect</h3>
+          </div>
+        </div>
+        <div class="summary-grid compact community-summary-grid">
+          <article>
+            <span>Fastest</span>
+            <strong>Join by code</strong>
+          </article>
+          <article>
+            <span>Nearby</span>
+            <strong>Players first</strong>
+          </article>
+          <article>
+            <span>Social</span>
+            <strong>Friends and games</strong>
+          </article>
+        </div>
+        <div class="row-actions empty-state-actions">
+          <button class="button secondary" type="button" data-action="nav-view" data-view="community">Open Community</button>
+          ${renderHelpLink("Shared round guide", "playing-round", true)}
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+function renderCommunityJoinSection(state, activeRound, activeGroup) {
+  const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "";
+  const joinSummary = inviteCode
+    ? `Use a code or share ${inviteCode}`
+    : "Use a code to join";
+
+  return `
+    <details class="card discovery-card community-section-card" data-persist-key="community-join" open>
+      <summary class="community-section-summary">
+        <div>
+          <p class="eyebrow">Join</p>
+          <h3>Join a live round</h3>
+        </div>
+        <span>${escapeHtml(joinSummary)}</span>
+      </summary>
+      <div class="community-section-body">
+        <form class="inline-form round-join-form community-join-form" data-form="join-code">
+          <label class="inline-grow">
+            Invite code
+            <input name="inviteCode" type="text" placeholder="Enter code" data-community-join-input />
+          </label>
+          <button class="button primary community-button" type="submit">Join</button>
+        </form>
+        <div class="row-actions compact-actions community-action-row">
+          ${inviteCode
+            ? `<button class="button secondary community-button" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Share Invite</button>`
+            : ""}
+          ${renderHelpLink("Joining guide", "playing-round", true)}
+        </div>
+      </div>
+    </details>
+  `;
+}
+
 function renderInstallCard(state) {
   if (state.session.installHintDismissed) {
     return "";
@@ -1853,7 +2219,7 @@ function renderSettingsLandingView(state) {
 
   return `
     <section class="view-grid settings-grid settings-grid--landing">
-      <article class="card settings-top-card card-span-3">
+      <article class="card settings-top-card settings-top-card--landing card-span-3">
         <div class="profile-identity-row">
           ${renderAvatarChip(state.currentUser.avatarLabel || state.currentUser.avatar, "is-large")}
           <div>
@@ -1862,23 +2228,11 @@ function renderSettingsLandingView(state) {
             <p>${escapeHtml(state.currentUser.username || "@golfer")} / ${escapeHtml(subscription.tier === "premium" ? "Premium" : "Free")} / ${escapeHtml(provider)}</p>
           </div>
         </div>
-        <div class="summary-grid compact settings-summary-grid">
-          <article>
-            <span>Rounds</span>
-            <strong>${preview?.roundsPlayed || state.currentUser.roundsPlayed || 0}</strong>
-          </article>
-          <article>
-            <span>Average</span>
-            <strong>${formatAverageScore(preview?.averageScore ?? state.currentUser.averageScore)}</strong>
-          </article>
-          <article>
-            <span>Best round</span>
-            <strong>${preview?.bestRound || state.currentUser.bestRound || "--"}</strong>
-          </article>
-          <article>
-            <span>Friends</span>
-            <strong>${relationshipCounts.friends}</strong>
-          </article>
+        <div class="settings-profile-meta">
+          <span class="status-pill">Rounds ${preview?.roundsPlayed || state.currentUser.roundsPlayed || 0}</span>
+          <span class="status-pill">Average ${formatAverageScore(preview?.averageScore ?? state.currentUser.averageScore)}</span>
+          <span class="status-pill">Best ${preview?.bestRound || state.currentUser.bestRound || "--"}</span>
+          <span class="status-pill">Friends ${relationshipCounts.friends}</span>
         </div>
       </article>
       <div class="settings-destination-grid card-span-3">
@@ -1901,16 +2255,15 @@ function renderSettingsDestinationHeader(state, destination) {
   const copy = getSettingsDestinationCopy(destination);
 
   return `
-    <article class="card settings-top-card card-span-3">
-      <div class="profile-identity-row">
-        ${renderAvatarChip(state.currentUser.avatarLabel || state.currentUser.avatar, "is-large")}
-        <div>
+    <article class="card settings-top-card settings-top-card--workspace card-span-3">
+      <div class="settings-destination-head">
+        <button class="button subtle compact-header-button settings-back-button" type="button" data-action="set-settings-destination" data-destination="landing" data-section="account">Back</button>
+        <div class="settings-destination-copy">
           <p class="eyebrow">${escapeHtml(copy.eyebrow)}</p>
           <h3>${escapeHtml(copy.title)}</h3>
           <p class="compact-copy">${escapeHtml(copy.description)}</p>
         </div>
       </div>
-      ${renderSettingsSectionNav(state, destination)}
     </article>
   `;
 }
@@ -1952,7 +2305,14 @@ function renderSettingsDestinationWorkspace(state, destination) {
       ${getSettingsDestination(state) === destination ? "" : "hidden"}
     >
       ${renderSettingsDestinationHeader(state, destination)}
-      ${renderSettingsPanelsForDestination(state, destination)}
+      <div class="settings-workspace">
+        <article class="card settings-nav-card">
+          ${renderSettingsSectionNav(state, destination)}
+        </article>
+        <div class="settings-panel-stack">
+          ${renderSettingsPanelsForDestination(state, destination)}
+        </div>
+      </div>
     </section>
   `;
 }
@@ -2798,15 +3158,15 @@ function renderModeNotes(state, mode) {
 
   return `
     <div class="mode-strip">
-      <span class="status-pill">Mode in play: ${escapeHtml(getGameModeLabel(mode))}</span>
-      <span class="status-pill">${isPremiumSubscription(subscription) ? "Premium modes unlocked" : `${escapeHtml(premiumModes)} unlock with Premium`}</span>
+      <span class="status-pill">Format: ${escapeHtml(getGameModeLabel(mode))}</span>
+      <span class="status-pill">${isPremiumSubscription(subscription) ? "Premium formats unlocked" : `${escapeHtml(premiumModes)} unlock with Premium`}</span>
     </div>
   `;
 }
 
 const ROUND_SETUP_STEP_COPY = [
   { id: "course", label: "Course" },
-  { id: "mode", label: "Game Mode" },
+  { id: "mode", label: "Format" },
   { id: "review", label: "Round Type" },
 ];
 
@@ -2890,7 +3250,7 @@ function renderGameModePicker(state) {
     <div class="round-setup-step-card">
       <div class="round-setup-step-head">
         <p class="eyebrow">Step 2</p>
-        <h4>Choose game mode</h4>
+        <h4>Pick format</h4>
       </div>
       <div class="stack-list round-mode-grid">
         ${modeCards}
@@ -4790,10 +5150,18 @@ function renderCommunityView(state) {
   const nearby = getNearbyDiscoveryState(state);
   const nearbyGames = nearby.games;
   const nearbyPlayers = nearby.players;
-  const friendRows = nearby.friends;
-  const friendLeaderboard = buildFriendLeaderboard(state).slice(0, 4);
+  const friendActivityRows = nearby.friends;
+  const socialCircle = buildFriendLeaderboard(state);
+  const friends = socialCircle.filter((entry) => entry.isFriend);
+  const following = socialCircle.filter((entry) => !entry.isFriend);
+  const friendLeaderboard = socialCircle.slice(0, 4);
+  const directInbox = buildDirectMessageInbox(state);
+  const feedPosts = buildCommunityFeed(state).slice(0, 6);
+  const friendActivityMap = new Map(friendActivityRows.map((entry) => [entry.profileId, entry]));
   const featuredProfileId = state.session.selectedProfileId
     || activeRound?.players.find((player) => !player.userId)?.profileId
+    || friends[0]?.profileId
+    || following[0]?.profileId
     || nearbyPlayers[0]?.profileId
     || state.currentUser.profileId;
   const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "";
@@ -4804,44 +5172,87 @@ function renderCommunityView(state) {
         <div class="section-heading">
           <div>
             <p class="eyebrow">Community</p>
-            <h3>Join and discover</h3>
+            <h3>Golf circle</h3>
           </div>
-          <span class="status-pill">${escapeHtml(inviteCode || "No code yet")}</span>
+          <span class="status-pill">${escapeHtml(directInbox.length ? `${directInbox.length} chats` : friends.length ? `${friends.length} friends` : inviteCode || "Open")}</span>
+        </div>
+        <p class="community-hub-copy">Posts, chats, and live rounds stay in one place.</p>
+        <div class="summary-grid compact community-summary-grid">
+          <article>
+            <span>Friends</span>
+            <strong>${friends.length}</strong>
+          </article>
+          <article>
+            <span>Chats</span>
+            <strong>${directInbox.length}</strong>
+          </article>
+          <article>
+            <span>Nearby games</span>
+            <strong>${nearbyGames.length}</strong>
+          </article>
+        </div>
+        <div class="row-actions compact-actions community-hub-actions">
+          <button class="button primary community-button" type="button" data-action="focus-community-composer">Share update</button>
+          <button class="button secondary community-button" type="button" data-action="invite-friends">Invite friends</button>
         </div>
       </article>
-      <details class="card discovery-card community-section-card" data-persist-key="community-join-options" open>
+      ${renderCommunityJoinSection(state, activeRound, activeGroup)}
+      <details class="card discovery-card community-section-card" data-persist-key="community-feed">
         <summary class="community-section-summary">
           <div>
-            <p class="eyebrow">Join options</p>
-            <h3>Join now</h3>
+            <p class="eyebrow">Clubhouse</p>
+            <h3>Posts from your golf circle</h3>
           </div>
-          <span>Open</span>
+          <span>${feedPosts.length || "Open"}</span>
         </summary>
         <div class="community-section-body">
-          <form class="inline-form round-join-form community-join-form" data-form="join-code">
-            <label class="inline-grow">
-              Invite code
-              <input name="inviteCode" type="text" placeholder="Enter code" />
+          <form class="stack-form compact-form community-composer-card" data-form="create-social-post">
+            <label>
+              Share an update
+              <textarea name="message" rows="3" placeholder="Post a golf thought, round update, or challenge note." data-community-composer></textarea>
             </label>
-            <button class="button primary" type="submit">Join</button>
+            <label>
+              Link
+              <input name="linkUrl" type="text" placeholder="Optional article or video link" />
+            </label>
+            <div class="row-actions compact-actions">
+              <button class="button primary community-button" type="submit">Post</button>
+            </div>
           </form>
-          <div class="row-actions compact-actions community-action-row">
-            ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Invite</button>` : ""}
-            <button class="button subtle" type="button" data-action="invite-friends">Invite golfer</button>
-            ${renderHelpLink("Joining guide", "playing-round", true)}
-          </div>
+          ${renderCommunityFeedRows(feedPosts)}
         </div>
       </details>
-      <details class="card discovery-card community-section-card" data-persist-key="community-nearby-players">
+      ${renderCommunityMessagesSection(state)}
+      <details class="card discovery-card community-section-card" data-persist-key="community-friends">
         <summary class="community-section-summary">
           <div>
-            <p class="eyebrow">Nearby players</p>
-            <h3>Active golfers now</h3>
+            <p class="eyebrow">Friends</p>
+            <h3>Your golf friends</h3>
           </div>
-          <span>${nearbyPlayers.length}</span>
+          <span>${friends.length || "Open"}</span>
         </summary>
         <div class="community-section-body">
-          ${renderNearbyPlayerRows(nearbyPlayers)}
+          ${renderCommunityConnectionRows(friends, {
+            activityMap: friendActivityMap,
+            emptyTitle: "No friends yet.",
+            emptyCopy: "Follow golfers on Home, then add them here to build your circle.",
+          })}
+        </div>
+      </details>
+      ${renderCommunityProfileSpotlight(state, featuredProfileId)}
+      <details class="card discovery-card community-section-card" data-persist-key="community-following">
+        <summary class="community-section-summary">
+          <div>
+            <p class="eyebrow">Following</p>
+            <h3>Golfers you keep up with</h3>
+          </div>
+          <span>${following.length}</span>
+        </summary>
+        <div class="community-section-body">
+          ${renderCommunityConnectionRows(following, {
+            emptyTitle: "No followed golfers yet.",
+            emptyCopy: "Use Home to follow golfers, then their stats and posts will show up here.",
+          })}
         </div>
       </details>
       <details class="card discovery-card community-section-card" data-persist-key="community-nearby-games">
@@ -4863,101 +5274,51 @@ function renderCommunityView(state) {
             `}
         </div>
       </details>
-      <details class="card discovery-card community-section-card" data-persist-key="community-friends">
+      <details class="card discovery-card community-section-card" data-persist-key="community-ranking">
         <summary class="community-section-summary">
           <div>
-            <p class="eyebrow">Friends</p>
-            <h3>People you golf with</h3>
+            <p class="eyebrow">Social ranking</p>
+            <h3>Friends leaderboard</h3>
           </div>
-          <span>${friendRows.length || "Open"}</span>
+          <span>${friendLeaderboard.length || "Open"}</span>
         </summary>
         <div class="community-section-body">
-          ${friendRows.length
+          ${friendLeaderboard.length
             ? `
               <div class="stack-list compact-stack play-list">
-                ${friendRows.map((friend) => `
+                ${friendLeaderboard.map((entry, index) => `
                   <article class="list-row play-list-row">
-                    <div>
-                      <strong>${escapeHtml(friend.displayName)}</strong>
-                      <p>${escapeHtml(friend.statusLabel)}</p>
+                    <div class="community-connection-main">
+                      ${renderAvatarChip(entry.avatarLabel || entry.displayName)}
+                      <div>
+                        <strong>#${index + 1} ${escapeHtml(entry.displayName)}</strong>
+                        <p>${escapeHtml(entry.relationshipLabel)} / ${escapeHtml(entry.formLabel || entry.recentFormSummary || "Building form")}</p>
+                      </div>
                     </div>
                     <div class="list-metrics">
-                      ${friend.canJoin ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${friend.inviteCode}">Join</button>` : ""}
-                      ${!friend.canJoin ? `<button class="button secondary" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(friend.profileId)}">Challenge</button>` : ""}
-                      <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(friend.profileId)}">View</button>
+                      <span>${typeof entry.averageScore === "number" ? `${entry.averageScore.toFixed(1)} avg` : "New"}</span>
+                      <button class="button subtle community-button" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(entry.profileId)}">View</button>
+                      <button class="button secondary community-button" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(entry.profileId)}">Challenge</button>
                     </div>
                   </article>
                 `).join("")}
               </div>
             `
-            : `
-              <div class="empty-state compact-empty-state">
-                <strong>No friend activity yet.</strong>
-                <p>Follow golfers here to make repeat rounds faster.</p>
-              </div>
-            `}
+            : renderCompetitionLayerCard(activeRound ? getRoundSummaryForState(state, activeRound) : {
+                friendLeaderboard: {
+                  title: "Friends leaderboard",
+                  entries: nearbyPlayers.slice(0, 3).map((player, index) => ({
+                    rank: index + 1,
+                    name: player.displayName,
+                    relationshipLabel: player.relationshipLabel,
+                    displayStatus: player.isLive ? "Live now" : player.statsSummary,
+                  })),
+                },
+                sideGame: null,
+                tournamentScaffold: null,
+              })}
         </div>
       </details>
-      <article class="card discovery-card">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Social ranking</p>
-            <h3>Friends leaderboard</h3>
-          </div>
-        </div>
-        ${friendLeaderboard.length
-          ? `
-            <div class="stack-list compact-stack play-list">
-              ${friendLeaderboard.map((entry, index) => `
-                <article class="list-row play-list-row">
-                  <div>
-                    <strong>#${index + 1} ${escapeHtml(entry.displayName)}</strong>
-                    <p>${escapeHtml(entry.relationshipLabel)} / ${escapeHtml(entry.formLabel || entry.recentFormSummary || "Building form")}</p>
-                  </div>
-                  <div class="list-metrics">
-                    <span>${typeof entry.averageScore === "number" ? `${entry.averageScore.toFixed(1)} avg` : "New"}</span>
-                    <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(entry.profileId)}">View</button>
-                    <button class="button secondary" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(entry.profileId)}">Challenge</button>
-                  </div>
-                </article>
-              `).join("")}
-            </div>
-          `
-          : renderCompetitionLayerCard(activeRound ? getRoundSummaryForState(state, activeRound) : {
-              friendLeaderboard: {
-                title: "Friends leaderboard",
-                entries: nearbyPlayers.slice(0, 3).map((player, index) => ({
-                  rank: index + 1,
-                  name: player.displayName,
-                  relationshipLabel: player.relationshipLabel,
-                  displayStatus: player.isLive ? "Live now" : player.statsSummary,
-                })),
-              },
-              sideGame: null,
-              tournamentScaffold: null,
-            })}
-      </article>
-      ${renderCompetitivePreviewCard(state, featuredProfileId, featuredProfileId === state.currentUser.profileId ? "Your public matchup card" : "Selected golfer preview")}
-      <article class="card card-span-2">
-        <div class="summary-grid compact">
-          <article>
-            <span>Fallback</span>
-            <strong>Join by code</strong>
-          </article>
-          <article>
-            <span>Fast path</span>
-            <strong>Nearby games</strong>
-          </article>
-          <article>
-            <span>Player cards</span>
-            <strong>Tap to compare</strong>
-          </article>
-        </div>
-        <p class="body-copy compact-copy">Community keeps joining and discovery in one place so Score can stay focused on setup and scoring.</p>
-        <div class="row-actions empty-state-actions">
-          ${renderHelpLink("Shared round guide", "playing-round", true)}
-        </div>
-      </article>
     </section>
   `;
 }

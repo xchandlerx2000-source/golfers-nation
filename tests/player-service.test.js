@@ -2,11 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import { createDefaultState } from "../src/state/default-state.js";
 import {
+  buildCommunityFeed,
   buildCompetitivePreview,
+  buildDirectConversationThread,
+  buildDirectMessageInbox,
   buildFriendLeaderboard,
   buildPlayerComparison,
+  ensureDirectConversation,
   ensureProfilesForNames,
+  markDirectConversationRead,
   requestFriendProfile,
+  sendDirectMessage,
   toggleFollowProfile,
 } from "../src/services/player-service.js";
 
@@ -49,7 +55,7 @@ describe("player service", () => {
     expect(comparison.right.headToHeadLabel).toContain("shared rounds");
   });
 
-  it("tracks follow and friend-request scaffolding on public player cards", () => {
+  it("tracks follow and friend connections on public player cards", () => {
     const state = createDefaultState();
     const [, reese] = ensureProfilesForNames(state, ["Avery Brooks", "Reese Hall"]);
 
@@ -59,10 +65,10 @@ describe("player service", () => {
     const reesePreview = buildCompetitivePreview(state, reese.profileId, state.currentUser.profileId);
 
     expect(followResult.isFollowed).toBe(false);
-    expect(friendResult.status).toBe("requested");
+    expect(friendResult.status).toBe("connected");
     expect(theoPreview?.isFollowed).toBe(false);
-    expect(reesePreview?.pendingFriendRequest).toBe(true);
-    expect(reesePreview?.relationshipLabel).toBe("Friend request sent");
+    expect(reesePreview?.isFriend).toBe(true);
+    expect(reesePreview?.relationshipLabel).toBe("Friend");
   });
 
   it("builds a friend leaderboard from followed and friend golfers", () => {
@@ -72,5 +78,45 @@ describe("player service", () => {
     expect(leaderboard.length).toBeGreaterThan(0);
     expect(leaderboard[0].relationshipLabel).toBe("Friend");
     expect(leaderboard.some((entry) => entry.profileId === "profile-theo")).toBe(true);
+  });
+
+  it("builds a clubhouse feed from the current golfer social circle", () => {
+    const state = createDefaultState();
+    const feed = buildCommunityFeed(state);
+
+    expect(feed.length).toBeGreaterThan(0);
+    expect(feed.some((entry) => entry.profileId === state.currentUser.profileId)).toBe(true);
+    expect(feed.some((entry) => entry.profileId === "profile-maya")).toBe(true);
+    expect(feed.every((entry) => typeof entry.message === "string" && entry.message.length > 0)).toBe(true);
+  });
+
+  it("builds a direct-message inbox and thread for the current golfer", () => {
+    const state = createDefaultState();
+    const inbox = buildDirectMessageInbox(state);
+    const thread = buildDirectConversationThread(state, inbox[0].id);
+
+    expect(inbox.length).toBeGreaterThan(0);
+    expect(inbox[0].displayName).toBeTruthy();
+    expect(typeof inbox[0].lastMessagePreview).toBe("string");
+    expect(thread?.messages.length).toBeGreaterThan(0);
+    expect(thread?.messages[0].displayName).toBeTruthy();
+  });
+
+  it("creates and updates direct conversations on top of the friend network", () => {
+    const state = createDefaultState();
+    const result = ensureDirectConversation(state, "profile-maya");
+    const conversationId = result.conversationId || buildDirectMessageInbox(state).find((entry) => entry.peerProfileId === "profile-maya")?.id;
+
+    const sendResult = sendDirectMessage(state, conversationId, "Want to tee it up early Saturday?");
+    const inbox = buildDirectMessageInbox(state);
+    const mayaThread = buildDirectConversationThread(state, conversationId);
+
+    expect(conversationId).toBeTruthy();
+    expect(sendResult.changed).toBe(true);
+    expect(mayaThread?.messages[mayaThread.messages.length - 1].message).toBe("Want to tee it up early Saturday?");
+
+    markDirectConversationRead(state, conversationId);
+    expect(inbox.some((entry) => entry.peerProfileId === "profile-maya")).toBe(true);
+    expect(buildDirectMessageInbox(state).find((entry) => entry.id === conversationId)?.unreadCount).toBe(0);
   });
 });

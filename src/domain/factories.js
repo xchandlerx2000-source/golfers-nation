@@ -379,6 +379,78 @@ export function createActivity({ type = "update", message }) {
   };
 }
 
+export function createSocialPost({
+  authorProfileId,
+  message,
+  linkUrl = "",
+  linkLabel = "",
+  courseName = "",
+  visibility = "friends",
+}) {
+  return {
+    id: uid("post"),
+    authorProfileId,
+    message: String(message || "").trim(),
+    linkUrl: String(linkUrl || "").trim(),
+    linkLabel: String(linkLabel || "").trim(),
+    courseName: String(courseName || "").trim(),
+    visibility,
+    createdAt: Date.now(),
+  };
+}
+
+function normalizeConversationProfileIds(participantProfileIds = []) {
+  return [...new Set((Array.isArray(participantProfileIds) ? participantProfileIds : []).filter(Boolean))];
+}
+
+export function createDirectMessage({
+  authorProfileId,
+  message,
+  createdAt = Date.now(),
+  status = "sent",
+}) {
+  return {
+    id: uid("message"),
+    authorProfileId,
+    message: String(message || "").trim(),
+    createdAt,
+    status,
+  };
+}
+
+export function createDirectConversation({
+  participantProfileIds = [],
+  title = "",
+  messages = [],
+  createdAt = Date.now(),
+  unreadByProfileId = {},
+}) {
+  const normalizedParticipantProfileIds = normalizeConversationProfileIds(participantProfileIds);
+  const normalizedMessages = (Array.isArray(messages) ? messages : [])
+    .map((message) => createDirectMessage({
+      authorProfileId: message?.authorProfileId,
+      message: message?.message,
+      createdAt: message?.createdAt || createdAt,
+      status: message?.status || "sent",
+    }))
+    .filter((message) => message.authorProfileId && message.message);
+  const lastMessage = normalizedMessages[normalizedMessages.length - 1] || null;
+
+  return {
+    id: uid("conversation"),
+    title: String(title || "").trim(),
+    participantProfileIds: normalizedParticipantProfileIds,
+    messages: normalizedMessages,
+    unreadByProfileId: normalizedParticipantProfileIds.reduce((result, profileId) => {
+      result[profileId] = Number(unreadByProfileId?.[profileId] || 0);
+      return result;
+    }, {}),
+    createdAt,
+    updatedAt: lastMessage?.createdAt || createdAt,
+    lastMessageAt: lastMessage?.createdAt || createdAt,
+  };
+}
+
 export function describeSide(side) {
   return `${side.name}: ${compactNames(side.playerNames)}`;
 }

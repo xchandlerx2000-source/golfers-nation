@@ -152,28 +152,28 @@ const GAME_MODES = {
   stroke: {
     id: "stroke",
     name: "Stroke Play",
-    label: "Stroke Play",
+    label: "Strokes",
     type: "individual",
     scoringLogicType: "stroke-total",
-    shortDescription: "Lowest total wins.",
+    shortDescription: "Stroke play",
     description: "Track every player by total strokes and to-par standing.",
   },
   match: {
     id: "match",
     name: "Match Play",
-    label: "Match Play",
+    label: "Holes",
     type: "side",
     scoringLogicType: "match-holes",
-    shortDescription: "Win holes head to head.",
+    shortDescription: "Match play",
     description: "Track side-vs-side holes won with a head-to-head scoreboard.",
   },
   scramble: {
     id: "scramble",
     name: "Scramble",
-    label: "Scramble",
+    label: "Teams",
     type: "team",
     scoringLogicType: "team-stroke-total",
-    shortDescription: "One team card per side.",
+    shortDescription: "Scramble",
     description: "Score teams with one combined card and faster social play.",
   },
   skins: {
@@ -182,7 +182,7 @@ const GAME_MODES = {
     label: "Skins",
     type: "individual",
     scoringLogicType: "skins",
-    shortDescription: "Win a hole outright.",
+    shortDescription: "Hole wins",
     description: "Track hole wins with carry-ready skins-style pressure.",
   },
   stableford: {
@@ -191,7 +191,7 @@ const GAME_MODES = {
     label: "Stableford",
     type: "individual",
     scoringLogicType: "stableford-points",
-    shortDescription: "Points beat raw strokes.",
+    shortDescription: "Points game",
     description: "Turn each hole into points so fast scoring still feels competitive.",
   },
 };
@@ -258,7 +258,7 @@ const SUBSCRIPTION_PLANS = [
       "Enhanced live group and sync tools",
       "Tournament and league controls",
       "Advanced scoring modes",
-      "Future GPS, watch, and smart gear integrations",
+      "Future course view, GPS, and club tools",
     ],
   },
 ];
@@ -674,6 +674,75 @@ function createActivity({ type = "update", message }) {
     type,
     message,
     createdAt: Date.now(),
+  };
+}
+function createSocialPost({
+  authorProfileId,
+  message,
+  linkUrl = "",
+  linkLabel = "",
+  courseName = "",
+  visibility = "friends",
+}) {
+  return {
+    id: uid("post"),
+    authorProfileId,
+    message: String(message || "").trim(),
+    linkUrl: String(linkUrl || "").trim(),
+    linkLabel: String(linkLabel || "").trim(),
+    courseName: String(courseName || "").trim(),
+    visibility,
+    createdAt: Date.now(),
+  };
+}
+
+function normalizeConversationProfileIds(participantProfileIds = []) {
+  return [...new Set((Array.isArray(participantProfileIds) ? participantProfileIds : []).filter(Boolean))];
+}
+function createDirectMessage({
+  authorProfileId,
+  message,
+  createdAt = Date.now(),
+  status = "sent",
+}) {
+  return {
+    id: uid("message"),
+    authorProfileId,
+    message: String(message || "").trim(),
+    createdAt,
+    status,
+  };
+}
+function createDirectConversation({
+  participantProfileIds = [],
+  title = "",
+  messages = [],
+  createdAt = Date.now(),
+  unreadByProfileId = {},
+}) {
+  const normalizedParticipantProfileIds = normalizeConversationProfileIds(participantProfileIds);
+  const normalizedMessages = (Array.isArray(messages) ? messages : [])
+    .map((message) => createDirectMessage({
+      authorProfileId: message?.authorProfileId,
+      message: message?.message,
+      createdAt: message?.createdAt || createdAt,
+      status: message?.status || "sent",
+    }))
+    .filter((message) => message.authorProfileId && message.message);
+  const lastMessage = normalizedMessages[normalizedMessages.length - 1] || null;
+
+  return {
+    id: uid("conversation"),
+    title: String(title || "").trim(),
+    participantProfileIds: normalizedParticipantProfileIds,
+    messages: normalizedMessages,
+    unreadByProfileId: normalizedParticipantProfileIds.reduce((result, profileId) => {
+      result[profileId] = Number(unreadByProfileId?.[profileId] || 0);
+      return result;
+    }, {}),
+    createdAt,
+    updatedAt: lastMessage?.createdAt || createdAt,
+    lastMessageAt: lastMessage?.createdAt || createdAt,
   };
 }
 function describeSide(side) {
@@ -2137,6 +2206,22 @@ function getCourseReadinessTier({
 
   return "incomplete";
 }
+function deriveAdvancedGolferToolAvailability(rawCourse = {}, catalogMetadata = {}) {
+  const metadata = rawCourse?.metadata || {};
+  const hasHoleOverlays = Boolean(Array.isArray(rawCourse?.holeOverlays) && rawCourse.holeOverlays.length);
+  const hasGreenComplexes = Boolean(Array.isArray(rawCourse?.greenComplexes) && rawCourse.greenComplexes.length);
+  const gpsReady = Boolean(catalogMetadata.gpsReady);
+  const holeDetailReady = Boolean(catalogMetadata.qualityFlags?.hasRealHoleData || catalogMetadata.holeDetailReady);
+  const routingReady = Boolean(catalogMetadata.routingReady || metadata.routingReady);
+
+  return {
+    courseViewReady: Boolean(metadata.courseViewReady || hasHoleOverlays || holeDetailReady),
+    greenViewReady: Boolean(metadata.greenViewReady || hasGreenComplexes),
+    gpsDistanceReady: gpsReady,
+    clubTrackingReady: Boolean(metadata.clubTrackingReady),
+    holeGuidanceReady: Boolean(metadata.holeGuidanceReady || (gpsReady && (routingReady || holeDetailReady))),
+  };
+}
 function deriveCourseCatalogMetadata(rawCourse = {}, providerId = "us-course-database") {
   const rawTeeRows = getRawCourseTeeRows(rawCourse);
   const rawHoleRows = getRawCourseHoleRows(rawCourse);
@@ -2282,6 +2367,7 @@ function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-database"
   const slug = rawCourse?.slug || slugifyCourseValue(rawCourse?.id || `${displayName}-${rawCourse?.city || ""}-${rawCourse?.state || ""}`);
   const postalCode = rawCourse?.postalCode || rawCourse?.zip || "";
   const catalogMetadata = deriveCourseCatalogMetadata(rawCourse, providerId);
+  const advancedTools = deriveAdvancedGolferToolAvailability(rawCourse, catalogMetadata);
   const metadata = {
     ...cloneData(rawCourse?.metadata || {}),
     providerId,
@@ -2299,6 +2385,7 @@ function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-database"
     source: rawCourse?.source || providerId,
     sourceType: rawCourse?.sourceType || rawCourse?.metadata?.sourceType || "seeded-us-database",
     ...catalogMetadata,
+    advancedTools,
     externalIds: cloneData(rawCourse?.externalIds || rawCourse?.metadata?.externalIds || {}),
     providerCourseId: rawCourse?.providerCourseId || rawCourse?.metadata?.providerCourseId || rawCourse?.id || "",
     clubhousePhone: rawCourse?.metadata?.clubhousePhone || "",
@@ -2408,6 +2495,13 @@ function createCourseRoundTemplateRecord({
       ...cloneData(course.metadata || {}),
       teeCount: Array.isArray(course.teeBoxes) ? course.teeBoxes.length : 0,
       roundTemplateReady: true,
+      advancedTools: cloneData(course.metadata?.advancedTools || {
+        courseViewReady: false,
+        greenViewReady: false,
+        gpsDistanceReady: false,
+        clubTrackingReady: false,
+        holeGuidanceReady: false,
+      }),
     },
   };
 }
@@ -2457,6 +2551,13 @@ function createManualRoundTemplateRecord({
       gpsReady: false,
       routingReady: false,
       holeDetailReady: true,
+      advancedTools: {
+        courseViewReady: false,
+        greenViewReady: false,
+        gpsDistanceReady: false,
+        clubTrackingReady: false,
+        holeGuidanceReady: false,
+      },
     },
   };
 }
@@ -4729,10 +4830,10 @@ function createRoundCourseSelection(courseId, teeBoxId = "") {
 // Source of truth: data/course-import/**/*.json, data/course-enrichment/**/*.json, and scripts/build-course-catalog.mjs
 const IMPORTED_US_COURSE_CATALOG_MANIFEST = {
   "version": 1,
-  "assetVersion": "e848499d01e0",
+  "assetVersion": "3ebaa735347b",
   "providerId": "imported-us-course-database",
   "providerLabel": "Imported U.S. course database",
-  "generatedAt": "2026-03-26T04:32:08.058Z",
+  "generatedAt": "2026-03-26T05:35:01.753Z",
   "recordCount": 16284,
   "sourceCount": 4,
   "qualitySummary": {
@@ -6535,6 +6636,18 @@ function profilePlayer(profile) {
   };
 }
 
+function createSeedConversation(currentProfileId, otherProfileId, messages = [], unreadCurrent = 0) {
+  return createDirectConversation({
+    participantProfileIds: [currentProfileId, otherProfileId],
+    messages,
+    createdAt: messages[0]?.createdAt || Date.now(),
+    unreadByProfileId: {
+      [currentProfileId]: unreadCurrent,
+      [otherProfileId]: 0,
+    },
+  });
+}
+
 function createSelfProfile(account) {
   return createSeedProfile({
     id: account.profileId,
@@ -6729,6 +6842,48 @@ function createSeededWorkspace(account, options = {}) {
             : "Free account access is active. Premium tools stay cleanly locked until upgrade.",
         }),
       ],
+      posts: [
+        createSocialPost({
+          authorProfileId: account.profileId,
+          message: account.subscription.tier === "premium"
+            ? "Live rounds feel better when the whole group stays in one card."
+            : "Working on cleaner weekend rounds and quicker score entry.",
+          courseName: activeRound.courseName,
+        }),
+        createSocialPost({
+          authorProfileId: "profile-maya",
+          message: "Dialed in the wedges this week. Looking for a live match on Sunday.",
+          linkUrl: "https://www.usga.org/rules-hub.html",
+          linkLabel: "Rules refresher",
+          courseName: "Pebble Beach Golf Links",
+        }),
+        createSocialPost({
+          authorProfileId: "profile-theo",
+          message: "Anybody up for a twilight card? I want a clean 9 before sunset.",
+          courseName: "Shadow Creek Golf Course",
+        }),
+      ],
+      conversations: [
+        createSeedConversation(account.profileId, "profile-theo", [
+          {
+            authorProfileId: "profile-theo",
+            message: "You free for a quick live card this weekend?",
+            createdAt: Date.now() - 1000 * 60 * 100,
+          },
+          {
+            authorProfileId: account.profileId,
+            message: "Yes. Send the code when you're ready.",
+            createdAt: Date.now() - 1000 * 60 * 92,
+          },
+        ]),
+        createSeedConversation(account.profileId, "profile-jordan", [
+          {
+            authorProfileId: "profile-jordan",
+            message: "Dropped the Nassau article in Clubhouse. We should run it next round.",
+            createdAt: Date.now() - 1000 * 60 * 40,
+          },
+        ], 1),
+      ],
     },
     userSession: {
       activeRoundId: activeRound.id,
@@ -6755,6 +6910,8 @@ function createEmptyWorkspace(account) {
           message: `${account.displayName} created a Golfers Nation account.`,
         }),
       ],
+      posts: [],
+      conversations: [],
     },
     userSession: {
       activeRoundId: null,
@@ -7100,9 +7257,9 @@ function createDefaultAccountState() {
     seasonGoal: "Break 80 in three new states",
     createdAt: Date.now() - 1000 * 60 * 60 * 24 * 160,
     social: {
-      followedProfileIds: ["profile-maya", "profile-theo"],
-      friendProfileIds: ["profile-maya"],
-      pendingFriendProfileIds: ["profile-jordan"],
+      followedProfileIds: ["profile-maya", "profile-theo", "profile-jordan"],
+      friendProfileIds: ["profile-maya", "profile-jordan"],
+      pendingFriendProfileIds: [],
     },
   });
 
@@ -7122,7 +7279,7 @@ function createDefaultAccountState() {
     createdAt: Date.now() - 1000 * 60 * 60 * 24 * 220,
     social: {
       followedProfileIds: ["profile-demo-free", "profile-theo"],
-      friendProfileIds: ["profile-demo-free"],
+      friendProfileIds: ["profile-demo-free", "profile-theo"],
     },
   });
 
@@ -7237,6 +7394,7 @@ function hydrateActiveAccountState(state) {
     next.session.selectedHole = previewWorkspace.userSession?.selectedHole || 1;
     next.session.summaryRoundId = previewWorkspace.userSession?.summaryRoundId || null;
     next.session.selectedProfileId = previewWorkspace.userSession?.selectedProfileId || previewAccount.profileId;
+    next.session.selectedConversationId = null;
     next.session.roundSetup = {
       ...(next.session.roundSetup || {}),
       ...(previewWorkspace.userSession?.roundSetup || {}),
@@ -7315,6 +7473,7 @@ function loadAccountIntoState(draft, userId) {
   draft.session.selectedHole = workspace.userSession?.selectedHole || 1;
   draft.session.summaryRoundId = workspace.userSession?.summaryRoundId || null;
   draft.session.selectedProfileId = workspace.userSession?.selectedProfileId || account.profileId;
+  draft.session.selectedConversationId = null;
   draft.session.roundSetup = {
     ...(draft.session.roundSetup || {}),
     ...(workspace.userSession?.roundSetup || {}),
@@ -8320,6 +8479,27 @@ function getUniqueSocialIds(value) {
     ? [...new Set(value.filter(Boolean))]
     : [];
 }
+
+function getConversationRecords(state) {
+  return Array.isArray(state?.social?.conversations)
+    ? state.social.conversations.filter(Boolean)
+    : [];
+}
+
+function findDirectConversationRecord(state, conversationId) {
+  return getConversationRecords(state).find((conversation) => conversation.id === conversationId) || null;
+}
+
+function findPeerProfileId(state, conversation) {
+  const currentProfileId = state.currentUser?.profileId;
+  if (!conversation) {
+    return null;
+  }
+
+  return (conversation.participantProfileIds || []).find((profileId) => profileId && profileId !== currentProfileId)
+    || currentProfileId
+    || null;
+}
 function getFollowedProfileIds(state) {
   return getUniqueSocialIds(getCurrentSocialSettings(state).followedProfileIds);
 }
@@ -8337,6 +8517,13 @@ function isProfileFriend(state, profileId) {
 }
 function hasPendingFriendRequest(state, profileId) {
   return Boolean(profileId) && getPendingFriendProfileIds(state).includes(profileId);
+}
+function canDirectMessageProfile(state, profileId) {
+  return Boolean(
+    profileId
+    && profileId !== state.currentUser?.profileId
+    && (isProfileFriend(state, profileId) || isProfileFollowed(state, profileId))
+  );
 }
 
 function buildProfileRelationship(state, profileId) {
@@ -8476,6 +8663,191 @@ function buildFriendLeaderboard(state) {
       || left.displayName.localeCompare(right.displayName)
     );
 }
+function buildCommunityFeed(state) {
+  const visibleProfileIds = new Set([
+    state.currentUser?.profileId,
+    ...getFriendProfileIds(state),
+    ...getFollowedProfileIds(state),
+  ].filter(Boolean));
+
+  return (state.social?.posts || [])
+    .filter((post) => visibleProfileIds.has(post.authorProfileId))
+    .map((post) => {
+      const preview = buildCompetitivePreview(state, post.authorProfileId, state.currentUser?.profileId) || {};
+      const profile = getProfileById(state, post.authorProfileId);
+
+      return {
+        ...post,
+        profileId: post.authorProfileId,
+        displayName: preview.displayName || profile?.publicProfile?.displayName || "Golfer",
+        username: preview.username || profile?.publicProfile?.username || "@golfer",
+        avatarLabel: preview.avatarLabel || profile?.publicProfile?.avatarLabel || "GN",
+        relationshipLabel: preview.relationshipLabel || (post.authorProfileId === state.currentUser?.profileId ? "You" : "Golf circle"),
+        roundsPlayed: preview.roundsPlayed || profile?.publicProfile?.roundsPlayed || 0,
+        averageScore: preview.averageScore ?? profile?.publicProfile?.averageScore ?? null,
+        formLabel: preview.formLabel || profile?.publicProfile?.formLabel || "",
+        homeCourse: preview.homeCourse || profile?.publicProfile?.homeCourse || "",
+        isCurrentUser: post.authorProfileId === state.currentUser?.profileId,
+        isFriend: Boolean(preview.isFriend),
+        isFollowed: Boolean(preview.isFollowed),
+      };
+    })
+    .sort((left, right) =>
+      Number(right.isCurrentUser) - Number(left.isCurrentUser)
+      || Number(right.isFriend) - Number(left.isFriend)
+      || Number(right.isFollowed) - Number(left.isFollowed)
+      || (right.createdAt || 0) - (left.createdAt || 0)
+    );
+}
+function buildDirectMessageInbox(state) {
+  const currentProfileId = state.currentUser?.profileId;
+
+  return getConversationRecords(state)
+    .filter((conversation) => (conversation.participantProfileIds || []).includes(currentProfileId))
+    .map((conversation) => {
+      const peerProfileId = findPeerProfileId(state, conversation);
+      const preview = buildCompetitivePreview(state, peerProfileId, currentProfileId) || {};
+      const latestMessage = (conversation.messages || []).slice().sort((left, right) => (left.createdAt || 0) - (right.createdAt || 0)).pop() || null;
+
+      return {
+        id: conversation.id,
+        peerProfileId,
+        title: conversation.title || preview.displayName || "Direct message",
+        displayName: preview.displayName || "Golfer",
+        username: preview.username || "@golfer",
+        avatarLabel: preview.avatarLabel || "GN",
+        relationshipLabel: preview.relationshipLabel || "Golf circle",
+        averageScore: preview.averageScore ?? null,
+        roundsPlayed: preview.roundsPlayed || 0,
+        formLabel: preview.formLabel || "",
+        isFriend: Boolean(preview.isFriend),
+        isFollowed: Boolean(preview.isFollowed),
+        lastMessagePreview: latestMessage?.message || "Start the conversation",
+        lastMessageAt: latestMessage?.createdAt || conversation.lastMessageAt || conversation.updatedAt || conversation.createdAt || 0,
+        unreadCount: Number(conversation.unreadByProfileId?.[currentProfileId] || 0),
+        messageCount: Array.isArray(conversation.messages) ? conversation.messages.length : 0,
+      };
+    })
+    .sort((left, right) =>
+      right.unreadCount - left.unreadCount
+      || (right.lastMessageAt || 0) - (left.lastMessageAt || 0)
+      || left.displayName.localeCompare(right.displayName)
+    );
+}
+function buildDirectConversationThread(state, conversationId) {
+  const conversation = findDirectConversationRecord(state, conversationId);
+  if (!conversation) {
+    return null;
+  }
+
+  const currentProfileId = state.currentUser?.profileId;
+  const peerProfileId = findPeerProfileId(state, conversation);
+  const peerPreview = buildCompetitivePreview(state, peerProfileId, currentProfileId) || {};
+
+  return {
+    id: conversation.id,
+    peerProfileId,
+    displayName: peerPreview.displayName || "Golfer",
+    username: peerPreview.username || "@golfer",
+    avatarLabel: peerPreview.avatarLabel || "GN",
+    relationshipLabel: peerPreview.relationshipLabel || "Golf circle",
+    formLabel: peerPreview.formLabel || "",
+    isFriend: Boolean(peerPreview.isFriend),
+    isFollowed: Boolean(peerPreview.isFollowed),
+    messages: (conversation.messages || [])
+      .slice()
+      .sort((left, right) => (left.createdAt || 0) - (right.createdAt || 0))
+      .map((message) => {
+        const authorProfile = getProfileById(state, message.authorProfileId);
+        return {
+          ...message,
+          displayName: authorProfile?.publicProfile?.displayName
+            || (message.authorProfileId === currentProfileId ? state.currentUser?.displayName || state.currentUser?.name || "You" : "Golfer"),
+          avatarLabel: authorProfile?.publicProfile?.avatarLabel
+            || (message.authorProfileId === currentProfileId ? state.currentUser?.avatarLabel || "GN" : "GN"),
+          isCurrentUser: message.authorProfileId === currentProfileId,
+        };
+      }),
+  };
+}
+function ensureDirectConversation(draft, profileId) {
+  if (!canDirectMessageProfile(draft, profileId)) {
+    return { changed: false, status: "not-allowed", conversationId: null };
+  }
+
+  const currentProfileId = draft.currentUser?.profileId;
+  const existing = getConversationRecords(draft).find((conversation) => {
+    const participantProfileIds = getUniqueSocialIds(conversation.participantProfileIds);
+    return participantProfileIds.length === 2
+      && participantProfileIds.includes(currentProfileId)
+      && participantProfileIds.includes(profileId);
+  });
+
+  if (existing) {
+    return { changed: false, status: "existing", conversationId: existing.id };
+  }
+
+  const conversation = createDirectConversation({
+    participantProfileIds: [currentProfileId, profileId],
+  });
+
+  draft.social = {
+    ...(draft.social || {}),
+    conversations: [
+      conversation,
+      ...getConversationRecords(draft),
+    ],
+  };
+
+  return { changed: true, status: "created", conversationId: conversation.id };
+}
+function markDirectConversationRead(draft, conversationId) {
+  const conversation = findDirectConversationRecord(draft, conversationId);
+  if (!conversation) {
+    return false;
+  }
+
+  const currentProfileId = draft.currentUser?.profileId;
+  conversation.unreadByProfileId = {
+    ...(conversation.unreadByProfileId || {}),
+    [currentProfileId]: 0,
+  };
+  conversation.updatedAt = Date.now();
+  return true;
+}
+function sendDirectMessage(draft, conversationId, messageText) {
+  const conversation = findDirectConversationRecord(draft, conversationId);
+  const trimmedMessage = String(messageText || "").trim();
+  if (!conversation || !trimmedMessage) {
+    return { changed: false, conversationId: null, peerProfileId: null };
+  }
+
+  const currentProfileId = draft.currentUser?.profileId;
+  const nextMessage = createDirectMessage({
+    authorProfileId: currentProfileId,
+    message: trimmedMessage,
+  });
+  const peerProfileIds = getUniqueSocialIds(conversation.participantProfileIds)
+    .filter((profileId) => profileId !== currentProfileId);
+
+  conversation.messages = [...(conversation.messages || []), nextMessage].slice(-80);
+  conversation.lastMessageAt = nextMessage.createdAt;
+  conversation.updatedAt = nextMessage.createdAt;
+  conversation.unreadByProfileId = {
+    ...(conversation.unreadByProfileId || {}),
+    [currentProfileId]: 0,
+  };
+
+  peerProfileIds.forEach((profileId) => {
+    conversation.unreadByProfileId[profileId] = Number(conversation.unreadByProfileId?.[profileId] || 0) + 1;
+  });
+
+  return {
+    changed: true,
+    conversationId: conversation.id,
+    peerProfileId: peerProfileIds[0] || null,
+  };
+}
 function toggleFollowProfile(draft, profileId) {
   if (!profileId || profileId === draft.currentUser?.profileId) {
     return { changed: false, isFollowed: false };
@@ -8511,23 +8883,21 @@ function requestFriendProfile(draft, profileId) {
   }
 
   const pendingIds = new Set(getUniqueSocialIds(draft.currentUser?.social?.pendingFriendProfileIds));
-  if (pendingIds.has(profileId)) {
-    return { changed: false, status: "pending" };
-  }
-
   const followedIds = new Set(getUniqueSocialIds(draft.currentUser?.social?.followedProfileIds));
+  friendIds.add(profileId);
   followedIds.add(profileId);
-  pendingIds.add(profileId);
+  pendingIds.delete(profileId);
 
   draft.currentUser.social = {
     ...(draft.currentUser.social || {}),
     followedProfileIds: [...followedIds],
+    friendProfileIds: [...friendIds],
     pendingFriendProfileIds: [...pendingIds],
   };
 
   return {
     changed: true,
-    status: "requested",
+    status: "connected",
   };
 }
 function buildPlayerComparison(state, leftProfileId, rightProfileId) {
@@ -12023,6 +12393,7 @@ function createDefaultState() {
       selectedHole: activeWorkspace.userSession.selectedHole,
       roundScreenMode: "setup",
       summaryRoundId: activeWorkspace.userSession.summaryRoundId,
+      selectedConversationId: null,
       lastScoredParticipantId: null,
       lastScoredHole: null,
       lastScorePulseAt: 0,
@@ -12211,9 +12582,9 @@ const SCREEN_COPY = {
     description: "Season progress, round summaries, and locked advanced analytics all live in one structured player history.",
   },
   community: {
-    eyebrow: "Group play",
-    title: "Invite rounds, social groups, and tournament entry points without the placeholder feel.",
-    description: "Community keeps live group play and event tools organized, with clear upgrade paths for premium league features.",
+    eyebrow: "Golf circle",
+    title: "Follow golfers, share quick golf updates, and keep live play feeling social.",
+    description: "Community now centers on friends, stats visibility, clubhouse posts, and nearby rounds without pulling scoring off course.",
   },
   premium: {
     eyebrow: "Premium and shop",
@@ -12565,7 +12936,7 @@ function renderFirstRoundGuide(state, placement) {
           </article>
           <article>
             <strong>2</strong>
-            <p>Confirm the course and press <strong>Start round</strong>.</p>
+            <p>Confirm the course and tap <strong>Start round</strong>.</p>
           </article>
           <article>
             <strong>3</strong>
@@ -12573,7 +12944,7 @@ function renderFirstRoundGuide(state, placement) {
           </article>
         </div>
         <div class="row-actions">
-          <button class="button primary guided-action" type="button" data-action="nav-view" data-view="round">Start round now</button>
+          <button class="button primary guided-action" type="button" data-action="nav-view" data-view="round">Start Round</button>
           ${renderHelpLink("Open Help Center", "getting-started", true)}
         </div>
       </article>
@@ -12590,7 +12961,7 @@ function renderFirstRoundGuide(state, placement) {
           </div>
           <span class="status-pill">Keep it simple</span>
         </div>
-        <p class="body-copy compact-copy">For the easiest first round, keep stroke play selected, confirm the course, and tap <strong>Start round</strong>.</p>
+        <p class="body-copy compact-copy">For the easiest first round, keep <strong>Strokes</strong> selected, confirm the course, and tap <strong>Start round</strong>.</p>
       </article>
     `;
   }
@@ -13117,6 +13488,261 @@ function renderSummarySpotlight(state, summaryRound) {
   `;
 }
 
+function renderCommunityFeedRows(feedPosts) {
+  if (!feedPosts.length) {
+    return `
+      <div class="empty-state compact-empty-state">
+        <strong>No clubhouse posts yet.</strong>
+        <p>Follow golfers on Home or share your first golf update here.</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="stack-list compact-stack community-feed-stack">
+      ${feedPosts.map((post) => `
+        <article class="community-post-row">
+          <div class="community-post-head">
+            <div class="community-post-main">
+              ${renderAvatarChip(post.avatarLabel)}
+              <div>
+                <strong>${escapeHtml(post.displayName)}</strong>
+                <p>${escapeHtml(post.relationshipLabel)} / ${post.roundsPlayed ? `${post.roundsPlayed} rounds` : "New golfer"} / ${typeof post.averageScore === "number" ? `${post.averageScore.toFixed(1)} avg` : "No average yet"}</p>
+              </div>
+            </div>
+            <span class="community-post-meta">${escapeHtml(formatDateTime(post.createdAt))}</span>
+          </div>
+          <div class="community-post-body">
+            <p>${escapeHtml(post.message)}</p>
+            ${(post.courseName || post.formLabel || post.homeCourse)
+              ? `<p class="community-post-detail">${escapeHtml([post.courseName, post.formLabel || "", post.homeCourse || ""].filter(Boolean).join(" / "))}</p>`
+              : ""}
+          </div>
+          <div class="list-metrics community-post-actions">
+            <button class="button subtle community-button" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(post.profileId)}">View stats</button>
+            ${post.linkUrl
+              ? `<a class="button secondary community-button" href="${escapeHtml(post.linkUrl)}" target="_blank" rel="noreferrer">Open link</a>`
+              : post.isCurrentUser
+                ? `<span class="status-pill">You</span>`
+                : post.isFriend
+                  ? `<button class="button secondary community-button" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(post.profileId)}">Challenge</button>`
+                  : ""}
+          </div>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderCommunityMessagesSection(state) {
+  const inbox = buildDirectMessageInbox(state);
+  const unreadCount = inbox.reduce((sum, entry) => sum + Number(entry.unreadCount || 0), 0);
+  const selectedConversationId = state.session.selectedConversationId || inbox[0]?.id || "";
+  const activeConversation = buildDirectConversationThread(state, selectedConversationId);
+
+  return `
+    <details class="card discovery-card community-section-card" data-persist-key="community-messages">
+      <summary class="community-section-summary">
+        <div>
+          <p class="eyebrow">Messages</p>
+          <h3>Direct chats</h3>
+        </div>
+        <span>${unreadCount ? `${unreadCount} new` : inbox.length || "Open"}</span>
+      </summary>
+      <div class="community-section-body">
+        ${inbox.length
+          ? `
+            <div class="community-message-layout">
+              <div class="stack-list compact-stack community-message-list">
+                ${inbox.map((conversation) => `
+                  <button
+                    class="community-message-row ${conversation.id === selectedConversationId ? "is-active" : ""}"
+                    type="button"
+                    data-action="open-direct-message"
+                    data-conversation-id="${escapeHtml(conversation.id)}"
+                    data-profile-id="${escapeHtml(conversation.peerProfileId || "")}"
+                  >
+                    <div class="community-message-row-main">
+                      ${renderAvatarChip(conversation.avatarLabel || conversation.displayName)}
+                      <div>
+                        <strong>${escapeHtml(conversation.displayName)}</strong>
+                        <p>${escapeHtml(conversation.relationshipLabel)} / ${escapeHtml(conversation.lastMessagePreview)}</p>
+                      </div>
+                    </div>
+                    <div class="community-message-row-meta">
+                      <span>${escapeHtml(formatRelativeSync(conversation.lastMessageAt))}</span>
+                      ${conversation.unreadCount ? `<span class="status-pill">${conversation.unreadCount}</span>` : ""}
+                    </div>
+                  </button>
+                `).join("")}
+              </div>
+              ${activeConversation
+                ? `
+                  <article class="community-message-thread">
+                    <div class="community-message-thread-head">
+                      <div class="community-connection-main">
+                        ${renderAvatarChip(activeConversation.avatarLabel || activeConversation.displayName, "is-large")}
+                        <div>
+                          <strong>${escapeHtml(activeConversation.displayName)}</strong>
+                          <p>${escapeHtml(activeConversation.username)} / ${escapeHtml(activeConversation.relationshipLabel)}</p>
+                        </div>
+                      </div>
+                      <div class="list-metrics">
+                        <button class="button subtle community-button" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(activeConversation.peerProfileId || "")}">View stats</button>
+                        ${activeConversation.isFriend ? `<button class="button secondary community-button" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(activeConversation.peerProfileId || "")}">Challenge</button>` : ""}
+                      </div>
+                    </div>
+                    <div class="community-message-bubbles">
+                      ${activeConversation.messages.map((message) => `
+                        <article class="community-message-bubble ${message.isCurrentUser ? "is-outbound" : "is-inbound"}">
+                          <p>${escapeHtml(message.message)}</p>
+                          <span>${escapeHtml(message.isCurrentUser ? "You" : message.displayName)} / ${escapeHtml(formatDateTime(message.createdAt))}</span>
+                        </article>
+                      `).join("")}
+                    </div>
+                    <form class="community-message-form" data-form="send-direct-message">
+                      <input type="hidden" name="conversationId" value="${escapeHtml(activeConversation.id)}" />
+                      <label>
+                        Message
+                        <textarea name="message" rows="2" placeholder="Send a quick golf message." data-community-message-input></textarea>
+                      </label>
+                      <div class="row-actions compact-actions">
+                        <button class="button primary community-button" type="submit">Send</button>
+                      </div>
+                    </form>
+                  </article>
+                `
+                : `
+                  <div class="empty-state compact-empty-state">
+                    <strong>Open a thread.</strong>
+                    <p>Pick a golfer from the list to keep golf plans and live-round invites in one place.</p>
+                  </div>
+                `}
+            </div>
+          `
+          : `
+            <div class="empty-state compact-empty-state">
+              <strong>No direct chats yet.</strong>
+              <p>Add a friend or follow a golfer, then start a message from their card.</p>
+            </div>
+          `}
+      </div>
+    </details>
+  `;
+}
+
+function renderCommunityConnectionRows(rows, {
+  emptyTitle,
+  emptyCopy,
+  activityMap = new Map(),
+} = {}) {
+  if (!rows.length) {
+    return `
+      <div class="empty-state compact-empty-state">
+        <strong>${escapeHtml(emptyTitle || "No golfers yet.")}</strong>
+        <p>${escapeHtml(emptyCopy || "Use Home to connect with more golfers.")}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="stack-list compact-stack play-list">
+      ${rows.map((entry) => {
+        const activity = activityMap.get(entry.profileId) || null;
+        const statusLine = activity?.statusLabel
+          || entry.recentFormSummary
+          || entry.formLabel
+          || "Public stats ready";
+        const detailLine = [
+          entry.relationshipLabel,
+          entry.roundsPlayed ? `${entry.roundsPlayed} rounds` : "New golfer",
+          typeof entry.averageScore === "number" ? `${entry.averageScore.toFixed(1)} avg` : null,
+          entry.homeCourse || null,
+        ].filter(Boolean).join(" / ");
+
+        return `
+          <article class="list-row play-list-row">
+            <div class="community-connection-main">
+              ${renderAvatarChip(entry.avatarLabel || entry.displayName)}
+              <div>
+                <strong>${escapeHtml(entry.displayName)}</strong>
+                <p>${escapeHtml(statusLine)}</p>
+                <p class="community-connection-detail">${escapeHtml(detailLine)}</p>
+              </div>
+            </div>
+            <div class="list-metrics">
+              ${activity?.canJoin ? `<button class="button secondary community-button" type="button" data-action="quick-join-code" data-code="${escapeHtml(activity.inviteCode)}">Join</button>` : ""}
+              ${(entry.isFriend || entry.isFollowed) ? `<button class="button secondary community-button" type="button" data-action="open-direct-message" data-profile-id="${escapeHtml(entry.profileId)}">Message</button>` : ""}
+              ${!activity?.canJoin && entry.isFriend ? `<button class="button secondary community-button" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(entry.profileId)}">Challenge</button>` : ""}
+              ${!entry.isFriend && !entry.pendingFriendRequest ? `<button class="button subtle community-button" type="button" data-action="request-friend-profile" data-profile-id="${escapeHtml(entry.profileId)}">Add friend</button>` : ""}
+              ${!entry.isFriend && !entry.isFollowed ? `<button class="button subtle community-button" type="button" data-action="toggle-follow-profile" data-profile-id="${escapeHtml(entry.profileId)}">Follow</button>` : ""}
+              <button class="button subtle community-button" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(entry.profileId)}">View stats</button>
+            </div>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderCommunityProfileSpotlight(state, profileId) {
+  const preview = buildCompetitivePreview(state, profileId, state.currentUser.profileId);
+  if (!preview) {
+    return "";
+  }
+
+  return `
+    <details class="card discovery-card community-section-card" data-persist-key="community-spotlight">
+      <summary class="community-section-summary">
+        <div>
+          <p class="eyebrow">Spotlight</p>
+          <h3>${escapeHtml(preview.displayName)}</h3>
+        </div>
+        <span>${escapeHtml(preview.relationshipLabel)}</span>
+      </summary>
+      <div class="community-section-body">
+        <article class="community-spotlight-card">
+          <div class="community-spotlight-head">
+            <div class="community-connection-main">
+              ${renderAvatarChip(preview.avatarLabel, "is-large")}
+              <div>
+                <strong>${escapeHtml(preview.displayName)}</strong>
+                <p>${escapeHtml(preview.username)} / ${escapeHtml(preview.relationshipLabel)}</p>
+              </div>
+            </div>
+            <div class="list-metrics">
+              <button class="button subtle community-button" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(preview.profileId)}">View stats</button>
+              ${canDirectMessageProfile(state, preview.profileId) ? `<button class="button secondary community-button" type="button" data-action="open-direct-message" data-profile-id="${escapeHtml(preview.profileId)}">Message</button>` : ""}
+              ${!preview.isCurrentUser && !preview.isFriend ? `<button class="button secondary community-button" type="button" data-action="request-friend-profile" data-profile-id="${escapeHtml(preview.profileId)}">Add friend</button>` : ""}
+              ${!preview.isCurrentUser && !preview.isFollowed ? `<button class="button subtle community-button" type="button" data-action="toggle-follow-profile" data-profile-id="${escapeHtml(preview.profileId)}">Follow</button>` : ""}
+              ${!preview.isCurrentUser ? `<button class="button secondary community-button" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(preview.profileId)}">Challenge</button>` : ""}
+            </div>
+          </div>
+          <div class="summary-grid compact">
+            <article>
+              <span>Rounds</span>
+              <strong>${preview.roundsPlayed}</strong>
+            </article>
+            <article>
+              <span>Average</span>
+              <strong>${typeof preview.averageScore === "number" ? preview.averageScore.toFixed(1) : "--"}</strong>
+            </article>
+            <article>
+              <span>Best</span>
+              <strong>${preview.bestRound || "--"}</strong>
+            </article>
+            <article>
+              <span>Form</span>
+              <strong>${escapeHtml(preview.formLabel || "Building")}</strong>
+            </article>
+          </div>
+          <p class="community-spotlight-copy">${escapeHtml(preview.recentFormSummary || "Stats and recent form stay visible here as your golf circle grows.")}</p>
+        </article>
+      </div>
+    </details>
+  `;
+}
+
 function renderAvatarChip(label, sizeClass = "") {
   const source = String(label || "GN").trim();
   const compact = source.length <= 2 && !source.includes(" ")
@@ -13594,6 +14220,106 @@ function renderPlayActiveGameCard(state, activeRound) {
     `;
 }
 
+function renderHomeSupportCards(nearby) {
+  const nearbyPlayers = nearby.players || [];
+
+  return `
+    <div class="stack-list compact-stack">
+      <article class="card discovery-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Join</p>
+            <h3>Join a live round</h3>
+          </div>
+          <span class="status-pill">Enter code</span>
+        </div>
+        <form class="inline-form round-join-form community-join-form" data-form="join-code">
+          <label class="inline-grow">
+            Invite code
+            <input name="inviteCode" type="text" placeholder="Enter code" data-home-join-input />
+          </label>
+          <button class="button primary" type="submit">Join</button>
+        </form>
+        <div class="row-actions compact-actions community-action-row">
+          ${renderHelpLink("Joining guide", "playing-round", true)}
+        </div>
+      </article>
+      <article class="card discovery-card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Nearby players</p>
+            <h3>Active golfers now</h3>
+          </div>
+          <span class="status-pill">${nearbyPlayers.length}</span>
+        </div>
+        <div class="community-section-body">
+          ${renderNearbyPlayerRows(nearbyPlayers)}
+        </div>
+      </article>
+      <article class="card">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Fallback</p>
+            <h3>More ways to connect</h3>
+          </div>
+        </div>
+        <div class="summary-grid compact community-summary-grid">
+          <article>
+            <span>Fastest</span>
+            <strong>Join by code</strong>
+          </article>
+          <article>
+            <span>Nearby</span>
+            <strong>Players first</strong>
+          </article>
+          <article>
+            <span>Social</span>
+            <strong>Friends and games</strong>
+          </article>
+        </div>
+        <div class="row-actions empty-state-actions">
+          <button class="button secondary" type="button" data-action="nav-view" data-view="community">Open Community</button>
+          ${renderHelpLink("Shared round guide", "playing-round", true)}
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+function renderCommunityJoinSection(state, activeRound, activeGroup) {
+  const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "";
+  const joinSummary = inviteCode
+    ? `Use a code or share ${inviteCode}`
+    : "Use a code to join";
+
+  return `
+    <details class="card discovery-card community-section-card" data-persist-key="community-join" open>
+      <summary class="community-section-summary">
+        <div>
+          <p class="eyebrow">Join</p>
+          <h3>Join a live round</h3>
+        </div>
+        <span>${escapeHtml(joinSummary)}</span>
+      </summary>
+      <div class="community-section-body">
+        <form class="inline-form round-join-form community-join-form" data-form="join-code">
+          <label class="inline-grow">
+            Invite code
+            <input name="inviteCode" type="text" placeholder="Enter code" data-community-join-input />
+          </label>
+          <button class="button primary community-button" type="submit">Join</button>
+        </form>
+        <div class="row-actions compact-actions community-action-row">
+          ${inviteCode
+            ? `<button class="button secondary community-button" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Share Invite</button>`
+            : ""}
+          ${renderHelpLink("Joining guide", "playing-round", true)}
+        </div>
+      </div>
+    </details>
+  `;
+}
+
 function renderInstallCard(state) {
   if (state.session.installHintDismissed) {
     return "";
@@ -13993,7 +14719,7 @@ function renderSettingsLandingView(state) {
 
   return `
     <section class="view-grid settings-grid settings-grid--landing">
-      <article class="card settings-top-card card-span-3">
+      <article class="card settings-top-card settings-top-card--landing card-span-3">
         <div class="profile-identity-row">
           ${renderAvatarChip(state.currentUser.avatarLabel || state.currentUser.avatar, "is-large")}
           <div>
@@ -14002,23 +14728,11 @@ function renderSettingsLandingView(state) {
             <p>${escapeHtml(state.currentUser.username || "@golfer")} / ${escapeHtml(subscription.tier === "premium" ? "Premium" : "Free")} / ${escapeHtml(provider)}</p>
           </div>
         </div>
-        <div class="summary-grid compact settings-summary-grid">
-          <article>
-            <span>Rounds</span>
-            <strong>${preview?.roundsPlayed || state.currentUser.roundsPlayed || 0}</strong>
-          </article>
-          <article>
-            <span>Average</span>
-            <strong>${formatAverageScore(preview?.averageScore ?? state.currentUser.averageScore)}</strong>
-          </article>
-          <article>
-            <span>Best round</span>
-            <strong>${preview?.bestRound || state.currentUser.bestRound || "--"}</strong>
-          </article>
-          <article>
-            <span>Friends</span>
-            <strong>${relationshipCounts.friends}</strong>
-          </article>
+        <div class="settings-profile-meta">
+          <span class="status-pill">Rounds ${preview?.roundsPlayed || state.currentUser.roundsPlayed || 0}</span>
+          <span class="status-pill">Average ${formatAverageScore(preview?.averageScore ?? state.currentUser.averageScore)}</span>
+          <span class="status-pill">Best ${preview?.bestRound || state.currentUser.bestRound || "--"}</span>
+          <span class="status-pill">Friends ${relationshipCounts.friends}</span>
         </div>
       </article>
       <div class="settings-destination-grid card-span-3">
@@ -14041,16 +14755,15 @@ function renderSettingsDestinationHeader(state, destination) {
   const copy = getSettingsDestinationCopy(destination);
 
   return `
-    <article class="card settings-top-card card-span-3">
-      <div class="profile-identity-row">
-        ${renderAvatarChip(state.currentUser.avatarLabel || state.currentUser.avatar, "is-large")}
-        <div>
+    <article class="card settings-top-card settings-top-card--workspace card-span-3">
+      <div class="settings-destination-head">
+        <button class="button subtle compact-header-button settings-back-button" type="button" data-action="set-settings-destination" data-destination="landing" data-section="account">Back</button>
+        <div class="settings-destination-copy">
           <p class="eyebrow">${escapeHtml(copy.eyebrow)}</p>
           <h3>${escapeHtml(copy.title)}</h3>
           <p class="compact-copy">${escapeHtml(copy.description)}</p>
         </div>
       </div>
-      ${renderSettingsSectionNav(state, destination)}
     </article>
   `;
 }
@@ -14092,7 +14805,14 @@ function renderSettingsDestinationWorkspace(state, destination) {
       ${getSettingsDestination(state) === destination ? "" : "hidden"}
     >
       ${renderSettingsDestinationHeader(state, destination)}
-      ${renderSettingsPanelsForDestination(state, destination)}
+      <div class="settings-workspace">
+        <article class="card settings-nav-card">
+          ${renderSettingsSectionNav(state, destination)}
+        </article>
+        <div class="settings-panel-stack">
+          ${renderSettingsPanelsForDestination(state, destination)}
+        </div>
+      </div>
     </section>
   `;
 }
@@ -14938,15 +15658,15 @@ function renderModeNotes(state, mode) {
 
   return `
     <div class="mode-strip">
-      <span class="status-pill">Mode in play: ${escapeHtml(getGameModeLabel(mode))}</span>
-      <span class="status-pill">${isPremiumSubscription(subscription) ? "Premium modes unlocked" : `${escapeHtml(premiumModes)} unlock with Premium`}</span>
+      <span class="status-pill">Format: ${escapeHtml(getGameModeLabel(mode))}</span>
+      <span class="status-pill">${isPremiumSubscription(subscription) ? "Premium formats unlocked" : `${escapeHtml(premiumModes)} unlock with Premium`}</span>
     </div>
   `;
 }
 
 const ROUND_SETUP_STEP_COPY = [
   { id: "course", label: "Course" },
-  { id: "mode", label: "Game Mode" },
+  { id: "mode", label: "Format" },
   { id: "review", label: "Round Type" },
 ];
 
@@ -15030,7 +15750,7 @@ function renderGameModePicker(state) {
     <div class="round-setup-step-card">
       <div class="round-setup-step-head">
         <p class="eyebrow">Step 2</p>
-        <h4>Choose game mode</h4>
+        <h4>Pick format</h4>
       </div>
       <div class="stack-list round-mode-grid">
         ${modeCards}
@@ -16929,10 +17649,18 @@ function renderCommunityView(state) {
   const nearby = getNearbyDiscoveryState(state);
   const nearbyGames = nearby.games;
   const nearbyPlayers = nearby.players;
-  const friendRows = nearby.friends;
-  const friendLeaderboard = buildFriendLeaderboard(state).slice(0, 4);
+  const friendActivityRows = nearby.friends;
+  const socialCircle = buildFriendLeaderboard(state);
+  const friends = socialCircle.filter((entry) => entry.isFriend);
+  const following = socialCircle.filter((entry) => !entry.isFriend);
+  const friendLeaderboard = socialCircle.slice(0, 4);
+  const directInbox = buildDirectMessageInbox(state);
+  const feedPosts = buildCommunityFeed(state).slice(0, 6);
+  const friendActivityMap = new Map(friendActivityRows.map((entry) => [entry.profileId, entry]));
   const featuredProfileId = state.session.selectedProfileId
     || activeRound?.players.find((player) => !player.userId)?.profileId
+    || friends[0]?.profileId
+    || following[0]?.profileId
     || nearbyPlayers[0]?.profileId
     || state.currentUser.profileId;
   const inviteCode = activeGroup?.inviteCode || activeRound?.inviteCode || "";
@@ -16943,44 +17671,87 @@ function renderCommunityView(state) {
         <div class="section-heading">
           <div>
             <p class="eyebrow">Community</p>
-            <h3>Join and discover</h3>
+            <h3>Golf circle</h3>
           </div>
-          <span class="status-pill">${escapeHtml(inviteCode || "No code yet")}</span>
+          <span class="status-pill">${escapeHtml(directInbox.length ? `${directInbox.length} chats` : friends.length ? `${friends.length} friends` : inviteCode || "Open")}</span>
+        </div>
+        <p class="community-hub-copy">Posts, chats, and live rounds stay in one place.</p>
+        <div class="summary-grid compact community-summary-grid">
+          <article>
+            <span>Friends</span>
+            <strong>${friends.length}</strong>
+          </article>
+          <article>
+            <span>Chats</span>
+            <strong>${directInbox.length}</strong>
+          </article>
+          <article>
+            <span>Nearby games</span>
+            <strong>${nearbyGames.length}</strong>
+          </article>
+        </div>
+        <div class="row-actions compact-actions community-hub-actions">
+          <button class="button primary community-button" type="button" data-action="focus-community-composer">Share update</button>
+          <button class="button secondary community-button" type="button" data-action="invite-friends">Invite friends</button>
         </div>
       </article>
-      <details class="card discovery-card community-section-card" data-persist-key="community-join-options" open>
+      ${renderCommunityJoinSection(state, activeRound, activeGroup)}
+      <details class="card discovery-card community-section-card" data-persist-key="community-feed">
         <summary class="community-section-summary">
           <div>
-            <p class="eyebrow">Join options</p>
-            <h3>Join now</h3>
+            <p class="eyebrow">Clubhouse</p>
+            <h3>Posts from your golf circle</h3>
           </div>
-          <span>Open</span>
+          <span>${feedPosts.length || "Open"}</span>
         </summary>
         <div class="community-section-body">
-          <form class="inline-form round-join-form community-join-form" data-form="join-code">
-            <label class="inline-grow">
-              Invite code
-              <input name="inviteCode" type="text" placeholder="Enter code" />
+          <form class="stack-form compact-form community-composer-card" data-form="create-social-post">
+            <label>
+              Share an update
+              <textarea name="message" rows="3" placeholder="Post a golf thought, round update, or challenge note." data-community-composer></textarea>
             </label>
-            <button class="button primary" type="submit">Join</button>
+            <label>
+              Link
+              <input name="linkUrl" type="text" placeholder="Optional article or video link" />
+            </label>
+            <div class="row-actions compact-actions">
+              <button class="button primary community-button" type="submit">Post</button>
+            </div>
           </form>
-          <div class="row-actions compact-actions community-action-row">
-            ${inviteCode ? `<button class="button secondary" type="button" data-action="copy-invite-code" data-code="${inviteCode}">Invite</button>` : ""}
-            <button class="button subtle" type="button" data-action="invite-friends">Invite golfer</button>
-            ${renderHelpLink("Joining guide", "playing-round", true)}
-          </div>
+          ${renderCommunityFeedRows(feedPosts)}
         </div>
       </details>
-      <details class="card discovery-card community-section-card" data-persist-key="community-nearby-players">
+      ${renderCommunityMessagesSection(state)}
+      <details class="card discovery-card community-section-card" data-persist-key="community-friends">
         <summary class="community-section-summary">
           <div>
-            <p class="eyebrow">Nearby players</p>
-            <h3>Active golfers now</h3>
+            <p class="eyebrow">Friends</p>
+            <h3>Your golf friends</h3>
           </div>
-          <span>${nearbyPlayers.length}</span>
+          <span>${friends.length || "Open"}</span>
         </summary>
         <div class="community-section-body">
-          ${renderNearbyPlayerRows(nearbyPlayers)}
+          ${renderCommunityConnectionRows(friends, {
+            activityMap: friendActivityMap,
+            emptyTitle: "No friends yet.",
+            emptyCopy: "Follow golfers on Home, then add them here to build your circle.",
+          })}
+        </div>
+      </details>
+      ${renderCommunityProfileSpotlight(state, featuredProfileId)}
+      <details class="card discovery-card community-section-card" data-persist-key="community-following">
+        <summary class="community-section-summary">
+          <div>
+            <p class="eyebrow">Following</p>
+            <h3>Golfers you keep up with</h3>
+          </div>
+          <span>${following.length}</span>
+        </summary>
+        <div class="community-section-body">
+          ${renderCommunityConnectionRows(following, {
+            emptyTitle: "No followed golfers yet.",
+            emptyCopy: "Use Home to follow golfers, then their stats and posts will show up here.",
+          })}
         </div>
       </details>
       <details class="card discovery-card community-section-card" data-persist-key="community-nearby-games">
@@ -17002,101 +17773,51 @@ function renderCommunityView(state) {
             `}
         </div>
       </details>
-      <details class="card discovery-card community-section-card" data-persist-key="community-friends">
+      <details class="card discovery-card community-section-card" data-persist-key="community-ranking">
         <summary class="community-section-summary">
           <div>
-            <p class="eyebrow">Friends</p>
-            <h3>People you golf with</h3>
+            <p class="eyebrow">Social ranking</p>
+            <h3>Friends leaderboard</h3>
           </div>
-          <span>${friendRows.length || "Open"}</span>
+          <span>${friendLeaderboard.length || "Open"}</span>
         </summary>
         <div class="community-section-body">
-          ${friendRows.length
+          ${friendLeaderboard.length
             ? `
               <div class="stack-list compact-stack play-list">
-                ${friendRows.map((friend) => `
+                ${friendLeaderboard.map((entry, index) => `
                   <article class="list-row play-list-row">
-                    <div>
-                      <strong>${escapeHtml(friend.displayName)}</strong>
-                      <p>${escapeHtml(friend.statusLabel)}</p>
+                    <div class="community-connection-main">
+                      ${renderAvatarChip(entry.avatarLabel || entry.displayName)}
+                      <div>
+                        <strong>#${index + 1} ${escapeHtml(entry.displayName)}</strong>
+                        <p>${escapeHtml(entry.relationshipLabel)} / ${escapeHtml(entry.formLabel || entry.recentFormSummary || "Building form")}</p>
+                      </div>
                     </div>
                     <div class="list-metrics">
-                      ${friend.canJoin ? `<button class="button secondary" type="button" data-action="quick-join-code" data-code="${friend.inviteCode}">Join</button>` : ""}
-                      ${!friend.canJoin ? `<button class="button secondary" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(friend.profileId)}">Challenge</button>` : ""}
-                      <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(friend.profileId)}">View</button>
+                      <span>${typeof entry.averageScore === "number" ? `${entry.averageScore.toFixed(1)} avg` : "New"}</span>
+                      <button class="button subtle community-button" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(entry.profileId)}">View</button>
+                      <button class="button secondary community-button" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(entry.profileId)}">Challenge</button>
                     </div>
                   </article>
                 `).join("")}
               </div>
             `
-            : `
-              <div class="empty-state compact-empty-state">
-                <strong>No friend activity yet.</strong>
-                <p>Follow golfers here to make repeat rounds faster.</p>
-              </div>
-            `}
+            : renderCompetitionLayerCard(activeRound ? getRoundSummaryForState(state, activeRound) : {
+                friendLeaderboard: {
+                  title: "Friends leaderboard",
+                  entries: nearbyPlayers.slice(0, 3).map((player, index) => ({
+                    rank: index + 1,
+                    name: player.displayName,
+                    relationshipLabel: player.relationshipLabel,
+                    displayStatus: player.isLive ? "Live now" : player.statsSummary,
+                  })),
+                },
+                sideGame: null,
+                tournamentScaffold: null,
+              })}
         </div>
       </details>
-      <article class="card discovery-card">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Social ranking</p>
-            <h3>Friends leaderboard</h3>
-          </div>
-        </div>
-        ${friendLeaderboard.length
-          ? `
-            <div class="stack-list compact-stack play-list">
-              ${friendLeaderboard.map((entry, index) => `
-                <article class="list-row play-list-row">
-                  <div>
-                    <strong>#${index + 1} ${escapeHtml(entry.displayName)}</strong>
-                    <p>${escapeHtml(entry.relationshipLabel)} / ${escapeHtml(entry.formLabel || entry.recentFormSummary || "Building form")}</p>
-                  </div>
-                  <div class="list-metrics">
-                    <span>${typeof entry.averageScore === "number" ? `${entry.averageScore.toFixed(1)} avg` : "New"}</span>
-                    <button class="button subtle" type="button" data-action="select-profile-preview" data-profile-id="${escapeHtml(entry.profileId)}">View</button>
-                    <button class="button secondary" type="button" data-action="challenge-player" data-profile-id="${escapeHtml(entry.profileId)}">Challenge</button>
-                  </div>
-                </article>
-              `).join("")}
-            </div>
-          `
-          : renderCompetitionLayerCard(activeRound ? getRoundSummaryForState(state, activeRound) : {
-              friendLeaderboard: {
-                title: "Friends leaderboard",
-                entries: nearbyPlayers.slice(0, 3).map((player, index) => ({
-                  rank: index + 1,
-                  name: player.displayName,
-                  relationshipLabel: player.relationshipLabel,
-                  displayStatus: player.isLive ? "Live now" : player.statsSummary,
-                })),
-              },
-              sideGame: null,
-              tournamentScaffold: null,
-            })}
-      </article>
-      ${renderCompetitivePreviewCard(state, featuredProfileId, featuredProfileId === state.currentUser.profileId ? "Your public matchup card" : "Selected golfer preview")}
-      <article class="card card-span-2">
-        <div class="summary-grid compact">
-          <article>
-            <span>Fallback</span>
-            <strong>Join by code</strong>
-          </article>
-          <article>
-            <span>Fast path</span>
-            <strong>Nearby games</strong>
-          </article>
-          <article>
-            <span>Player cards</span>
-            <strong>Tap to compare</strong>
-          </article>
-        </div>
-        <p class="body-copy compact-copy">Community keeps joining and discovery in one place so Score can stay focused on setup and scoring.</p>
-        <div class="row-actions empty-state-actions">
-          ${renderHelpLink("Shared round guide", "playing-round", true)}
-        </div>
-      </article>
     </section>
   `;
 }
@@ -17673,6 +18394,10 @@ function applyLocalUiOverrides(state = {}, localUiState = {}) {
     nextState.session.settingsSection = settingsState.section;
   }
 
+  if (typeof localUiState.communityConversationId === "string") {
+    nextState.session.selectedConversationId = localUiState.communityConversationId;
+  }
+
   if (localUiState.courseAdminReview) {
     nextState.course.adminReview = {
       ...getDefaultCourseAdminReviewState(),
@@ -17803,6 +18528,7 @@ function createRenderer(root) {
     appMenuOpen: false,
     settingsDestination: null,
     settingsSection: null,
+    communityConversationId: "",
     roundSetupFieldDrafts: {},
     courseAdminReview: getDefaultCourseAdminReviewState(),
   };
@@ -17839,6 +18565,11 @@ function createRenderer(root) {
       };
     }
 
+    if (Object.prototype.hasOwnProperty.call(patch, "communityConversationId")) {
+      localUiState.communityConversationId = String(patch.communityConversationId || "");
+      shouldRerender = true;
+    }
+
     if (Object.prototype.hasOwnProperty.call(patch, "courseAdminReview")) {
       localUiState.courseAdminReview = {
         ...getDefaultCourseAdminReviewState(),
@@ -17862,6 +18593,7 @@ function createRenderer(root) {
   function getLocalUiState() {
     return {
       ...localUiState,
+      communityConversationId: localUiState.communityConversationId || "",
       roundSetupFieldDrafts: {
         ...(localUiState.roundSetupFieldDrafts || {}),
       },
@@ -18923,6 +19655,52 @@ function bootstrapApp({
         ...getCourseAdminReviewUiState(),
         ...(updates || {}),
       },
+    });
+  };
+
+  const openCommunityMessagesUi = ({ conversationId = "", focusInput = false } = {}) => {
+    updateLocalUi({
+      communityConversationId: String(conversationId || ""),
+    });
+
+    const messagesSection = root.querySelector('[data-persist-key="community-messages"]');
+    if (messagesSection) {
+      root.querySelectorAll(".community-section-card[open]").forEach((section) => {
+        if (section !== messagesSection) {
+          section.open = false;
+        }
+      });
+      messagesSection.open = true;
+    }
+
+    requestAnimationFrame(() => {
+      if (focusInput) {
+        const input = root.querySelector("[data-community-message-input]");
+        if (input && typeof input.focus === "function") {
+          input.focus();
+        }
+      }
+    });
+  };
+
+  const openCommunityJoinUi = ({ focusInput = false } = {}) => {
+    const joinSection = root.querySelector('[data-persist-key="community-join"]');
+    if (joinSection) {
+      root.querySelectorAll(".community-section-card[open]").forEach((section) => {
+        if (section !== joinSection) {
+          section.open = false;
+        }
+      });
+      joinSection.open = true;
+    }
+
+    requestAnimationFrame(() => {
+      if (focusInput) {
+        const input = root.querySelector("[data-community-join-input]");
+        if (input && typeof input.focus === "function") {
+          input.focus();
+        }
+      }
     });
   };
 
@@ -20151,9 +20929,10 @@ function bootstrapApp({
       closeTransientUi();
       store.setState((draft) => {
         setActiveView(draft, "community", "tab");
-        setFeedback(draft, "info", "Join live round", "Enter the code. Score opens right after you join.");
+        setFeedback(draft, "info", "Join live round", "Enter the code here. Score opens right after you join.");
         return draft;
       }, { reason: "open-community-join" });
+      openCommunityJoinUi({ focusInput: true });
       return;
     }
 
@@ -20163,6 +20942,55 @@ function bootstrapApp({
         openHelpView(draft, actionElement.dataset.section);
         return draft;
       }, { reason: "open-help-section" });
+      return;
+    }
+
+    if (action === "focus-community-composer") {
+      closeTransientUi();
+      store.setState((draft) => {
+        setActiveView(draft, "community", "tab");
+        clearFeedback(draft);
+        return draft;
+      }, { reason: "focus-community-composer" });
+      requestAnimationFrame(() => {
+        const input = root.querySelector("[data-community-composer]");
+        if (input && typeof input.focus === "function") {
+          input.focus();
+        }
+      });
+      return;
+    }
+
+    if (action === "open-direct-message") {
+      closeTransientUi();
+      let conversationId = String(actionElement.dataset.conversationId || "");
+      const profileId = String(actionElement.dataset.profileId || "");
+
+      if (profileId) {
+        store.setState((draft) => {
+          setActiveView(draft, "community", "tab");
+          if (profileId) {
+            draft.session.selectedProfileId = profileId;
+          }
+          const result = ensureDirectConversation(draft, profileId);
+          conversationId = result.conversationId || conversationId;
+          if (conversationId) {
+            markDirectConversationRead(draft, conversationId);
+          }
+          return draft;
+        }, { reason: "open-direct-message" });
+      } else if (conversationId) {
+        store.setState((draft) => {
+          setActiveView(draft, "community", "tab");
+          markDirectConversationRead(draft, conversationId);
+          return draft;
+        }, { reason: "open-direct-message" });
+      }
+
+      openCommunityMessagesUi({
+        conversationId,
+        focusInput: true,
+      });
       return;
     }
 
@@ -20449,7 +21277,7 @@ function bootstrapApp({
 
     if (action === "more-round-modes") {
       store.setState((draft) => {
-        setFeedback(draft, "info", "More games later", "This build keeps the core golf formats fast. More variants can fit here later.");
+        setFeedback(draft, "info", "More formats later", "This build keeps the core formats fast. More games can slot in here later.");
         return draft;
       }, { reason: "more-round-modes" });
       return;
@@ -21087,20 +21915,18 @@ function bootstrapApp({
           setFeedback(
             draft,
             "info",
-            result.status === "already-friends" ? "Already friends" : "Friend request already sent",
-            result.status === "already-friends"
-              ? `${profile?.publicProfile?.displayName || "This golfer"} is already in your friend layer.`
-              : `${profile?.publicProfile?.displayName || "This golfer"} already has a pending friend request scaffold.`
+            "Already friends",
+            `${profile?.publicProfile?.displayName || "This golfer"} is already in your golf circle.`
           );
           return draft;
         }
 
-        appendActivity(draft, `${draft.currentUser.displayName} sent a friend request to ${profile?.publicProfile?.displayName || "a golfer"}.`, "profile");
+        appendActivity(draft, `${draft.currentUser.displayName} added ${profile?.publicProfile?.displayName || "a golfer"} as a friend.`, "profile");
         setFeedback(
           draft,
           "success",
-          "Friend request sent",
-          `${profile?.publicProfile?.displayName || "This golfer"} is now on your follow list and ready for future friend acceptance flows.`
+          "Friend added",
+          `${profile?.publicProfile?.displayName || "This golfer"} is now in your golf circle with stats and social updates ready in Community.`
         );
         return draft;
       }, { reason: "request-friend-profile" });
@@ -21882,6 +22708,80 @@ function bootstrapApp({
       return;
     }
 
+    if (formName === "create-social-post") {
+      const rawMessage = String(data.get("message") || "").trim();
+      const rawLinkUrl = String(data.get("linkUrl") || "").trim();
+      const normalizedLinkUrl = rawLinkUrl && !/^https?:\/\//i.test(rawLinkUrl)
+        ? `https://${rawLinkUrl}`
+        : rawLinkUrl;
+
+      if (!rawMessage) {
+        store.setState((draft) => {
+          setFeedback(draft, "info", "Write a post first", "Add a short golf update before posting to Community.");
+          return draft;
+        }, { reason: "create-social-post-empty" });
+        return;
+      }
+
+      store.setState((draft) => {
+        draft.social = {
+          ...(draft.social || {}),
+          posts: [
+            createSocialPost({
+              authorProfileId: draft.currentUser.profileId,
+              message: rawMessage,
+              linkUrl: normalizedLinkUrl,
+              linkLabel: normalizedLinkUrl ? "Open link" : "",
+              courseName: findRound(draft, draft.session.activeRoundId)?.courseName || "",
+            }),
+            ...((draft.social?.posts || []).filter(Boolean)),
+          ].slice(0, 24),
+        };
+        appendActivity(draft, `${draft.currentUser.displayName} posted to Community.`, "profile");
+        setFeedback(draft, "success", "Post shared", "Your golf circle can see this post in Community.");
+        return draft;
+      }, { reason: "create-social-post" });
+      form.reset();
+      return;
+    }
+
+    if (formName === "send-direct-message") {
+      const conversationId = String(data.get("conversationId") || "").trim();
+      const rawMessage = String(data.get("message") || "").trim();
+
+      if (!rawMessage) {
+        store.setState((draft) => {
+          setFeedback(draft, "info", "Write a message first", "Add a short golf message before sending.");
+          return draft;
+        }, { reason: "send-direct-message-empty" });
+        return;
+      }
+
+      let peerProfileId = "";
+      store.setState((draft) => {
+        const result = sendDirectMessage(draft, conversationId, rawMessage);
+        peerProfileId = result.peerProfileId || "";
+        if (!result.changed) {
+          setFeedback(draft, "warning", "Message unavailable", "This conversation could not be updated right now.");
+          return draft;
+        }
+
+        if (peerProfileId) {
+          draft.session.selectedProfileId = peerProfileId;
+        }
+        draft.session.selectedConversationId = conversationId;
+        appendActivity(draft, `${draft.currentUser.displayName} sent a direct message in Community.`, "profile");
+        clearFeedback(draft);
+        return draft;
+      }, { reason: "send-direct-message" });
+      form.reset();
+      openCommunityMessagesUi({
+        conversationId,
+        focusInput: true,
+      });
+      return;
+    }
+
     if (formName === "submit-tester-feedback") {
       const currentState = store.getState();
       const payload = {
@@ -22017,7 +22917,7 @@ function bootstrapApp({
         draft.rounds.unshift(round);
         focusRoundView(draft, round.id, draft.currentUser.profileId, setActiveView);
         draft.session.roundScreenMode = intent === "host" ? "lobby" : "score";
-        appendActivity(draft, `${round.courseName} started in ${(GAME_MODES[round.mode]?.label || "Stroke Play").toLowerCase()}.`, "round");
+      appendActivity(draft, `${round.courseName} started in ${(GAME_MODES[round.mode]?.name || "Stroke Play").toLowerCase()}.`, "round");
         setFeedback(
           draft,
           "success",

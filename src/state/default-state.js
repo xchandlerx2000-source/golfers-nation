@@ -85,6 +85,7 @@ export function createDefaultState() {
       selectedHole: activeWorkspace.userSession.selectedHole,
       roundScreenMode: "setup",
       summaryRoundId: activeWorkspace.userSession.summaryRoundId,
+      selectedConversationId: null,
       lastScoredParticipantId: null,
       lastScoredHole: null,
       lastScorePulseAt: 0,

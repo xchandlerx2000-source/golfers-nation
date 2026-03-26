@@ -1,4 +1,12 @@
-import { createActivity, createGearItem, createPlayerProfile, createRound, createTournament } from "../domain/factories.js";
+import {
+  createActivity,
+  createDirectConversation,
+  createGearItem,
+  createPlayerProfile,
+  createRound,
+  createSocialPost,
+  createTournament,
+} from "../domain/factories.js";
 import { getPendingRoundEvents } from "../domain/round-sync.js";
 import { createIntegrationSettings, createSpotifySessionState } from "../integrations/spotify-service.js";
 import { applyHoleUpdate, getParticipantTotals } from "../domain/scoring.js";
@@ -162,6 +170,18 @@ function profilePlayer(profile) {
     username: profile.publicProfile.username,
     avatarLabel: profile.publicProfile.avatarLabel,
   };
+}
+
+function createSeedConversation(currentProfileId, otherProfileId, messages = [], unreadCurrent = 0) {
+  return createDirectConversation({
+    participantProfileIds: [currentProfileId, otherProfileId],
+    messages,
+    createdAt: messages[0]?.createdAt || Date.now(),
+    unreadByProfileId: {
+      [currentProfileId]: unreadCurrent,
+      [otherProfileId]: 0,
+    },
+  });
 }
 
 function createSelfProfile(account) {
@@ -358,6 +378,48 @@ function createSeededWorkspace(account, options = {}) {
             : "Free account access is active. Premium tools stay cleanly locked until upgrade.",
         }),
       ],
+      posts: [
+        createSocialPost({
+          authorProfileId: account.profileId,
+          message: account.subscription.tier === "premium"
+            ? "Live rounds feel better when the whole group stays in one card."
+            : "Working on cleaner weekend rounds and quicker score entry.",
+          courseName: activeRound.courseName,
+        }),
+        createSocialPost({
+          authorProfileId: "profile-maya",
+          message: "Dialed in the wedges this week. Looking for a live match on Sunday.",
+          linkUrl: "https://www.usga.org/rules-hub.html",
+          linkLabel: "Rules refresher",
+          courseName: "Pebble Beach Golf Links",
+        }),
+        createSocialPost({
+          authorProfileId: "profile-theo",
+          message: "Anybody up for a twilight card? I want a clean 9 before sunset.",
+          courseName: "Shadow Creek Golf Course",
+        }),
+      ],
+      conversations: [
+        createSeedConversation(account.profileId, "profile-theo", [
+          {
+            authorProfileId: "profile-theo",
+            message: "You free for a quick live card this weekend?",
+            createdAt: Date.now() - 1000 * 60 * 100,
+          },
+          {
+            authorProfileId: account.profileId,
+            message: "Yes. Send the code when you're ready.",
+            createdAt: Date.now() - 1000 * 60 * 92,
+          },
+        ]),
+        createSeedConversation(account.profileId, "profile-jordan", [
+          {
+            authorProfileId: "profile-jordan",
+            message: "Dropped the Nassau article in Clubhouse. We should run it next round.",
+            createdAt: Date.now() - 1000 * 60 * 40,
+          },
+        ], 1),
+      ],
     },
     userSession: {
       activeRoundId: activeRound.id,
@@ -385,6 +447,8 @@ export function createEmptyWorkspace(account) {
           message: `${account.displayName} created a Golfers Nation account.`,
         }),
       ],
+      posts: [],
+      conversations: [],
     },
     userSession: {
       activeRoundId: null,
@@ -735,9 +799,9 @@ export function createDefaultAccountState() {
     seasonGoal: "Break 80 in three new states",
     createdAt: Date.now() - 1000 * 60 * 60 * 24 * 160,
     social: {
-      followedProfileIds: ["profile-maya", "profile-theo"],
-      friendProfileIds: ["profile-maya"],
-      pendingFriendProfileIds: ["profile-jordan"],
+      followedProfileIds: ["profile-maya", "profile-theo", "profile-jordan"],
+      friendProfileIds: ["profile-maya", "profile-jordan"],
+      pendingFriendProfileIds: [],
     },
   });
 
@@ -757,7 +821,7 @@ export function createDefaultAccountState() {
     createdAt: Date.now() - 1000 * 60 * 60 * 24 * 220,
     social: {
       followedProfileIds: ["profile-demo-free", "profile-theo"],
-      friendProfileIds: ["profile-demo-free"],
+      friendProfileIds: ["profile-demo-free", "profile-theo"],
     },
   });
 
@@ -874,6 +938,7 @@ export function hydrateActiveAccountState(state) {
     next.session.selectedHole = previewWorkspace.userSession?.selectedHole || 1;
     next.session.summaryRoundId = previewWorkspace.userSession?.summaryRoundId || null;
     next.session.selectedProfileId = previewWorkspace.userSession?.selectedProfileId || previewAccount.profileId;
+    next.session.selectedConversationId = null;
     next.session.roundSetup = {
       ...(next.session.roundSetup || {}),
       ...(previewWorkspace.userSession?.roundSetup || {}),
@@ -954,6 +1019,7 @@ export function loadAccountIntoState(draft, userId) {
   draft.session.selectedHole = workspace.userSession?.selectedHole || 1;
   draft.session.summaryRoundId = workspace.userSession?.summaryRoundId || null;
   draft.session.selectedProfileId = workspace.userSession?.selectedProfileId || account.profileId;
+  draft.session.selectedConversationId = null;
   draft.session.roundSetup = {
     ...(draft.session.roundSetup || {}),
     ...(workspace.userSession?.roundSetup || {}),

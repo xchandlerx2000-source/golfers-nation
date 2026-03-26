@@ -141,6 +141,23 @@ function getCourseReadinessTier({
   return "incomplete";
 }
 
+export function deriveAdvancedGolferToolAvailability(rawCourse = {}, catalogMetadata = {}) {
+  const metadata = rawCourse?.metadata || {};
+  const hasHoleOverlays = Boolean(Array.isArray(rawCourse?.holeOverlays) && rawCourse.holeOverlays.length);
+  const hasGreenComplexes = Boolean(Array.isArray(rawCourse?.greenComplexes) && rawCourse.greenComplexes.length);
+  const gpsReady = Boolean(catalogMetadata.gpsReady);
+  const holeDetailReady = Boolean(catalogMetadata.qualityFlags?.hasRealHoleData || catalogMetadata.holeDetailReady);
+  const routingReady = Boolean(catalogMetadata.routingReady || metadata.routingReady);
+
+  return {
+    courseViewReady: Boolean(metadata.courseViewReady || hasHoleOverlays || holeDetailReady),
+    greenViewReady: Boolean(metadata.greenViewReady || hasGreenComplexes),
+    gpsDistanceReady: gpsReady,
+    clubTrackingReady: Boolean(metadata.clubTrackingReady),
+    holeGuidanceReady: Boolean(metadata.holeGuidanceReady || (gpsReady && (routingReady || holeDetailReady))),
+  };
+}
+
 export function deriveCourseCatalogMetadata(rawCourse = {}, providerId = "us-course-database") {
   const rawTeeRows = getRawCourseTeeRows(rawCourse);
   const rawHoleRows = getRawCourseHoleRows(rawCourse);
@@ -289,6 +306,7 @@ export function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-da
   const slug = rawCourse?.slug || slugifyCourseValue(rawCourse?.id || `${displayName}-${rawCourse?.city || ""}-${rawCourse?.state || ""}`);
   const postalCode = rawCourse?.postalCode || rawCourse?.zip || "";
   const catalogMetadata = deriveCourseCatalogMetadata(rawCourse, providerId);
+  const advancedTools = deriveAdvancedGolferToolAvailability(rawCourse, catalogMetadata);
   const metadata = {
     ...cloneData(rawCourse?.metadata || {}),
     providerId,
@@ -306,6 +324,7 @@ export function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-da
     source: rawCourse?.source || providerId,
     sourceType: rawCourse?.sourceType || rawCourse?.metadata?.sourceType || "seeded-us-database",
     ...catalogMetadata,
+    advancedTools,
     externalIds: cloneData(rawCourse?.externalIds || rawCourse?.metadata?.externalIds || {}),
     providerCourseId: rawCourse?.providerCourseId || rawCourse?.metadata?.providerCourseId || rawCourse?.id || "",
     clubhousePhone: rawCourse?.metadata?.clubhousePhone || "",
@@ -418,6 +437,13 @@ export function createCourseRoundTemplateRecord({
       ...cloneData(course.metadata || {}),
       teeCount: Array.isArray(course.teeBoxes) ? course.teeBoxes.length : 0,
       roundTemplateReady: true,
+      advancedTools: cloneData(course.metadata?.advancedTools || {
+        courseViewReady: false,
+        greenViewReady: false,
+        gpsDistanceReady: false,
+        clubTrackingReady: false,
+        holeGuidanceReady: false,
+      }),
     },
   };
 }
@@ -468,6 +494,13 @@ export function createManualRoundTemplateRecord({
       gpsReady: false,
       routingReady: false,
       holeDetailReady: true,
+      advancedTools: {
+        courseViewReady: false,
+        greenViewReady: false,
+        gpsDistanceReady: false,
+        clubTrackingReady: false,
+        holeGuidanceReady: false,
+      },
     },
   };
 }

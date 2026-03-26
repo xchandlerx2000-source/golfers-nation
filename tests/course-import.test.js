@@ -48,6 +48,10 @@ describe("course import pipeline", () => {
     expect(course.metadata.qualityFlags.hasRealTeeData).toBe(true);
     expect(course.metadata.qualityFlags.hasRealHoleData).toBe(true);
     expect(course.metadata.qualityFlags.hasRealRatingSlope).toBe(true);
+    expect(course.metadata.advancedTools.gpsDistanceReady).toBe(true);
+    expect(course.metadata.advancedTools.courseViewReady).toBe(true);
+    expect(course.metadata.advancedTools.holeGuidanceReady).toBe(true);
+    expect(course.metadata.advancedTools.greenViewReady).toBe(false);
     expect(course.metadata.providerCourseId).toBe("tp-south-1");
   });
 
@@ -163,6 +167,11 @@ describe("course import pipeline", () => {
     expect(course.metadata.qualityFlags.hasRealTeeData).toBe(false);
     expect(course.metadata.qualityFlags.usesFallbackTeeData).toBe(true);
     expect(course.metadata.qualityFlags.usesFallbackHoleData).toBe(true);
+    expect(course.metadata.advancedTools.gpsDistanceReady).toBe(true);
+    expect(course.metadata.advancedTools.courseViewReady).toBe(false);
+    expect(course.metadata.advancedTools.holeGuidanceReady).toBe(false);
+    expect(template.metadata.advancedTools.gpsDistanceReady).toBe(true);
+    expect(template.metadata.advancedTools.clubTrackingReady).toBe(false);
   });
 
   it("emits runtime discovery and detail-shard assets for the imported catalog", async () => {

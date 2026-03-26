@@ -1,5 +1,5 @@
 import { isSideBasedMode } from "../config.js";
-import { createPlayerProfile } from "../domain/factories.js";
+import { createDirectConversation, createDirectMessage, createPlayerProfile } from "../domain/factories.js";
 import {
   buildPerformanceInsights,
   calculateHandicapScaffold,
@@ -293,6 +293,27 @@ function getUniqueSocialIds(value) {
     : [];
 }
 
+function getConversationRecords(state) {
+  return Array.isArray(state?.social?.conversations)
+    ? state.social.conversations.filter(Boolean)
+    : [];
+}
+
+function findDirectConversationRecord(state, conversationId) {
+  return getConversationRecords(state).find((conversation) => conversation.id === conversationId) || null;
+}
+
+function findPeerProfileId(state, conversation) {
+  const currentProfileId = state.currentUser?.profileId;
+  if (!conversation) {
+    return null;
+  }
+
+  return (conversation.participantProfileIds || []).find((profileId) => profileId && profileId !== currentProfileId)
+    || currentProfileId
+    || null;
+}
+
 export function getFollowedProfileIds(state) {
   return getUniqueSocialIds(getCurrentSocialSettings(state).followedProfileIds);
 }
@@ -315,6 +336,14 @@ export function isProfileFriend(state, profileId) {
 
 export function hasPendingFriendRequest(state, profileId) {
   return Boolean(profileId) && getPendingFriendProfileIds(state).includes(profileId);
+}
+
+export function canDirectMessageProfile(state, profileId) {
+  return Boolean(
+    profileId
+    && profileId !== state.currentUser?.profileId
+    && (isProfileFriend(state, profileId) || isProfileFollowed(state, profileId))
+  );
 }
 
 function buildProfileRelationship(state, profileId) {
@@ -458,6 +487,197 @@ export function buildFriendLeaderboard(state) {
     );
 }
 
+export function buildCommunityFeed(state) {
+  const visibleProfileIds = new Set([
+    state.currentUser?.profileId,
+    ...getFriendProfileIds(state),
+    ...getFollowedProfileIds(state),
+  ].filter(Boolean));
+
+  return (state.social?.posts || [])
+    .filter((post) => visibleProfileIds.has(post.authorProfileId))
+    .map((post) => {
+      const preview = buildCompetitivePreview(state, post.authorProfileId, state.currentUser?.profileId) || {};
+      const profile = getProfileById(state, post.authorProfileId);
+
+      return {
+        ...post,
+        profileId: post.authorProfileId,
+        displayName: preview.displayName || profile?.publicProfile?.displayName || "Golfer",
+        username: preview.username || profile?.publicProfile?.username || "@golfer",
+        avatarLabel: preview.avatarLabel || profile?.publicProfile?.avatarLabel || "GN",
+        relationshipLabel: preview.relationshipLabel || (post.authorProfileId === state.currentUser?.profileId ? "You" : "Golf circle"),
+        roundsPlayed: preview.roundsPlayed || profile?.publicProfile?.roundsPlayed || 0,
+        averageScore: preview.averageScore ?? profile?.publicProfile?.averageScore ?? null,
+        formLabel: preview.formLabel || profile?.publicProfile?.formLabel || "",
+        homeCourse: preview.homeCourse || profile?.publicProfile?.homeCourse || "",
+        isCurrentUser: post.authorProfileId === state.currentUser?.profileId,
+        isFriend: Boolean(preview.isFriend),
+        isFollowed: Boolean(preview.isFollowed),
+      };
+    })
+    .sort((left, right) =>
+      Number(right.isCurrentUser) - Number(left.isCurrentUser)
+      || Number(right.isFriend) - Number(left.isFriend)
+      || Number(right.isFollowed) - Number(left.isFollowed)
+      || (right.createdAt || 0) - (left.createdAt || 0)
+    );
+}
+
+export function buildDirectMessageInbox(state) {
+  const currentProfileId = state.currentUser?.profileId;
+
+  return getConversationRecords(state)
+    .filter((conversation) => (conversation.participantProfileIds || []).includes(currentProfileId))
+    .map((conversation) => {
+      const peerProfileId = findPeerProfileId(state, conversation);
+      const preview = buildCompetitivePreview(state, peerProfileId, currentProfileId) || {};
+      const latestMessage = (conversation.messages || []).slice().sort((left, right) => (left.createdAt || 0) - (right.createdAt || 0)).pop() || null;
+
+      return {
+        id: conversation.id,
+        peerProfileId,
+        title: conversation.title || preview.displayName || "Direct message",
+        displayName: preview.displayName || "Golfer",
+        username: preview.username || "@golfer",
+        avatarLabel: preview.avatarLabel || "GN",
+        relationshipLabel: preview.relationshipLabel || "Golf circle",
+        averageScore: preview.averageScore ?? null,
+        roundsPlayed: preview.roundsPlayed || 0,
+        formLabel: preview.formLabel || "",
+        isFriend: Boolean(preview.isFriend),
+        isFollowed: Boolean(preview.isFollowed),
+        lastMessagePreview: latestMessage?.message || "Start the conversation",
+        lastMessageAt: latestMessage?.createdAt || conversation.lastMessageAt || conversation.updatedAt || conversation.createdAt || 0,
+        unreadCount: Number(conversation.unreadByProfileId?.[currentProfileId] || 0),
+        messageCount: Array.isArray(conversation.messages) ? conversation.messages.length : 0,
+      };
+    })
+    .sort((left, right) =>
+      right.unreadCount - left.unreadCount
+      || (right.lastMessageAt || 0) - (left.lastMessageAt || 0)
+      || left.displayName.localeCompare(right.displayName)
+    );
+}
+
+export function buildDirectConversationThread(state, conversationId) {
+  const conversation = findDirectConversationRecord(state, conversationId);
+  if (!conversation) {
+    return null;
+  }
+
+  const currentProfileId = state.currentUser?.profileId;
+  const peerProfileId = findPeerProfileId(state, conversation);
+  const peerPreview = buildCompetitivePreview(state, peerProfileId, currentProfileId) || {};
+
+  return {
+    id: conversation.id,
+    peerProfileId,
+    displayName: peerPreview.displayName || "Golfer",
+    username: peerPreview.username || "@golfer",
+    avatarLabel: peerPreview.avatarLabel || "GN",
+    relationshipLabel: peerPreview.relationshipLabel || "Golf circle",
+    formLabel: peerPreview.formLabel || "",
+    isFriend: Boolean(peerPreview.isFriend),
+    isFollowed: Boolean(peerPreview.isFollowed),
+    messages: (conversation.messages || [])
+      .slice()
+      .sort((left, right) => (left.createdAt || 0) - (right.createdAt || 0))
+      .map((message) => {
+        const authorProfile = getProfileById(state, message.authorProfileId);
+        return {
+          ...message,
+          displayName: authorProfile?.publicProfile?.displayName
+            || (message.authorProfileId === currentProfileId ? state.currentUser?.displayName || state.currentUser?.name || "You" : "Golfer"),
+          avatarLabel: authorProfile?.publicProfile?.avatarLabel
+            || (message.authorProfileId === currentProfileId ? state.currentUser?.avatarLabel || "GN" : "GN"),
+          isCurrentUser: message.authorProfileId === currentProfileId,
+        };
+      }),
+  };
+}
+
+export function ensureDirectConversation(draft, profileId) {
+  if (!canDirectMessageProfile(draft, profileId)) {
+    return { changed: false, status: "not-allowed", conversationId: null };
+  }
+
+  const currentProfileId = draft.currentUser?.profileId;
+  const existing = getConversationRecords(draft).find((conversation) => {
+    const participantProfileIds = getUniqueSocialIds(conversation.participantProfileIds);
+    return participantProfileIds.length === 2
+      && participantProfileIds.includes(currentProfileId)
+      && participantProfileIds.includes(profileId);
+  });
+
+  if (existing) {
+    return { changed: false, status: "existing", conversationId: existing.id };
+  }
+
+  const conversation = createDirectConversation({
+    participantProfileIds: [currentProfileId, profileId],
+  });
+
+  draft.social = {
+    ...(draft.social || {}),
+    conversations: [
+      conversation,
+      ...getConversationRecords(draft),
+    ],
+  };
+
+  return { changed: true, status: "created", conversationId: conversation.id };
+}
+
+export function markDirectConversationRead(draft, conversationId) {
+  const conversation = findDirectConversationRecord(draft, conversationId);
+  if (!conversation) {
+    return false;
+  }
+
+  const currentProfileId = draft.currentUser?.profileId;
+  conversation.unreadByProfileId = {
+    ...(conversation.unreadByProfileId || {}),
+    [currentProfileId]: 0,
+  };
+  conversation.updatedAt = Date.now();
+  return true;
+}
+
+export function sendDirectMessage(draft, conversationId, messageText) {
+  const conversation = findDirectConversationRecord(draft, conversationId);
+  const trimmedMessage = String(messageText || "").trim();
+  if (!conversation || !trimmedMessage) {
+    return { changed: false, conversationId: null, peerProfileId: null };
+  }
+
+  const currentProfileId = draft.currentUser?.profileId;
+  const nextMessage = createDirectMessage({
+    authorProfileId: currentProfileId,
+    message: trimmedMessage,
+  });
+  const peerProfileIds = getUniqueSocialIds(conversation.participantProfileIds)
+    .filter((profileId) => profileId !== currentProfileId);
+
+  conversation.messages = [...(conversation.messages || []), nextMessage].slice(-80);
+  conversation.lastMessageAt = nextMessage.createdAt;
+  conversation.updatedAt = nextMessage.createdAt;
+  conversation.unreadByProfileId = {
+    ...(conversation.unreadByProfileId || {}),
+    [currentProfileId]: 0,
+  };
+
+  peerProfileIds.forEach((profileId) => {
+    conversation.unreadByProfileId[profileId] = Number(conversation.unreadByProfileId?.[profileId] || 0) + 1;
+  });
+
+  return {
+    changed: true,
+    conversationId: conversation.id,
+    peerProfileId: peerProfileIds[0] || null,
+  };
+}
+
 export function toggleFollowProfile(draft, profileId) {
   if (!profileId || profileId === draft.currentUser?.profileId) {
     return { changed: false, isFollowed: false };
@@ -494,23 +714,21 @@ export function requestFriendProfile(draft, profileId) {
   }
 
   const pendingIds = new Set(getUniqueSocialIds(draft.currentUser?.social?.pendingFriendProfileIds));
-  if (pendingIds.has(profileId)) {
-    return { changed: false, status: "pending" };
-  }
-
   const followedIds = new Set(getUniqueSocialIds(draft.currentUser?.social?.followedProfileIds));
+  friendIds.add(profileId);
   followedIds.add(profileId);
-  pendingIds.add(profileId);
+  pendingIds.delete(profileId);
 
   draft.currentUser.social = {
     ...(draft.currentUser.social || {}),
     followedProfileIds: [...followedIds],
+    friendProfileIds: [...friendIds],
     pendingFriendProfileIds: [...pendingIds],
   };
 
   return {
     changed: true,
-    status: "requested",
+    status: "connected",
   };
 }
 
