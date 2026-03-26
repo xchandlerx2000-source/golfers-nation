@@ -312,7 +312,7 @@ function buildRuntimeCatalogArtifacts(catalog = [], sources = []) {
 
 async function writeJsonFile(filePath, payload) {
   await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  await writeFile(filePath, JSON.stringify(payload), "utf8");
 }
 
 function createGeneratedManifestModule(manifest) {

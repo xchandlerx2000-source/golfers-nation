@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 
 import { createCourseRoundTemplateRecord, getDefaultCourseTeeBoxRecord } from "../src/domain/course-models.js";
 import { normalizeImportedCourseSourceRecord, normalizeImportedCourseSourceRecords } from "../src/services/course-normalization.js";
@@ -175,6 +175,8 @@ describe("course import pipeline", () => {
 
     const nearbyIndex = JSON.parse(await readFile(nearbyIndexPath, "utf8"));
     const discoveryIndex = JSON.parse(await readFile(discoveryIndexPath, "utf8"));
+    const nearbyIndexStats = await stat(nearbyIndexPath);
+    const discoveryIndexStats = await stat(discoveryIndexPath);
     const firstShard = JSON.parse(await readFile(firstShardPath, "utf8"));
     const reconciliationReport = JSON.parse(await readFile(reconciliationReportPath, "utf8"));
     const adminOverrides = JSON.parse(await readFile(adminOverridesPath, "utf8"));
@@ -183,8 +185,10 @@ describe("course import pipeline", () => {
     expect(manifest.nearbyIndexPath).toContain("nearby-index.json");
     expect(nearbyIndex.recordCount).toBeGreaterThan(0);
     expect(nearbyIndex.recordCount).toBeLessThanOrEqual(manifest.recordCount);
+    expect(nearbyIndexStats.size).toBeLessThan(25 * 1024 * 1024);
     expect(nearbyIndex.courses[0].detailShard).toBeTruthy();
     expect(discoveryIndex.recordCount).toBe(manifest.recordCount);
+    expect(discoveryIndexStats.size).toBeLessThan(25 * 1024 * 1024);
     expect(manifest.qualitySummary.readinessTiers["basic-round-ready"]).toBeGreaterThan(0);
     expect(manifest.qualitySummary.readinessTiers["rich-round-ready"]).toBeGreaterThan(0);
     expect(manifest.qualitySummary.confidenceTiers.medium).toBeGreaterThan(0);
