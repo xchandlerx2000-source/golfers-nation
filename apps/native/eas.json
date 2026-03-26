@@ -1,0 +1,70 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "environment": "development",
+      "env": {
+        "APP_ENV": "development",
+        "EXPO_PUBLIC_APP_ENV": "development",
+        "EXPO_PUBLIC_RELEASE_CHANNEL": "development",
+        "EXPO_PUBLIC_CRASH_REPORTING": "true"
+      }
+    },
+    "internal": {
+      "distribution": "store",
+      "channel": "internal-alpha",
+      "environment": "preview",
+      "env": {
+        "APP_ENV": "preview",
+        "EXPO_PUBLIC_APP_ENV": "preview",
+        "EXPO_PUBLIC_RELEASE_CHANNEL": "internal-alpha",
+        "EXPO_PUBLIC_CRASH_REPORTING": "true"
+      }
+    },
+    "internal-android": {
+      "extends": "internal",
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "channel": "internal-android"
+    },
+    "sideload-android": {
+      "extends": "internal",
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "sideload-android"
+    },
+    "internal-ios": {
+      "extends": "internal",
+      "channel": "internal-ios"
+    },
+    "production": {
+      "channel": "production",
+      "environment": "production",
+      "env": {
+        "APP_ENV": "production",
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_RELEASE_CHANNEL": "production",
+        "EXPO_PUBLIC_CRASH_REPORTING": "true"
+      }
+    }
+  },
+  "submit": {
+    "internal-android": {
+      "android": {
+        "track": "internal"
+      }
+    },
+    "testflight": {
+      "ios": {}
+    }
+  }
+}

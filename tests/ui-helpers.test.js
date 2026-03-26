@@ -253,6 +253,29 @@ describe("ui helpers", () => {
     expect(markup).toContain('name="selectedCourseId" value="pebble-beach-california"');
   });
 
+  it("shows tee-time CTA on supported web round-setup courses without expanding the flow", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "round";
+    state.rounds = [];
+    state.groups = [];
+    state.session.activeRoundId = null;
+    state.session.roundSetup = {
+      ...state.session.roundSetup,
+      step: "course",
+      courseMethod: "search",
+      courseQuery: "Torrey",
+      selectedCourseId: "torrey-pines-golf-course-la-jolla-ca",
+      selectedTeeBoxId: "torrey-pines-golf-course-la-jolla-ca-black",
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Book Tee Time");
+    expect(markup).toContain("torreypines.com/tee-time-reservations");
+  });
+
   it("keeps score setup focused on round creation instead of community join content", () => {
     const state = createDefaultState();
     state.auth.status = "authenticated";

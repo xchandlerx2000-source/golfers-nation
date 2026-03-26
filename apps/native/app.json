@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Golfers Nation",
+    "slug": "golfers-nation",
+    "scheme": "golfersnation",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.golfersnation.app"
+    },
+    "android": {
+      "package": "com.golfersnation.app"
+    }
+  }
+}

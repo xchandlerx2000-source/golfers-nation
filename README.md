@@ -40,6 +40,20 @@ Do not edit these generated outputs directly:
 
 Those files are build artifacts generated from `src/` and `src/shell/`.
 
+## Development policy
+
+Before adding or changing features, read [DEVELOPMENT_POLICY.md](C:/Users/Bower/OneDrive/Desktop/golf%20nation/DEVELOPMENT_POLICY.md).
+
+That policy defines:
+
+- what must live in shared packages
+- what is native-first
+- what stays web-only
+- when web/native parity is required
+- how features should be classified before coding
+
+Contributors should follow that policy so shared logic stays centralized, native remains the primary product target, and web stays maintained without becoming a second competing product.
+
 ## Run it
 
 1. Install dependencies:

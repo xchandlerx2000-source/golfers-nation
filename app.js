@@ -4830,10 +4830,10 @@ function createRoundCourseSelection(courseId, teeBoxId = "") {
 // Source of truth: data/course-import/**/*.json, data/course-enrichment/**/*.json, and scripts/build-course-catalog.mjs
 const IMPORTED_US_COURSE_CATALOG_MANIFEST = {
   "version": 1,
-  "assetVersion": "3ebaa735347b",
+  "assetVersion": "2f9b459450a3",
   "providerId": "imported-us-course-database",
   "providerLabel": "Imported U.S. course database",
-  "generatedAt": "2026-03-26T06:04:49.354Z",
+  "generatedAt": "2026-03-26T18:33:25.666Z",
   "recordCount": 16284,
   "sourceCount": 4,
   "qualitySummary": {
@@ -4853,8 +4853,8 @@ const IMPORTED_US_COURSE_CATALOG_MANIFEST = {
     "hasRealRatingSlope": 14
   },
   "reconciliationSummary": {
-    "overriddenRecords": 0,
-    "reviewedRecords": 0
+    "overriddenRecords": 5,
+    "reviewedRecords": 5
   },
   "sources": [
     {
@@ -4886,7 +4886,7 @@ const IMPORTED_US_COURSE_CATALOG_MANIFEST = {
       "label": "Admin course overrides",
       "sourceType": "course-admin-override",
       "file": "data/course-admin/course-overrides.json",
-      "recordCount": 0,
+      "recordCount": 5,
       "importedAt": "2026-03-25T00:00:00.000Z"
     }
   ],
@@ -5436,21 +5436,21 @@ async function readJsonAsset(relativePath = "", { manifest = manifestCache } = {
 }
 
 function cacheDiscoveryIndex(courses = []) {
-  discoveryIndexCache = Array.isArray(courses) ? courses : [];
+  discoveryIndexCache = applyCourseCapabilitiesToCatalog(courses);
   discoveryIndexById = new Map(discoveryIndexCache.map((course) => [course.id, course]));
   discoveryIndexError = null;
   return discoveryIndexCache;
 }
 
 function cacheNearbyIndex(courses = []) {
-  nearbyIndexCache = Array.isArray(courses) ? courses : [];
+  nearbyIndexCache = applyCourseCapabilitiesToCatalog(courses);
   nearbyIndexById = new Map(nearbyIndexCache.map((course) => [course.id, course]));
   nearbyIndexError = null;
   return nearbyIndexCache;
 }
 
 function cacheDetailCourses(courses = []) {
-  (Array.isArray(courses) ? courses : []).forEach((course) => {
+  applyCourseCapabilitiesToCatalog(courses).forEach((course) => {
     if (course?.id) {
       detailByIdCache.set(course.id, course);
     }
@@ -5638,7 +5638,7 @@ async function loadCourseDetailShard(shardMeta = null, { manifest = manifestCach
 
   const shardPromise = readJsonAsset(shardMeta.path, { manifest })
     .then((payload) => {
-      const courses = Array.isArray(payload?.courses) ? payload.courses : [];
+      const courses = applyCourseCapabilitiesToCatalog(payload?.courses);
       detailShardCache.set(shardMeta.key, courses);
       cacheDetailCourses(courses);
       return courses;
@@ -15819,6 +15819,21 @@ function renderCourseSelectionLine(course = {}, teeBox = null, options = {}) {
   return escapeHtml(parts.join(" / "));
 }
 
+function renderCourseTeeTimeLink(course = {}) {
+  const teeTimes = course?.metadata?.teeTimes || course?.metadata?.booking || course?.metadata?.capabilities?.teeTimes || {};
+  const url = String(teeTimes?.url || "").trim();
+  if (!Boolean(teeTimes?.enabled) || teeTimes?.mode !== "external-link" || !url) {
+    return "";
+  }
+
+  const label = String(teeTimes?.label || "Book Tee Time").trim() || "Book Tee Time";
+  return `
+    <a class="button subtle" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">
+      ${escapeHtml(label)}
+    </a>
+  `;
+}
+
 function getRoundSetupDiscovery(state, roundSetup = getRoundSetup(state)) {
   return getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {}, {
     rounds: state.rounds,
@@ -15867,6 +15882,7 @@ function renderSelectedCourseSetupCard(course, teeBox, roundSetup = {}, options 
   }
 
   const holeCountOptions = getCourseHoleCountOptions(course);
+  const teeTimeLink = renderCourseTeeTimeLink(course);
   return `
     <article class="course-selected-card" data-selected-course="true">
       <div class="course-selected-copy">
@@ -15897,6 +15913,7 @@ function renderSelectedCourseSetupCard(course, teeBox, roundSetup = {}, options 
           </select>
         </label>
       </div>
+      ${teeTimeLink ? `<div class="row-actions compact-actions">${teeTimeLink}</div>` : ""}
     </article>
   `;
 }
@@ -16032,6 +16049,7 @@ function renderCoursePicker(state) {
             <button class="button subtle" type="button" data-action="skip-course-for-now">
               Skip for now
             </button>
+            ${renderCourseTeeTimeLink(suggestedCourse)}
           </div>
           ${renderCourseSuggestionSection("Recent courses", recentSuggestionCourses, {
             selectedCourseId: selectedCourse?.id,
@@ -16110,6 +16128,7 @@ function renderCoursePicker(state) {
             <button class="button subtle" type="button" data-action="skip-course-for-now">
               Skip for now
             </button>
+            ${renderCourseTeeTimeLink(suggestedCourse)}
           </div>
         </div>
       `;
@@ -16165,6 +16184,7 @@ function renderCoursePicker(state) {
             <button class="button subtle" type="button" data-action="skip-course-for-now">
               Skip for now
             </button>
+            ${renderCourseTeeTimeLink(detectedCourse)}
           </div>
         </div>
       `;

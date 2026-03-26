@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "engines": {
     "node": ">=18"
   },
@@ -19,6 +23,14 @@
     "build:netlify": "node scripts/build-dist-package.mjs",
     "build:cloudflare": "node scripts/build-dist-package.mjs",
     "review:bundle": "node scripts/build-peer-review-bundle.mjs",
+    "native:start": "npm run start --workspace golfers-nation-native",
+    "native:android": "npm run android --workspace golfers-nation-native",
+    "native:ios": "npm run ios --workspace golfers-nation-native",
+    "native:web": "npm run web --workspace golfers-nation-native",
+    "native:build:internal:android": "npm exec --workspace golfers-nation-native eas build --platform android --profile internal-android",
+    "native:build:testflight": "npm exec --workspace golfers-nation-native eas build --platform ios --profile internal-ios",
+    "native:submit:internal:android": "npm exec --workspace golfers-nation-native eas submit --platform android --profile internal-android",
+    "native:submit:testflight": "npm exec --workspace golfers-nation-native eas submit --platform ios --profile testflight",
     "test": "node ./node_modules/vitest/vitest.mjs run tests --pool=threads",
     "test:watch": "node ./node_modules/vitest/vitest.mjs tests --pool=threads",
     "test:e2e": "node -e \"console.log('Playwright setup skipped because browser automation support was not available in the setup environment.')\""

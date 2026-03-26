@@ -1,4 +1,5 @@
 import { IMPORTED_US_COURSE_CATALOG_MANIFEST } from "./course-import/generated/us-course-catalog-manifest.js";
+import { applyCourseCapabilitiesToCatalog } from "@golfers-nation/course";
 
 let manifestCache = IMPORTED_US_COURSE_CATALOG_MANIFEST || {
   nearbyIndexPath: "data/course/nearby-index.json",
@@ -63,21 +64,21 @@ async function readJsonAsset(relativePath = "", { manifest = manifestCache } = {
 }
 
 function cacheDiscoveryIndex(courses = []) {
-  discoveryIndexCache = Array.isArray(courses) ? courses : [];
+  discoveryIndexCache = applyCourseCapabilitiesToCatalog(courses);
   discoveryIndexById = new Map(discoveryIndexCache.map((course) => [course.id, course]));
   discoveryIndexError = null;
   return discoveryIndexCache;
 }
 
 function cacheNearbyIndex(courses = []) {
-  nearbyIndexCache = Array.isArray(courses) ? courses : [];
+  nearbyIndexCache = applyCourseCapabilitiesToCatalog(courses);
   nearbyIndexById = new Map(nearbyIndexCache.map((course) => [course.id, course]));
   nearbyIndexError = null;
   return nearbyIndexCache;
 }
 
 function cacheDetailCourses(courses = []) {
-  (Array.isArray(courses) ? courses : []).forEach((course) => {
+  applyCourseCapabilitiesToCatalog(courses).forEach((course) => {
     if (course?.id) {
       detailByIdCache.set(course.id, course);
     }
@@ -276,7 +277,7 @@ async function loadCourseDetailShard(shardMeta = null, { manifest = manifestCach
 
   const shardPromise = readJsonAsset(shardMeta.path, { manifest })
     .then((payload) => {
-      const courses = Array.isArray(payload?.courses) ? payload.courses : [];
+      const courses = applyCourseCapabilitiesToCatalog(payload?.courses);
       detailShardCache.set(shardMeta.key, courses);
       cacheDetailCourses(courses);
       return courses;

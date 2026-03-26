@@ -1,0 +1,12 @@
+{
+  "name": "@golfers-nation/course",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "dependencies": {
+    "@golfers-nation/core": "*"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  }
+}

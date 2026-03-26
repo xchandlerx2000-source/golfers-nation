@@ -2,6 +2,21 @@
 
 This repo now follows one source-of-truth workflow for review and integration.
 
+## Development policy
+
+Before changing features, read [DEVELOPMENT_POLICY.md](C:/Users/Bower/OneDrive/Desktop/golf%20nation/DEVELOPMENT_POLICY.md).
+
+That policy defines:
+- what must live in shared packages
+- what is native-first
+- what stays web-only
+- when parity is required
+- how features should be classified before coding
+
+For actual feature intake and planning, use:
+- [feature-planning-workflow.md](C:/Users/Bower/OneDrive/Desktop/golf%20nation/docs/feature-planning-workflow.md)
+- [feature-plan-template.md](C:/Users/Bower/OneDrive/Desktop/golf%20nation/docs/feature-plan-template.md)
+
 ## Edit vs generated
 
 - Edit application logic only in `src/`

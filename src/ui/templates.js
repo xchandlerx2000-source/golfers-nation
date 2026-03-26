@@ -3319,6 +3319,21 @@ function renderCourseSelectionLine(course = {}, teeBox = null, options = {}) {
   return escapeHtml(parts.join(" / "));
 }
 
+function renderCourseTeeTimeLink(course = {}) {
+  const teeTimes = course?.metadata?.teeTimes || course?.metadata?.booking || course?.metadata?.capabilities?.teeTimes || {};
+  const url = String(teeTimes?.url || "").trim();
+  if (!Boolean(teeTimes?.enabled) || teeTimes?.mode !== "external-link" || !url) {
+    return "";
+  }
+
+  const label = String(teeTimes?.label || "Book Tee Time").trim() || "Book Tee Time";
+  return `
+    <a class="button subtle" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">
+      ${escapeHtml(label)}
+    </a>
+  `;
+}
+
 function getRoundSetupDiscovery(state, roundSetup = getRoundSetup(state)) {
   return getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {}, {
     rounds: state.rounds,
@@ -3367,6 +3382,7 @@ function renderSelectedCourseSetupCard(course, teeBox, roundSetup = {}, options 
   }
 
   const holeCountOptions = getCourseHoleCountOptions(course);
+  const teeTimeLink = renderCourseTeeTimeLink(course);
   return `
     <article class="course-selected-card" data-selected-course="true">
       <div class="course-selected-copy">
@@ -3397,6 +3413,7 @@ function renderSelectedCourseSetupCard(course, teeBox, roundSetup = {}, options 
           </select>
         </label>
       </div>
+      ${teeTimeLink ? `<div class="row-actions compact-actions">${teeTimeLink}</div>` : ""}
     </article>
   `;
 }
@@ -3532,6 +3549,7 @@ function renderCoursePicker(state) {
             <button class="button subtle" type="button" data-action="skip-course-for-now">
               Skip for now
             </button>
+            ${renderCourseTeeTimeLink(suggestedCourse)}
           </div>
           ${renderCourseSuggestionSection("Recent courses", recentSuggestionCourses, {
             selectedCourseId: selectedCourse?.id,
@@ -3610,6 +3628,7 @@ function renderCoursePicker(state) {
             <button class="button subtle" type="button" data-action="skip-course-for-now">
               Skip for now
             </button>
+            ${renderCourseTeeTimeLink(suggestedCourse)}
           </div>
         </div>
       `;
@@ -3665,6 +3684,7 @@ function renderCoursePicker(state) {
             <button class="button subtle" type="button" data-action="skip-course-for-now">
               Skip for now
             </button>
+            ${renderCourseTeeTimeLink(detectedCourse)}
           </div>
         </div>
       `;

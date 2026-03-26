@@ -1,0 +1,284 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
+import { GAME_MODES } from "@golfers-nation/core";
+import { AppButton } from "../../src/components/AppButton";
+import { Card } from "../../src/components/Card";
+import { LiveStrip } from "../../src/components/LiveStrip";
+import { Screen } from "../../src/components/Screen";
+import { SectionHeader } from "../../src/components/SectionHeader";
+import { colors, radii, spacing } from "../../src/theme";
+import { useAppStore } from "../../src/store/useAppStore";
+
+function CollapsibleSection({ title, summary, open, onToggle, children, danger = false }) {
+  return (
+    <Card>
+      <Pressable onPress={onToggle} style={styles.sectionToggle}>
+        <View style={styles.sectionToggleText}>
+          <Text style={[styles.sectionTitle, danger ? styles.sectionTitleDanger : null]}>{title}</Text>
+          <Text style={styles.sectionSummary}>{summary}</Text>
+        </View>
+        <Text style={styles.sectionChevron}>{open ? "−" : "+"}</Text>
+      </Pressable>
+      {open ? <View style={styles.sectionBody}>{children}</View> : null}
+    </Card>
+  );
+}
+
+export default function ScoreScreen() {
+  const activeRound = useAppStore((state) => state.activeRound);
+  const submitHoleScore = useAppStore((state) => state.submitHoleScore);
+  const goToPreviousHole = useAppStore((state) => state.goToPreviousHole);
+  const leaveRound = useAppStore((state) => state.leaveRound);
+  const getRoundSummary = useAppStore((state) => state.getRoundSummary);
+  const liveSyncStatus = useAppStore((state) => state.liveSyncStatus);
+  const liveSyncNotice = useAppStore((state) => state.liveSyncNotice);
+  const [score, setScore] = useState(4);
+  const [openSection, setOpenSection] = useState("");
+
+  const summary = getRoundSummary();
+  const currentHole = useMemo(() => {
+    if (!activeRound) {
+      return null;
+    }
+
+    return activeRound.holes.find((hole) => hole.number === activeRound.currentHole) || activeRound.holes[0];
+  }, [activeRound]);
+
+  useEffect(() => {
+    if (!currentHole) {
+      return;
+    }
+
+    const ownerEntry = currentHole.entries?.[0];
+    setScore(Number(ownerEntry?.strokes) > 0 ? Number(ownerEntry.strokes) : Math.max(1, currentHole.par || 4));
+  }, [currentHole?.number, currentHole?.entries, currentHole?.par]);
+
+  if (!activeRound || !currentHole) {
+    return (
+      <Screen>
+        <SectionHeader title="Score" subtitle="No round in progress." />
+        <AppButton label="Start Round" onPress={() => router.push("/round/setup")} />
+      </Screen>
+    );
+  }
+
+  const localParticipant = summary?.localParticipant;
+  const scoreSummary = localParticipant?.displayStatus || "NS";
+  const playersSummary = `${activeRound.players.length} golfers`;
+  const leaderboardSummary = summary?.leaderboard?.[0]?.name
+    ? `${summary.leaderboard[0].name} leads`
+    : "Waiting on scores";
+  const finishSummary = activeRound.inviteCode ? "Leave or finish this round" : "Finish or end this round";
+
+  return (
+    <Screen>
+      <SectionHeader title="Score" subtitle={activeRound.courseName} />
+      <LiveStrip
+        live={Boolean(activeRound.inviteCode)}
+        connected={liveSyncStatus === "connected"}
+        players={activeRound.players.length}
+        format={GAME_MODES[activeRound.mode]?.label || "Strokes"}
+        statusLabel={liveSyncStatus === "connected" ? "Connected" : liveSyncStatus === "connecting" ? "Connecting" : "Saved on this phone"}
+      />
+      {liveSyncNotice ? <Text style={styles.notice}>{liveSyncNotice}</Text> : null}
+
+      <Card>
+        <View style={styles.holeHeader}>
+          <View>
+            <Text style={styles.holeLabel}>Hole {currentHole.number}</Text>
+            <Text style={styles.meta}>Par {currentHole.par} • {currentHole.yards} yds</Text>
+          </View>
+          <View style={styles.scoreMeta}>
+            <Text style={styles.scoreMetaLabel}>Card</Text>
+            <Text style={styles.scoreMetaValue}>{scoreSummary}</Text>
+          </View>
+        </View>
+        <View style={styles.scoreRow}>
+          <AppButton label="Prev" variant="secondary" onPress={goToPreviousHole} />
+          <View style={styles.scorePad}>
+            <Text style={styles.scoreValue}>{score}</Text>
+            <View style={styles.scoreAdjust}>
+              <AppButton label="-1" variant="secondary" onPress={() => setScore((value) => Math.max(1, value - 1))} />
+              <AppButton label="+1" variant="secondary" onPress={() => setScore((value) => value + 1)} />
+            </View>
+          </View>
+        </View>
+        <AppButton
+          label="Next Hole"
+          onPress={() => {
+            const result = submitHoleScore(score);
+            if (result.finished) {
+              router.replace("/round/finished");
+            }
+          }}
+        />
+      </Card>
+
+      <CollapsibleSection
+        title="Stats"
+        summary={summary?.momentum?.label || "Round pulse"}
+        open={openSection === "stats"}
+        onToggle={() => setOpenSection((value) => (value === "stats" ? "" : "stats"))}
+      >
+        <Text style={styles.sectionCopy}>{summary?.momentum?.detail || "Momentum builds after a few holes."}</Text>
+        <Text style={styles.sectionCopy}>Putts {summary?.averagePutts ?? "--"} • Holes played {summary?.holesPlayed ?? 0}</Text>
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Players"
+        summary={playersSummary}
+        open={openSection === "players"}
+        onToggle={() => setOpenSection((value) => (value === "players" ? "" : "players"))}
+      >
+        {activeRound.players.map((player) => (
+          <View key={player.id} style={styles.listRow}>
+            <Text style={styles.listName}>{player.name}</Text>
+            <Text style={styles.listMeta}>{player.role}</Text>
+          </View>
+        ))}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Leaderboard"
+        summary={leaderboardSummary}
+        open={openSection === "leaderboard"}
+        onToggle={() => setOpenSection((value) => (value === "leaderboard" ? "" : "leaderboard"))}
+      >
+        {(summary?.leaderboard || []).map((entry, index) => (
+          <View key={entry.id || entry.participantId || `${entry.name}-${index}`} style={styles.listRow}>
+            <Text style={styles.listName}>{index + 1}. {entry.name}</Text>
+            <Text style={styles.listMeta}>{entry.displayStatus || entry.scoreLabel || "--"}</Text>
+          </View>
+        ))}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Finish Round"
+        summary={finishSummary}
+        open={openSection === "finish"}
+        onToggle={() => setOpenSection((value) => (value === "finish" ? "" : "finish"))}
+        danger
+      >
+        <AppButton label="Finish Round" onPress={() => router.replace("/round/finished")} />
+        <AppButton
+          label={activeRound.inviteCode ? "Leave Round" : "End Round"}
+          variant="secondary"
+          onPress={() => {
+            leaveRound();
+            router.replace("/(tabs)/home");
+          }}
+        />
+      </CollapsibleSection>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  notice: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  holeHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: spacing.md,
+  },
+  holeLabel: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: "800",
+  },
+  meta: {
+    color: colors.textMuted,
+    fontSize: 14,
+  },
+  scoreMeta: {
+    alignItems: "flex-end",
+    gap: 2,
+  },
+  scoreMetaLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  scoreMetaValue: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  scoreRow: {
+    gap: spacing.md,
+  },
+  scorePad: {
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  scoreValue: {
+    color: colors.text,
+    fontSize: 56,
+    fontWeight: "900",
+  },
+  scoreAdjust: {
+    width: "100%",
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  sectionToggle: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  sectionToggleText: {
+    flex: 1,
+    gap: 2,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontWeight: "800",
+    fontSize: 16,
+  },
+  sectionTitleDanger: {
+    color: colors.danger,
+  },
+  sectionSummary: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  sectionChevron: {
+    color: colors.text,
+    fontSize: 24,
+    lineHeight: 24,
+    width: 24,
+    textAlign: "center",
+  },
+  sectionBody: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  sectionCopy: {
+    color: colors.textMuted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  listRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  listName: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  listMeta: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+});

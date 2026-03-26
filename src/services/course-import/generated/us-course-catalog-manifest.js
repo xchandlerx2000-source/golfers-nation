@@ -3,10 +3,10 @@
 
 export const IMPORTED_US_COURSE_CATALOG_MANIFEST = {
   "version": 1,
-  "assetVersion": "3ebaa735347b",
+  "assetVersion": "2f9b459450a3",
   "providerId": "imported-us-course-database",
   "providerLabel": "Imported U.S. course database",
-  "generatedAt": "2026-03-26T06:04:49.354Z",
+  "generatedAt": "2026-03-26T18:33:25.666Z",
   "recordCount": 16284,
   "sourceCount": 4,
   "qualitySummary": {
@@ -26,8 +26,8 @@ export const IMPORTED_US_COURSE_CATALOG_MANIFEST = {
     "hasRealRatingSlope": 14
   },
   "reconciliationSummary": {
-    "overriddenRecords": 0,
-    "reviewedRecords": 0
+    "overriddenRecords": 5,
+    "reviewedRecords": 5
   },
   "sources": [
     {
@@ -59,7 +59,7 @@ export const IMPORTED_US_COURSE_CATALOG_MANIFEST = {
       "label": "Admin course overrides",
       "sourceType": "course-admin-override",
       "file": "data/course-admin/course-overrides.json",
-      "recordCount": 0,
+      "recordCount": 5,
       "importedAt": "2026-03-25T00:00:00.000Z"
     }
   ],
