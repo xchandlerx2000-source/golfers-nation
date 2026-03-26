@@ -81,6 +81,7 @@ export function normalizeCourseRecord(rawCourse = {}, providerId = "us-course-da
     + (hasRatings ? 1 : 0)
   ) / 4;
   const metadata = {
+    ...cloneData(rawCourse?.metadata || {}),
     providerId,
     providerLabel: rawCourse?.providerLabel || "",
     region: rawCourse?.region || "",

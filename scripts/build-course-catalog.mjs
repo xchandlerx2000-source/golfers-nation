@@ -1,11 +1,13 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { mergeImportedCourseRowsWithEnrichment } from "../src/services/course-enrichment.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
 const rawImportRoot = path.join(projectRoot, "data", "course-import");
+const rawEnrichmentRoot = path.join(projectRoot, "data", "course-enrichment");
 const generatedModulePath = path.join(projectRoot, "src", "services", "course-import", "generated", "us-course-catalog.js");
 
 function toPosixPath(value = "") {
@@ -64,8 +66,8 @@ function normalizeRawImportDocument(document, filePath) {
   };
 }
 
-async function loadRawImportPayload() {
-  const files = await listJsonFiles(rawImportRoot);
+async function loadRawJsonPayload(rootDirectory) {
+  const files = await listJsonFiles(rootDirectory);
   if (!files.length) {
     return null;
   }
@@ -122,7 +124,7 @@ export const IMPORTED_US_COURSE_ROWS = createBootstrapImportedRows();
 
 function createImportedModule(payload) {
   return `// AUTO-GENERATED FILE. DO NOT EDIT DIRECTLY.
-// Source of truth: data/course-import/**/*.json
+// Source of truth: data/course-import/**/*.json and data/course-enrichment/**/*.json
 
 export const IMPORTED_US_COURSE_SOURCES = ${JSON.stringify(payload.sources, null, 2)};
 
@@ -132,13 +134,23 @@ export const IMPORTED_US_COURSE_ROWS = ${JSON.stringify(payload.rows, null, 2)};
 
 await mkdir(path.dirname(generatedModulePath), { recursive: true });
 
-const payload = await loadRawImportPayload();
-const nextContent = payload?.rows?.length
-  ? createImportedModule(payload)
+const importPayload = await loadRawJsonPayload(rawImportRoot);
+const enrichmentPayload = await loadRawJsonPayload(rawEnrichmentRoot);
+const mergedPayload = importPayload?.rows?.length
+  ? {
+      rows: mergeImportedCourseRowsWithEnrichment(importPayload.rows, enrichmentPayload?.rows || []),
+      sources: [
+        ...(importPayload?.sources || []),
+        ...(enrichmentPayload?.sources || []),
+      ],
+    }
+  : null;
+const nextContent = mergedPayload?.rows?.length
+  ? createImportedModule(mergedPayload)
   : createBootstrapModule();
 
 await writeFile(generatedModulePath, `${nextContent.trim()}\n`, "utf8");
 
-console.log(payload?.rows?.length
-  ? `Course catalog generated from ${payload.sources.length} import source(s).`
+console.log(mergedPayload?.rows?.length
+  ? `Course catalog generated from ${mergedPayload.sources.length} import/enrichment source(s).`
   : "Course catalog generated from seeded bootstrap data.");
