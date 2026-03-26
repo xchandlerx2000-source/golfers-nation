@@ -10,7 +10,7 @@ import { useAppStore } from "../../src/store/useAppStore";
 
 export default function FinishedRoundScreen() {
   const summary = useAppStore((state) => state.getRoundSummary());
-  const leaveRound = useAppStore((state) => state.leaveRound);
+  const finishRound = useAppStore((state) => state.finishRound);
 
   if (!summary) {
     router.replace("/(tabs)/home");
@@ -44,8 +44,8 @@ export default function FinishedRoundScreen() {
         <AppButton label="Review Scores" variant="secondary" onPress={() => router.replace("/(tabs)/score")} />
         <AppButton
           label="Finish Round"
-          onPress={() => {
-            leaveRound();
+          onPress={async () => {
+            await finishRound();
             router.replace("/(tabs)/home");
           }}
         />

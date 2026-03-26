@@ -18,6 +18,22 @@ import {
   STARTER_COURSES,
 } from "../lib/seed-state";
 import {
+  buildCompletedRoundSummaries,
+  normalizeCompletedRounds,
+  summarizeCompletedRounds,
+} from "../lib/round-history";
+import {
+  addFriendProfileId,
+  buildCommunityFeed,
+  buildDirectInbox,
+  buildSocialCircle,
+  buildSocialProfilePreview,
+  createSocialPostRecord,
+  normalizeSocialState,
+  toggleFollowedProfileIds,
+  upsertDirectConversationMessage,
+} from "../lib/social-state";
+import {
   applyRequestPersistenceResult,
   createLocalQueueItems,
   getCloudQueueItems,
@@ -42,6 +58,7 @@ import {
   fetchLiveRoundByCodeNative,
   joinRoundByCodeNative,
   listRequestReviewQueueNative,
+  patchNativeAppSession,
   requestPasswordResetNative,
   revalidateNativeAuthSession,
   restoreNativeAuthSession,
@@ -57,6 +74,10 @@ import {
 
 const DEFAULT_RECOMMENDED_COURSES = getBundledRecommendedCourses(6);
 const DEFAULT_COURSE = DEFAULT_RECOMMENDED_COURSES[0] || STARTER_COURSES[0] || null;
+const DEFAULT_SOCIAL_STATE = normalizeSocialState({
+  currentUser: DEMO_USER,
+  completedRounds: [],
+});
 const LIVE_SYNC_POLL_INTERVAL_MS = 12_000;
 const NATIVE_REALTIME_DEVICE_ID = `native-device-${Date.now()}`;
 
@@ -172,6 +193,10 @@ function createPersistedSession(currentUser, authMode = "local-demo") {
     authMode,
     restoredFrom: "native-storage",
   };
+}
+
+async function persistNativeStoreSession(sessionPatch = {}) {
+  await patchNativeAppSession(sessionPatch);
 }
 
 function getSelectedCourseFromState(state) {
@@ -321,6 +346,11 @@ export const useAppStore = create((set, get) => ({
   courseResultsSource: "starter",
   courseCatalogNotice: "",
   selectedCourse: DEFAULT_COURSE,
+  completedRounds: [],
+  socialProfiles: DEFAULT_SOCIAL_STATE.socialProfiles,
+  socialPosts: DEFAULT_SOCIAL_STATE.socialPosts,
+  socialConversations: DEFAULT_SOCIAL_STATE.socialConversations,
+  socialSettings: DEFAULT_SOCIAL_STATE.socialSettings,
   teeTimeRequests: [],
   courseServiceRequests: [],
   requestReviewQueue: [],
@@ -340,6 +370,14 @@ export const useAppStore = create((set, get) => ({
     set({ bootStatus: "restoring" });
     const restored = await restoreNativeAuthSession();
     if (restored?.signedIn && restored?.currentUser) {
+      const socialState = normalizeSocialState({
+        currentUser: restored.currentUser,
+        completedRounds: restored.completedRounds || [],
+        socialProfiles: restored.socialProfiles,
+        socialPosts: restored.socialPosts,
+        socialConversations: restored.socialConversations,
+        socialSettings: restored.socialSettings,
+      });
       set({
         bootStatus: "ready",
         signedIn: true,
@@ -349,12 +387,23 @@ export const useAppStore = create((set, get) => ({
         authHealthStatus: restored.authMode === "supabase" ? "active" : "local",
         authHealthNotice: restored.authMode === "supabase" ? "Cloud session active." : "Local tester session active.",
         sessionExpiresAt: Number(restored.sessionExpiresAt || 0),
+        completedRounds: normalizeCompletedRounds(restored.completedRounds || []),
+        socialProfiles: socialState.socialProfiles,
+        socialPosts: socialState.socialPosts,
+        socialConversations: socialState.socialConversations,
+        socialSettings: socialState.socialSettings,
+        teeTimeRequests: Array.isArray(restored.teeTimeRequests) ? restored.teeTimeRequests : [],
+        courseServiceRequests: Array.isArray(restored.courseServiceRequests) ? restored.courseServiceRequests : [],
         lastAuthCheckAt: Date.now(),
         authNotice: restored.restoredFrom === "supabase" ? "Session restored." : "",
       });
       return;
     }
 
+    const socialState = normalizeSocialState({
+      currentUser: DEMO_USER,
+      completedRounds: [],
+    });
     set({
       bootStatus: "ready",
       signedIn: false,
@@ -363,12 +412,34 @@ export const useAppStore = create((set, get) => ({
       authHealthStatus: "signed-out",
       authHealthNotice: "",
       sessionExpiresAt: 0,
+      completedRounds: [],
+      socialProfiles: socialState.socialProfiles,
+      socialPosts: socialState.socialPosts,
+      socialConversations: socialState.socialConversations,
+      socialSettings: socialState.socialSettings,
       lastAuthCheckAt: Date.now(),
     });
   },
   signInDemo: async () => {
+    const socialState = normalizeSocialState({
+      currentUser: DEMO_USER,
+      completedRounds: get().completedRounds,
+      socialProfiles: get().socialProfiles,
+      socialPosts: get().socialPosts,
+      socialConversations: get().socialConversations,
+      socialSettings: get().socialSettings,
+    });
     const session = createPersistedSession(DEMO_USER, "local-demo");
-    await writeNativeAppSession(session);
+    await writeNativeAppSession({
+      ...session,
+      socialProfiles: socialState.socialProfiles,
+      socialPosts: socialState.socialPosts,
+      socialConversations: socialState.socialConversations,
+      socialSettings: socialState.socialSettings,
+      completedRounds: get().completedRounds,
+      teeTimeRequests: get().teeTimeRequests,
+      courseServiceRequests: get().courseServiceRequests,
+    });
     set({
       signedIn: true,
       currentUser: DEMO_USER,
@@ -380,6 +451,10 @@ export const useAppStore = create((set, get) => ({
       authHealthStatus: "local",
       authHealthNotice: "Local tester session active.",
       sessionExpiresAt: 0,
+      socialProfiles: socialState.socialProfiles,
+      socialPosts: socialState.socialPosts,
+      socialConversations: socialState.socialConversations,
+      socialSettings: socialState.socialSettings,
       lastAuthCheckAt: Date.now(),
     });
   },
@@ -394,6 +469,14 @@ export const useAppStore = create((set, get) => ({
       return result;
     }
 
+    const socialState = normalizeSocialState({
+      currentUser: result.session.currentUser,
+      completedRounds: get().completedRounds,
+      socialProfiles: get().socialProfiles,
+      socialPosts: get().socialPosts,
+      socialConversations: get().socialConversations,
+      socialSettings: get().socialSettings,
+    });
     set({
       signedIn: true,
       currentUser: result.session.currentUser,
@@ -405,7 +488,25 @@ export const useAppStore = create((set, get) => ({
       authHealthStatus: "active",
       authHealthNotice: "Cloud session active.",
       sessionExpiresAt: Number(result.session.sessionExpiresAt || 0),
+      socialProfiles: socialState.socialProfiles,
+      socialPosts: socialState.socialPosts,
+      socialConversations: socialState.socialConversations,
+      socialSettings: socialState.socialSettings,
       lastAuthCheckAt: Date.now(),
+    });
+    await persistNativeStoreSession({
+      signedIn: true,
+      currentUser: result.session.currentUser,
+      authMode: "supabase",
+      restoredFrom: "supabase",
+      sessionExpiresAt: Number(result.session.sessionExpiresAt || 0),
+      completedRounds: get().completedRounds,
+      socialProfiles: socialState.socialProfiles,
+      socialPosts: socialState.socialPosts,
+      socialConversations: socialState.socialConversations,
+      socialSettings: socialState.socialSettings,
+      teeTimeRequests: get().teeTimeRequests,
+      courseServiceRequests: get().courseServiceRequests,
     });
     return result;
   },
@@ -421,6 +522,14 @@ export const useAppStore = create((set, get) => ({
     }
 
     if (result?.session?.currentUser) {
+      const socialState = normalizeSocialState({
+        currentUser: result.session.currentUser,
+        completedRounds: get().completedRounds,
+        socialProfiles: get().socialProfiles,
+        socialPosts: get().socialPosts,
+        socialConversations: get().socialConversations,
+        socialSettings: get().socialSettings,
+      });
       set({
         signedIn: true,
         currentUser: result.session.currentUser,
@@ -432,7 +541,25 @@ export const useAppStore = create((set, get) => ({
         authHealthStatus: "active",
         authHealthNotice: "Cloud session active.",
         sessionExpiresAt: Number(result.session.sessionExpiresAt || 0),
+        socialProfiles: socialState.socialProfiles,
+        socialPosts: socialState.socialPosts,
+        socialConversations: socialState.socialConversations,
+        socialSettings: socialState.socialSettings,
         lastAuthCheckAt: Date.now(),
+      });
+      await persistNativeStoreSession({
+        signedIn: true,
+        currentUser: result.session.currentUser,
+        authMode: "supabase",
+        restoredFrom: "supabase",
+        sessionExpiresAt: Number(result.session.sessionExpiresAt || 0),
+        completedRounds: get().completedRounds,
+        socialProfiles: socialState.socialProfiles,
+        socialPosts: socialState.socialPosts,
+        socialConversations: socialState.socialConversations,
+        socialSettings: socialState.socialSettings,
+        teeTimeRequests: get().teeTimeRequests,
+        courseServiceRequests: get().courseServiceRequests,
       });
       return result;
     }
@@ -480,11 +607,20 @@ export const useAppStore = create((set, get) => ({
     detachRealtimeSession();
     await signOutNative();
     await clearNativeAppSession();
+    const socialState = normalizeSocialState({
+      currentUser: DEMO_USER,
+      completedRounds: [],
+    });
     set({
       signedIn: false,
       currentUser: null,
       authMode: "local-demo",
       activeRound: null,
+      completedRounds: [],
+      socialProfiles: socialState.socialProfiles,
+      socialPosts: socialState.socialPosts,
+      socialConversations: socialState.socialConversations,
+      socialSettings: socialState.socialSettings,
       teeTimeRequests: [],
       courseServiceRequests: [],
       requestReviewQueue: [],
@@ -512,6 +648,14 @@ export const useAppStore = create((set, get) => ({
     });
 
     if (result.status === "active" && result.currentUser) {
+      const socialState = normalizeSocialState({
+        currentUser: result.currentUser,
+        completedRounds: get().completedRounds,
+        socialProfiles: get().socialProfiles,
+        socialPosts: get().socialPosts,
+        socialConversations: get().socialConversations,
+        socialSettings: get().socialSettings,
+      });
       set({
         signedIn: true,
         currentUser: result.currentUser,
@@ -520,8 +664,26 @@ export const useAppStore = create((set, get) => ({
         authHealthStatus: "active",
         authHealthNotice: result.notice,
         sessionExpiresAt: Number(result.sessionExpiresAt || 0),
+        socialProfiles: socialState.socialProfiles,
+        socialPosts: socialState.socialPosts,
+        socialConversations: socialState.socialConversations,
+        socialSettings: socialState.socialSettings,
         lastAuthCheckAt: Date.now(),
         authNotice: quiet ? get().authNotice : "Session refreshed.",
+      });
+      await persistNativeStoreSession({
+        signedIn: true,
+        currentUser: result.currentUser,
+        authMode: "supabase",
+        restoredFrom: "supabase",
+        sessionExpiresAt: Number(result.sessionExpiresAt || 0),
+        completedRounds: get().completedRounds,
+        socialProfiles: socialState.socialProfiles,
+        socialPosts: socialState.socialPosts,
+        socialConversations: socialState.socialConversations,
+        socialSettings: socialState.socialSettings,
+        teeTimeRequests: get().teeTimeRequests,
+        courseServiceRequests: get().courseServiceRequests,
       });
       return result;
     }
@@ -549,6 +711,14 @@ export const useAppStore = create((set, get) => ({
         sessionExpiresAt: 0,
         lastAuthCheckAt: Date.now(),
         authNotice: result.notice,
+        ...normalizeSocialState({
+          currentUser: DEMO_USER,
+          completedRounds: state.completedRounds,
+          socialProfiles: state.socialProfiles,
+          socialPosts: state.socialPosts,
+          socialConversations: state.socialConversations,
+          socialSettings: state.socialSettings,
+        }),
         liveSyncStatus: state.activeRound?.inviteCode ? "retry-needed" : "idle",
         liveSyncNotice: state.activeRound?.inviteCode
           ? "Cloud session expired. Sign in again to resume live sync."
@@ -726,6 +896,15 @@ export const useAppStore = create((set, get) => ({
         : "Tee time request saved on this phone.",
       authError: "",
     }));
+    await persistNativeStoreSession({
+      completedRounds: get().completedRounds,
+      socialProfiles: get().socialProfiles,
+      socialPosts: get().socialPosts,
+      socialConversations: get().socialConversations,
+      socialSettings: get().socialSettings,
+      teeTimeRequests: get().teeTimeRequests,
+      courseServiceRequests: get().courseServiceRequests,
+    });
 
     return nextRequest;
   },
@@ -783,6 +962,15 @@ export const useAppStore = create((set, get) => ({
         : "Course service request saved on this phone.",
       authError: "",
     }));
+    await persistNativeStoreSession({
+      completedRounds: get().completedRounds,
+      socialProfiles: get().socialProfiles,
+      socialPosts: get().socialPosts,
+      socialConversations: get().socialConversations,
+      socialSettings: get().socialSettings,
+      teeTimeRequests: get().teeTimeRequests,
+      courseServiceRequests: get().courseServiceRequests,
+    });
 
     return nextRequest;
   },
@@ -1023,6 +1211,129 @@ export const useAppStore = create((set, get) => ({
       lastLiveSyncAt: 0,
     });
   },
+  finishRound: async () => {
+    const round = get().activeRound;
+    if (!round) {
+      return null;
+    }
+
+    const completedRound = {
+      ...round,
+      status: "completed",
+      completedAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const completedRounds = normalizeCompletedRounds([
+      completedRound,
+      ...get().completedRounds.filter((entry) => entry.id !== completedRound.id),
+    ]);
+
+    stopLiveSyncLoop();
+    detachRealtimeSession();
+    set({
+      activeRound: null,
+      completedRounds,
+      recentInviteCode: "",
+      joinedCode: "",
+      liveSyncStatus: "idle",
+      liveSyncNotice: "",
+      lastLiveSyncAt: 0,
+    });
+    await persistNativeStoreSession({
+      completedRounds,
+      socialProfiles: get().socialProfiles,
+      socialPosts: get().socialPosts,
+      socialConversations: get().socialConversations,
+      socialSettings: get().socialSettings,
+      teeTimeRequests: get().teeTimeRequests,
+      courseServiceRequests: get().courseServiceRequests,
+    });
+    return completedRound;
+  },
+  toggleFollowProfile: async (profileId) => {
+    const cleanedProfileId = String(profileId || "").trim();
+    if (!cleanedProfileId) {
+      return null;
+    }
+
+    const socialSettings = toggleFollowedProfileIds(get().socialSettings, cleanedProfileId);
+    set({ socialSettings });
+    await persistNativeStoreSession({
+      socialProfiles: get().socialProfiles,
+      socialPosts: get().socialPosts,
+      socialConversations: get().socialConversations,
+      socialSettings,
+      completedRounds: get().completedRounds,
+      teeTimeRequests: get().teeTimeRequests,
+      courseServiceRequests: get().courseServiceRequests,
+    });
+    return socialSettings;
+  },
+  addFriendProfile: async (profileId) => {
+    const cleanedProfileId = String(profileId || "").trim();
+    if (!cleanedProfileId) {
+      return null;
+    }
+
+    const socialSettings = addFriendProfileId(get().socialSettings, cleanedProfileId);
+    set({ socialSettings });
+    await persistNativeStoreSession({
+      socialProfiles: get().socialProfiles,
+      socialPosts: get().socialPosts,
+      socialConversations: get().socialConversations,
+      socialSettings,
+      completedRounds: get().completedRounds,
+      teeTimeRequests: get().teeTimeRequests,
+      courseServiceRequests: get().courseServiceRequests,
+    });
+    return socialSettings;
+  },
+  createSocialPost: async ({ message, linkUrl = "" }) => {
+    const post = createSocialPostRecord(get().currentUser || DEMO_USER, { message, linkUrl });
+    if (!post.message) {
+      return null;
+    }
+
+    const socialPosts = [post, ...get().socialPosts].slice(0, 40);
+    set({
+      socialPosts,
+      authNotice: "Update posted to Clubhouse.",
+      authError: "",
+    });
+    await persistNativeStoreSession({
+      socialProfiles: get().socialProfiles,
+      socialPosts,
+      socialConversations: get().socialConversations,
+      socialSettings: get().socialSettings,
+      completedRounds: get().completedRounds,
+      teeTimeRequests: get().teeTimeRequests,
+      courseServiceRequests: get().courseServiceRequests,
+    });
+    return post;
+  },
+  sendDirectMessage: async (profileId, text) => {
+    const socialConversations = upsertDirectConversationMessage(
+      get().socialConversations,
+      get().currentUser || DEMO_USER,
+      profileId,
+      text
+    );
+    set({
+      socialConversations,
+      authNotice: "Message saved.",
+      authError: "",
+    });
+    await persistNativeStoreSession({
+      socialProfiles: get().socialProfiles,
+      socialPosts: get().socialPosts,
+      socialConversations,
+      socialSettings: get().socialSettings,
+      completedRounds: get().completedRounds,
+      teeTimeRequests: get().teeTimeRequests,
+      courseServiceRequests: get().courseServiceRequests,
+    });
+    return socialConversations;
+  },
   getRoundSummary: () => {
     const round = get().activeRound;
     if (!round) {
@@ -1031,4 +1342,35 @@ export const useAppStore = create((set, get) => ({
 
     return getRoundSummary(round, (get().currentUser || DEMO_USER).id);
   },
+  getCurrentSocialProfile: () => buildSocialProfilePreview({
+    currentUser: get().currentUser || DEMO_USER,
+    socialProfiles: get().socialProfiles,
+    socialSettings: get().socialSettings,
+    profileId: (get().currentUser || DEMO_USER).profileId || (get().currentUser || DEMO_USER).id,
+  }),
+  getSocialProfile: (profileId) => buildSocialProfilePreview({
+    currentUser: get().currentUser || DEMO_USER,
+    socialProfiles: get().socialProfiles,
+    socialSettings: get().socialSettings,
+    profileId,
+  }),
+  getSocialCircle: () => buildSocialCircle({
+    currentUser: get().currentUser || DEMO_USER,
+    socialProfiles: get().socialProfiles,
+    socialSettings: get().socialSettings,
+  }),
+  getCommunityFeed: () => buildCommunityFeed({
+    currentUser: get().currentUser || DEMO_USER,
+    socialProfiles: get().socialProfiles,
+    socialPosts: get().socialPosts,
+    socialSettings: get().socialSettings,
+  }),
+  getDirectInbox: () => buildDirectInbox({
+    currentUser: get().currentUser || DEMO_USER,
+    socialProfiles: get().socialProfiles,
+    socialConversations: get().socialConversations,
+    socialSettings: get().socialSettings,
+  }),
+  getCompletedRoundStats: () => summarizeCompletedRounds(get().completedRounds, (get().currentUser || DEMO_USER).id),
+  getCompletedRoundSummaries: () => buildCompletedRoundSummaries(get().completedRounds, (get().currentUser || DEMO_USER).id),
 }));

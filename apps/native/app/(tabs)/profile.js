@@ -30,6 +30,9 @@ export default function ProfileScreen() {
   const authHealthStatus = useAppStore((state) => state.authHealthStatus);
   const sessionExpiresAt = useAppStore((state) => state.sessionExpiresAt);
   const activeRound = useAppStore((state) => state.activeRound);
+  const completedRoundStats = useAppStore((state) => state.getCompletedRoundStats());
+  const socialCircle = useAppStore((state) => state.getSocialCircle());
+  const communityFeed = useAppStore((state) => state.getCommunityFeed());
   const teeTimeRequests = useAppStore((state) => state.teeTimeRequests);
   const courseServiceRequests = useAppStore((state) => state.courseServiceRequests);
   const signOut = useAppStore((state) => state.signOut);
@@ -55,6 +58,8 @@ export default function ProfileScreen() {
   ]
     .sort((left, right) => right.createdAt - left.createdAt)
     .slice(0, 5);
+  const friendCount = socialCircle.filter((entry) => entry.isFriend).length;
+  const followingCount = socialCircle.filter((entry) => entry.isFollowed).length;
 
   return (
     <Screen scroll>
@@ -81,12 +86,22 @@ export default function ProfileScreen() {
         <InfoRow label="City" value={currentUser?.city || "Not set"} />
         <InfoRow label="Home course" value={currentUser?.homeCourse || "Not set"} />
         <InfoRow label="Handicap" value={currentUser?.handicap ? String(currentUser.handicap) : "--"} />
+        <InfoRow label="Rounds" value={String(completedRoundStats.roundsPlayed || 0)} />
+        <InfoRow label="Average" value={completedRoundStats.averageScore ? String(completedRoundStats.averageScore) : "--"} />
+        <InfoRow label="Best" value={completedRoundStats.bestRound ? String(completedRoundStats.bestRound) : "--"} />
       </Card>
 
       <Card>
         <Text style={styles.sectionTitle}>Build</Text>
         <InfoRow label="Environment" value={runtimeConfig.appEnv} />
         <InfoRow label="Channel" value={runtimeConfig.releaseChannel} />
+      </Card>
+
+      <Card>
+        <Text style={styles.sectionTitle}>Community</Text>
+        <InfoRow label="Friends" value={String(friendCount)} />
+        <InfoRow label="Following" value={String(followingCount)} />
+        <InfoRow label="Clubhouse posts" value={String(communityFeed.length)} />
       </Card>
 
       <Card>
@@ -111,6 +126,7 @@ export default function ProfileScreen() {
       </Card>
 
       <View style={styles.actions}>
+        <AppButton label="View Stats" variant="secondary" onPress={() => router.push("/stats")} />
         <AppButton label="Open Settings" onPress={() => router.push("/settings")} />
         <AppButton
           label="Sign Out"

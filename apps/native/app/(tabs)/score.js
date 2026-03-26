@@ -31,6 +31,15 @@ function CollapsibleSection({ title, summary, open, onToggle, children, danger =
   );
 }
 
+function DetailRow({ label, value }) {
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
+    </View>
+  );
+}
+
 export default function ScoreScreen() {
   const activeRound = useAppStore((state) => state.activeRound);
   const submitHoleScore = useAppStore((state) => state.submitHoleScore);
@@ -88,6 +97,18 @@ export default function ScoreScreen() {
       requestType,
       latest: getLatestCourseServiceRequest(courseServiceRequests, activeRound.courseId, requestType),
     }));
+  const scorecardRows = activeRound.holes
+    .map((hole) => {
+      const ownerEntry = hole.entries?.[0];
+      return {
+        number: hole.number,
+        par: hole.par,
+        strokes: Number(ownerEntry?.strokes) > 0 ? Number(ownerEntry.strokes) : null,
+      };
+    })
+    .filter((hole) => hole.strokes !== null)
+    .slice(-9);
+  const roundDetailsSummary = activeRound.teeBox || activeRound.weather || "Round details";
 
   return (
     <Screen>
@@ -144,6 +165,24 @@ export default function ScoreScreen() {
       </CollapsibleSection>
 
       <CollapsibleSection
+        title="Scorecard"
+        summary={scorecardRows.length ? `${scorecardRows.length} scored holes` : "Waiting on the first score"}
+        open={openSection === "scorecard"}
+        onToggle={() => setOpenSection((value) => (value === "scorecard" ? "" : "scorecard"))}
+      >
+        {scorecardRows.length ? (
+          scorecardRows.map((hole) => (
+            <View key={hole.number} style={styles.listRow}>
+              <Text style={styles.listName}>Hole {hole.number}</Text>
+              <Text style={styles.listMeta}>Par {hole.par} / Score {hole.strokes}</Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.sectionCopy}>Scores start showing here as soon as the card is underway.</Text>
+        )}
+      </CollapsibleSection>
+
+      <CollapsibleSection
         title="Players"
         summary={playersSummary}
         open={openSection === "players"}
@@ -155,6 +194,21 @@ export default function ScoreScreen() {
             <Text style={styles.listMeta}>{player.role}</Text>
           </View>
         ))}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Round Details"
+        summary={roundDetailsSummary}
+        open={openSection === "details"}
+        onToggle={() => setOpenSection((value) => (value === "details" ? "" : "details"))}
+      >
+        <DetailRow label="Course" value={activeRound.courseName} />
+        <DetailRow label="Tee" value={activeRound.teeBox || "--"} />
+        <DetailRow label="Weather" value={activeRound.weather || "--"} />
+        <DetailRow label="Rating" value={activeRound.courseRating ? String(activeRound.courseRating) : "--"} />
+        <DetailRow label="Slope" value={activeRound.courseSlope ? String(activeRound.courseSlope) : "--"} />
+        <DetailRow label="Invite code" value={activeRound.inviteCode || "Local round"} />
+        <DetailRow label="Sync" value={activeRound.sync?.label || "Offline-first"} />
       </CollapsibleSection>
 
       <CollapsibleSection
@@ -347,5 +401,24 @@ const styles = StyleSheet.create({
   serviceCopy: {
     flex: 1,
     gap: 2,
+  },
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  detailLabel: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  detailValue: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "600",
+    flexShrink: 1,
+    textAlign: "right",
   },
 });

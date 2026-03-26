@@ -32,6 +32,11 @@ describe("native app store", () => {
       courseResultsSource: "starter",
       courseCatalogNotice: "",
       selectedCourse: useAppStore.getInitialState().selectedCourse,
+      completedRounds: [],
+      socialProfiles: useAppStore.getInitialState().socialProfiles,
+      socialPosts: useAppStore.getInitialState().socialPosts,
+      socialConversations: useAppStore.getInitialState().socialConversations,
+      socialSettings: useAppStore.getInitialState().socialSettings,
       teeTimeRequests: [],
       courseServiceRequests: [],
       requestReviewQueue: [],
@@ -176,5 +181,60 @@ describe("native app store", () => {
 
     expect(result.error.message).toBe("Enter your email first.");
     expect(useAppStore.getState().authError).toBe("Enter your email first.");
+  });
+
+  it("finishes a round into completed history and exposes stats", async () => {
+    await useAppStore.getState().startSoloRound();
+    const activeRound = useAppStore.getState().activeRound;
+    const completedRound = {
+      ...activeRound,
+      holes: activeRound.holes.map((hole) => ({
+        ...hole,
+        entries: hole.entries.map((entry, index) =>
+          index === 0
+            ? { ...entry, strokes: hole.par, updatedAt: Date.now() }
+            : entry
+        ),
+      })),
+    };
+    useAppStore.setState({ activeRound: completedRound });
+
+    await useAppStore.getState().finishRound();
+
+    expect(useAppStore.getState().activeRound).toBeNull();
+    expect(useAppStore.getState().completedRounds.length).toBe(1);
+    expect(useAppStore.getState().getCompletedRoundStats().roundsPlayed).toBe(1);
+  });
+
+  it("creates native social posts and direct messages that persist in store state", async () => {
+    await useAppStore.getState().signInDemo();
+    const circle = useAppStore.getState().getSocialCircle();
+
+    expect(circle.length).toBeGreaterThan(0);
+
+    await useAppStore.getState().createSocialPost({
+      message: "Testing the Clubhouse post flow.",
+      linkUrl: "",
+    });
+    await useAppStore.getState().sendDirectMessage(circle[0].id, "You free for a round this week?");
+
+    const feed = useAppStore.getState().getCommunityFeed();
+    const inbox = useAppStore.getState().getDirectInbox();
+
+    expect(feed[0]?.message).toBe("Testing the Clubhouse post flow.");
+    expect(inbox[0]?.messages[inbox[0].messages.length - 1]?.text).toBe("You free for a round this week?");
+  });
+
+  it("promotes followed golfers to friends and exposes their preview state", async () => {
+    await useAppStore.getState().signInDemo();
+    const target = useAppStore.getState().getSocialCircle()[0];
+
+    await useAppStore.getState().toggleFollowProfile(target.id);
+    await useAppStore.getState().addFriendProfile(target.id);
+
+    const preview = useAppStore.getState().getSocialProfile(target.id);
+
+    expect(preview.isFriend).toBe(true);
+    expect(preview.isFollowed).toBe(true);
   });
 });

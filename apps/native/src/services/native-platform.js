@@ -280,6 +280,16 @@ export async function writeNativeAppSession(session) {
   await writeItem(APP_SESSION_KEY, JSON.stringify(session || null));
 }
 
+export async function patchNativeAppSession(patch = {}) {
+  const current = (await readNativeAppSession()) || {};
+  const nextSession = {
+    ...current,
+    ...patch,
+  };
+  await writeNativeAppSession(nextSession);
+  return nextSession;
+}
+
 export async function clearNativeAppSession() {
   await removeItem(APP_SESSION_KEY);
 }
