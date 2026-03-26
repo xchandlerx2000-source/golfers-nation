@@ -3860,6 +3860,9 @@ function renderLiveRoundLobby(state, round, group) {
             <button class="button secondary" type="button" data-action="start-live-scoring">
               Start Scoring
             </button>
+            <button class="button subtle" type="button" data-action="end-round" data-round-id="${round.id}">
+              Leave Round
+            </button>
           </div>
         </article>
       </div>
@@ -3889,6 +3892,7 @@ function renderRoundFinishDrawer(state, round) {
   const progress = getRoundProgress(round);
   const summary = getRoundSummaryForState(state, round);
   const canFinish = progress.completedHoles > 0;
+  const isLiveRound = Boolean(round?.inviteCode || round?.sync?.transport !== "local");
   const saveInProgress = state.session?.cloudSync?.status === "syncing"
     && state.session?.cloudSync?.scope === "round-finish"
     && state.session?.cloudSync?.roundId === round.id;
@@ -3906,6 +3910,7 @@ function renderRoundFinishDrawer(state, round) {
         </div>
         <div class="finish-actions">
           <button class="button primary finish-button" type="button" data-action="finish-round" data-round-id="${round.id}" ${canFinish && !saveInProgress ? "" : "disabled"}>${saveInProgress ? "Saving..." : "Finish"}</button>
+          <button class="button subtle finish-button-secondary" type="button" data-action="end-round" data-round-id="${round.id}">${isLiveRound ? "Leave Round" : "End Round"}</button>
         </div>
       </div>
     </details>

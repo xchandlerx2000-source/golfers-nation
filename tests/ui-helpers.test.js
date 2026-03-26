@@ -558,8 +558,52 @@ describe("ui helpers", () => {
     const markup = renderAppTemplate(state);
 
     expect(markup).toContain("Finish");
+    expect(markup).toContain("End Round");
     expect(markup).toContain("0/18 played");
     expect(markup).toContain(`data-action="finish-round" data-round-id="${state.rounds[0].id}" disabled`);
+    expect(markup).toContain(`data-action="end-round" data-round-id="${state.rounds[0].id}"`);
+  });
+
+  it("shows leave round in the live lobby and finish drawer for hosted rounds", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Live Exit",
+      email: "liveexit@example.com",
+      password: "swing123",
+    });
+
+    loadAccountIntoState(state, created.account.id);
+    state.session.activeView = "round";
+    state.rounds.unshift(
+      createRound({
+        currentUser: state.currentUser,
+        courseName: "The Country Club at Golden Nugget",
+        teeBox: "Gold",
+        weather: "Humid 79F",
+        mode: "stroke",
+        players: [state.currentUser.name, "Maya Chen"],
+        syncTransport: "invite",
+        inviteCode: "ABC123",
+      })
+    );
+    state.rounds[0].groupId = "group-1";
+    state.groups.unshift({
+      id: "group-1",
+      roundId: state.rounds[0].id,
+      inviteCode: "ABC123",
+      members: [
+        { id: "member-1", userId: state.currentUser.id, profileId: state.currentUser.profileId, displayName: state.currentUser.name, role: "host", connectionState: "ready" },
+        { id: "member-2", userId: "friend-1", profileId: "profile-friend-1", displayName: "Maya Chen", role: "player", connectionState: "connected" },
+      ],
+      feed: [],
+    });
+    state.session.activeRoundId = state.rounds[0].id;
+    state.session.roundScreenMode = "lobby";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain('data-action="end-round"');
+    expect(markup).toContain("Leave Round");
   });
 
   it("shows retry guidance when a cloud round save has failed", () => {

@@ -70,6 +70,7 @@ import {
 import { createDefaultState } from "./state/default-state.js";
 import {
   collectPendingRoundEvents,
+  endRound,
   findRound,
   finishRound,
   getNextIncompleteHoleNumber,
@@ -2093,6 +2094,14 @@ export function bootstrapApp({
           successFeedback: true,
         });
       }
+      return;
+    }
+
+    if (action === "end-round") {
+      store.setState((draft) => {
+        endRound(draft, actionElement.dataset.roundId, platform.data, setActiveView);
+        return draft;
+      }, { reason: "end-round" });
       return;
     }
 

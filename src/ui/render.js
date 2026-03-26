@@ -203,6 +203,7 @@ const HARD_RESET_RENDER_REASONS = new Set([
   "join-code",
   "resume-round",
   "finish-round",
+  "end-round",
   "auth-login",
   "auth-signup",
   "sign-out",

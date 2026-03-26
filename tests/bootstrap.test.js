@@ -585,6 +585,74 @@ describe("bootstrap app", () => {
     result.destroy();
   });
 
+  it("ends a local round without adding it to history", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Mistake Fixer",
+      email: "mistake@example.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    openRoundWizardForLocalRound();
+    document.querySelector('[data-action="skip-course-for-now"]').click();
+    chooseRoundMode("stroke");
+
+    const form = document.querySelector('[data-form="create-round"]');
+    form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="local"]'));
+
+    document.querySelector('[data-persist-key^="round-finish-"]').open = true;
+    document.querySelector('[data-action="end-round"]').click();
+
+    const currentState = result.store.getState();
+    expect(currentState.session.activeView).toBe("home");
+    expect(currentState.session.activeRoundId).toBeNull();
+    expect(currentState.rounds.some((round) => round.status === "completed")).toBe(false);
+    expect(currentState.session.feedback.title).toBe("Round ended");
+
+    result.destroy();
+  });
+
+  it("leaves a live round locally without completing it for everyone", () => {
+    const state = createDefaultState();
+    const created = createEmailAccount(state, {
+      displayName: "Live Leaver",
+      email: "leave@example.com",
+      password: "swing123",
+    });
+    loadAccountIntoState(state, created.account.id);
+    persistState(prepareStateForPersistence(state));
+
+    const result = bootstrapApp({
+      root: document.querySelector("#app"),
+      timeoutMs: 50,
+    });
+
+    openRoundWizardForLocalRound();
+    document.querySelector('[data-action="skip-course-for-now"]').click();
+    chooseRoundMode("stroke");
+
+    const form = document.querySelector('[data-form="create-round"]');
+    form.requestSubmit(form.querySelector('button[type="submit"][name="intent"][value="host"]'));
+
+    document.querySelector('[data-action="end-round"]').click();
+
+    const currentState = result.store.getState();
+    expect(currentState.session.activeView).toBe("home");
+    expect(currentState.session.activeRoundId).toBeNull();
+    expect(currentState.rounds.length).toBe(0);
+    expect(currentState.groups.length).toBe(0);
+    expect(currentState.session.feedback.title).toBe("You left the round");
+
+    result.destroy();
+  });
+
   it("preserves scroll position during in-round score actions", () => {
     const state = createDefaultState();
     const created = createEmailAccount(state, {

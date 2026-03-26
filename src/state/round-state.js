@@ -458,3 +458,74 @@ export function finishRound(draft, roundId, dataGateway, setActiveView) {
   dataGateway.saveWorkspace(draft, draft.currentUser.id);
   return round.id;
 }
+
+function removeRoundArtifacts(draft, round) {
+  if (!round) {
+    return;
+  }
+
+  draft.rounds = (draft.rounds || []).filter((entry) => entry.id !== round.id);
+  draft.groups = (draft.groups || []).filter((group) =>
+    group.roundId !== round.id
+      && group.id !== round.groupId
+      && (!round.inviteCode || group.inviteCode !== round.inviteCode)
+  );
+
+  if (draft.session.summaryRoundId === round.id) {
+    draft.session.summaryRoundId = null;
+  }
+}
+
+function isLiveRound(round, group) {
+  return Boolean(
+    group?.inviteCode
+      || round?.inviteCode
+      || (round?.sync?.transport && round.sync.transport !== "local")
+  );
+}
+
+export function endRound(draft, roundId, dataGateway, setActiveView) {
+  const round = (draft?.rounds || []).find((item) => item.id === roundId) || null;
+  if (!round) {
+    return null;
+  }
+
+  const group = (draft?.groups || []).find((entry) =>
+    entry.roundId === round.id
+      || entry.id === round.groupId
+      || (round.inviteCode && entry.inviteCode === round.inviteCode)
+  ) || null;
+  const liveRound = isLiveRound(round, group);
+  const courseName = round.courseName || "This round";
+
+  removeRoundArtifacts(draft, round);
+
+  draft.session.activeRoundId = null;
+  draft.session.selectedHole = 1;
+  draft.session.lastScoredParticipantId = null;
+  draft.session.roundScreenMode = "setup";
+  draft.session.selectedProfileId = draft.currentUser.profileId;
+  setActiveView(draft, "home", "tab");
+
+  appendActivity(
+    draft,
+    liveRound
+      ? `${draft.currentUser.displayName} left ${courseName}.`
+      : `${courseName} was ended before finishing.`,
+    "round"
+  );
+  setFeedback(
+    draft,
+    "info",
+    liveRound ? "You left the round" : "Round ended",
+    liveRound
+      ? `${courseName} was removed from this phone. Other golfers can keep playing.`
+      : `${courseName} was removed from this phone and will not be added to round history.`
+  );
+
+  refreshProfileSnapshots(draft);
+  syncCurrentUserProfile(draft);
+  dataGateway.saveWorkspace(draft, draft.currentUser.id);
+
+  return round.id;
+}
