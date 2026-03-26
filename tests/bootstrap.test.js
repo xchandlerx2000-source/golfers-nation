@@ -678,17 +678,57 @@ describe("bootstrap app", () => {
     const scrollHost = document.scrollingElement || document.documentElement;
     scrollHost.scrollTop = 240;
 
-    document.querySelector('[data-action="adjust-score"][data-direction="1"]').click();
+      document.querySelector('[data-action="adjust-score"][data-direction="1"]').click();
 
-    expect((document.scrollingElement || document.documentElement).scrollTop).toBe(240);
+      expect((document.scrollingElement || document.documentElement).scrollTop).toBe(240);
 
-    result.destroy();
-  });
+      result.destroy();
+    });
 
-  it("keeps score accordions open after in-place score edits", () => {
-    const state = createDefaultState();
-    const created = createEmailAccount(state, {
-      displayName: "Accordion Tester",
+    it("moves to a finished round state after the last hole is scored", () => {
+      const state = createDefaultState();
+      const created = createEmailAccount(state, {
+        displayName: "Closer Finisher",
+        email: "closer@example.com",
+        password: "swing123",
+      });
+      loadAccountIntoState(state, created.account.id);
+      state.session.activeView = "round";
+      state.rounds.unshift(
+        createRound({
+          currentUser: state.currentUser,
+          courseName: "Torrey Pines Golf Course",
+          teeBox: "Championship",
+          weather: "Clear 72F",
+          mode: "stroke",
+          players: [state.currentUser.name],
+        })
+      );
+      state.rounds[0].holes.slice(0, 17).forEach((hole) => {
+        hole.entries[0].strokes = 4;
+      });
+      state.session.activeRoundId = state.rounds[0].id;
+      state.session.selectedHole = 18;
+      persistState(prepareStateForPersistence(state));
+
+      const result = bootstrapApp({
+        root: document.querySelector("#app"),
+        timeoutMs: 50,
+      });
+
+      document.querySelector('[data-action="adjust-score"][data-hole="18"][data-direction="1"]').click();
+
+      expect(result.store.getState().session.roundScreenMode).toBe("finished");
+      expect(document.body.textContent).toContain("Round complete");
+      expect(document.body.textContent).toContain("Review Scores");
+
+      result.destroy();
+    });
+
+    it("keeps score accordions open after in-place score edits", () => {
+      const state = createDefaultState();
+      const created = createEmailAccount(state, {
+        displayName: "Accordion Tester",
       email: "accordion@test.com",
       password: "swing123",
     });

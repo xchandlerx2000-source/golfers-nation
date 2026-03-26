@@ -33,6 +33,7 @@ import {
 } from "../services/course-service.js";
 import { buildCompetitivePreview, buildFriendLeaderboard, buildPlayerComparison, getCurrentProfile, getProfileById, getProfileForPlayer } from "../services/player-service.js";
 import { renderSpotifySettingsPanel } from "./spotify-controls.js";
+import { getPreferredRoundScreenMode } from "../state/round-state.js";
 
 const PREMIUM_FEATURES = new Set([
   "advanced-stats",
@@ -4121,6 +4122,64 @@ function renderLiveRoundLobby(state, round, group) {
         </article>
       </div>
     </section>
+    `;
+}
+
+function renderFinishedRoundView(state, round) {
+  const summary = getRoundSummaryForState(state, round);
+  const leader = summary.leaderboard[0] || null;
+  const localEntry = summary.localParticipant || leader || null;
+  const saveInProgress = state.session?.cloudSync?.status === "syncing"
+    && state.session?.cloudSync?.scope === "round-finish"
+    && state.session?.cloudSync?.roundId === round.id;
+  const headline = leader?.isLocal
+    ? "You won"
+    : leader
+      ? `${summary.winnerLabel} wins`
+      : "Round complete";
+  const closingLine = leader
+    ? `${summary.winnerLabel} closes out ${round.courseName} in ${summary.roundLabel}.`
+    : `${round.courseName} is ready for final results.`;
+
+  return `
+    <section class="view-grid round-grid round-grid-live round-grid-live--score">
+      <div class="round-main-column round-main-column--score">
+        <article class="card round-card round-finished-card">
+          <div class="round-finished-hero">
+            <span class="status-pill round-finished-pill">Round complete</span>
+            <h2>${escapeHtml(headline)}</h2>
+            <p class="round-finished-copy">${escapeHtml(closingLine)}</p>
+            <p class="round-finished-subcopy">${round.holes.length} holes / ${escapeHtml(round.teeBox || "Default tee")} / ${escapeHtml(summary.roundLabel)}</p>
+          </div>
+          <div class="summary-grid compact round-finished-summary">
+            <article>
+              <span>Winner</span>
+              <strong>${escapeHtml(summary.winnerLabel)}</strong>
+            </article>
+            <article>
+              <span>Your finish</span>
+              <strong>${escapeHtml(localEntry?.displayStatus || "--")}</strong>
+            </article>
+            <article>
+              <span>Leaderboard</span>
+              <strong>${leader ? `#1 ${escapeHtml(leader.name)}` : "--"}</strong>
+            </article>
+            <article>
+              <span>Holes played</span>
+              <strong>${summary.holesPlayed}/${summary.totalHoles}</strong>
+            </article>
+          </div>
+          ${renderCompetitiveSpotlights(summary)}
+          <div class="stack-list round-finished-stack">
+            ${renderLeaderboardCard(state, round)}
+          </div>
+          <div class="finish-actions round-finished-actions">
+            <button class="button primary finish-button" type="button" data-action="finish-round" data-round-id="${round.id}" ${saveInProgress ? "disabled" : ""}>${saveInProgress ? "Saving..." : "Finish Round"}</button>
+            <button class="button secondary finish-button-secondary" type="button" data-action="review-round-card" data-round-id="${round.id}">Review Scores</button>
+          </div>
+        </article>
+      </div>
+    </section>
   `;
 }
 
@@ -4237,9 +4296,16 @@ function renderRoundView(state) {
     return renderLiveRoundLobby(state, activeRound, activeGroup);
   }
 
+  if (
+    state.session?.roundScreenMode === "finished"
+    || (state.session?.roundScreenMode !== "review" && getPreferredRoundScreenMode(activeRound) === "finished")
+  ) {
+    return renderFinishedRoundView(state, activeRound);
+  }
+
   return `
-    <section class="view-grid round-grid round-grid-live round-grid-live--score">
-      <div class="round-main-column round-main-column--score">
+      <section class="view-grid round-grid round-grid-live round-grid-live--score">
+        <div class="round-main-column round-main-column--score">
         ${renderHoleEditor(state, activeRound)}
         <div class="round-support-stack round-support-stack--accordion">
           ${renderRoundPlayersDrawer(state, activeRound, activeGroup)}

@@ -716,6 +716,37 @@ describe("ui helpers", () => {
     expect(markup).not.toContain('class="hole-pill');
   });
 
+  it("renders a finished round state with winner and final scores", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "round";
+    state.rounds.unshift(
+      createRound({
+        currentUser: state.currentUser,
+        courseName: "Torrey Pines Golf Course",
+        teeBox: "Championship",
+        weather: "Clear 72F",
+        mode: "stroke",
+        players: [state.currentUser.name, "Maya Chen"],
+      })
+    );
+    state.rounds[0].holes.forEach((hole) => {
+      hole.entries[0].strokes = 4;
+      hole.entries[1].strokes = 5;
+    });
+    state.session.activeRoundId = state.rounds[0].id;
+    state.session.roundScreenMode = "finished";
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Round complete");
+    expect(markup).toContain("You won");
+    expect(markup).toContain("Winner");
+    expect(markup).toContain("Review Scores");
+    expect(markup).toContain("Finish Round");
+  });
+
   it("renders the in-app tester feedback form in app support settings", () => {
     const state = createDefaultState();
     state.auth.status = "authenticated";

@@ -4493,6 +4493,63 @@ button:disabled {
   margin-top: 14px;
 }
 
+.round-finished-card {
+  gap: 14px;
+}
+
+.round-finished-hero {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  border-radius: calc(var(--radius-soft) + 2px);
+  border: 1px solid rgba(var(--accent-rgb), 0.22);
+  background:
+    linear-gradient(180deg, rgba(var(--accent-rgb), 0.2), rgba(255, 255, 255, 0.03) 72%),
+    var(--surface-soft);
+  text-align: center;
+}
+
+.round-finished-hero h2 {
+  margin: 0;
+  font-size: clamp(2rem, 8vw, 2.8rem);
+  line-height: 0.94;
+  text-align: center;
+}
+
+.round-finished-pill {
+  justify-self: center;
+  border-color: rgba(var(--success-rgb), 0.28);
+  background: rgba(var(--success-rgb), 0.14);
+}
+
+.round-finished-copy,
+.round-finished-subcopy {
+  margin: 0;
+}
+
+.round-finished-copy {
+  color: var(--text);
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.round-finished-subcopy {
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.round-finished-summary article strong {
+  font-size: 1.15rem;
+}
+
+.round-finished-stack {
+  gap: 10px;
+}
+
+.round-finished-actions {
+  margin-top: 2px;
+}
+
 .finish-button {
   min-height: 54px;
   font-size: 1rem;

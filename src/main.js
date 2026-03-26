@@ -88,8 +88,10 @@ import {
   findRound,
   finishRound,
   getNextIncompleteHoleNumber,
+  getPreferredRoundScreenMode,
   getRoundEventSyncCopy,
   hasPendingRoundSyncForUser,
+  isRoundFullyScored,
   updateRoundSyncDraft,
 } from "./state/round-state.js";
 import { renderInitialAppState, subscribeStorePersistence } from "./state/persistence.js";
@@ -140,6 +142,35 @@ function mapTabToView(tab) {
 function getRoundHoleLimit(state) {
   const round = state.rounds?.find((entry) => entry.id === state.session?.activeRoundId) || null;
   return Math.max(1, Number(round?.holes?.length || round?.selectedHoleCount || 18));
+}
+
+function syncFinishedRoundState(draft, round, { announce = false } = {}) {
+  if (!draft?.session || !round || draft.session.activeRoundId !== round.id) {
+    return false;
+  }
+
+  if (!isRoundFullyScored(round)) {
+    if (["finished", "review"].includes(draft.session.roundScreenMode) && round.status !== "completed") {
+      draft.session.roundScreenMode = "score";
+    }
+    return false;
+  }
+
+  const enteringFinished = draft.session.roundScreenMode !== "finished";
+  draft.session.roundScreenMode = "finished";
+  draft.session.selectedHole = Math.max(1, Number(round?.holes?.length || draft.session.selectedHole || 18));
+
+  if (announce && enteringFinished) {
+    appendActivity(draft, `${round.courseName} reached the final card.`, "round");
+    setFeedback(
+      draft,
+      "success",
+      "Round complete",
+      `${round.courseName} is ready for final results. Check the winner, then finish the round when you are done.`
+    );
+  }
+
+  return true;
 }
 
 function buildCrashContextSnapshot(state = null, extraContext = {}) {
@@ -1721,7 +1752,8 @@ export function bootstrapApp({
         }
 
         if (nextView === "round") {
-          draft.session.roundScreenMode = draft.session.activeRoundId ? "score" : "setup";
+          const activeRound = findRound(draft, draft.session.activeRoundId);
+          draft.session.roundScreenMode = activeRound ? getPreferredRoundScreenMode(activeRound) : "setup";
         }
 
         setActiveView(draft, nextView, "tab");
@@ -2200,21 +2232,22 @@ export function bootstrapApp({
         pulseHoleNumber = holeNumber;
 
         const defaultPutts = Math.max(1, Math.min(3, strokes - (hole.par - 2)));
-        captureRoundAction(draft, round, {
-          holeNumber,
-          participantId,
-          actionType: "score-set",
-          patch: {
+          captureRoundAction(draft, round, {
+            holeNumber,
+            participantId,
+            actionType: "score-set",
+            patch: {
           strokes,
           putts: defaultPutts,
           fairwayHit: hole.par > 3 ? strokes <= hole.par : false,
-          gir: strokes <= hole.par,
-          },
-        });
-        draft.session.selectedHole = getNextIncompleteHoleNumber(round, participantId, holeNumber);
-        appendActivity(draft, `${round.courseName} quick-scored hole ${holeNumber}.`, "round");
-        return draft;
-      }, { reason: "quick-score" });
+            gir: strokes <= hole.par,
+            },
+          });
+          draft.session.selectedHole = getNextIncompleteHoleNumber(round, participantId, holeNumber);
+          syncFinishedRoundState(draft, round, { announce: true });
+          appendActivity(draft, `${round.courseName} quick-scored hole ${holeNumber}.`, "round");
+          return draft;
+        }, { reason: "quick-score" });
       pulseScoreFeedback(pulseParticipantId, pulseHoleNumber);
       requestRealtimeRoundUpdate(store.getState().session.activeRoundId);
       void runPendingRoundSync({ successFeedback: false });
@@ -2250,15 +2283,16 @@ export function bootstrapApp({
           patch.putts = Math.max(1, Math.min(3, strokes - (hole.par - 2)));
         }
 
-        captureRoundAction(draft, round, {
-          holeNumber,
-          participantId,
-          actionType: "score-set",
-          patch,
-        });
-        appendActivity(draft, `${round.courseName} adjusted hole ${holeNumber} score.`, "round");
-        return draft;
-      }, { reason: "adjust-score" });
+          captureRoundAction(draft, round, {
+            holeNumber,
+            participantId,
+            actionType: "score-set",
+            patch,
+          });
+          syncFinishedRoundState(draft, round, { announce: true });
+          appendActivity(draft, `${round.courseName} adjusted hole ${holeNumber} score.`, "round");
+          return draft;
+        }, { reason: "adjust-score" });
       pulseScoreFeedback(pulseParticipantId, pulseHoleNumber);
       requestRealtimeRoundUpdate(store.getState().session.activeRoundId);
       void runPendingRoundSync({ successFeedback: false });
@@ -2524,14 +2558,27 @@ export function bootstrapApp({
       return;
     }
 
-    if (action === "resume-round") {
-      store.setState((draft) => {
-        focusRoundView(draft, actionElement.dataset.roundId, draft.currentUser.profileId, setActiveView);
-        draft.session.roundScreenMode = "score";
-        return draft;
-      }, { reason: "resume-round" });
-      return;
-    }
+      if (action === "resume-round") {
+        store.setState((draft) => {
+          focusRoundView(draft, actionElement.dataset.roundId, draft.currentUser.profileId, setActiveView);
+          return draft;
+        }, { reason: "resume-round" });
+        return;
+      }
+
+      if (action === "review-round-card") {
+        store.setState((draft) => {
+          const round = findRound(draft, actionElement.dataset.roundId || draft.session.activeRoundId);
+          if (!round) {
+            return draft;
+          }
+
+          draft.session.roundScreenMode = "review";
+          draft.session.selectedHole = Math.max(1, Number(round?.holes?.length || draft.session.selectedHole || 18));
+          return draft;
+        }, { reason: "review-round-card" });
+        return;
+      }
 
     if (action === "quick-join-code") {
       const code = actionElement.dataset.code;
@@ -3127,16 +3174,19 @@ export function bootstrapApp({
         return draft;
       }
 
-      captureRoundAction(draft, round, {
-        holeNumber,
-        participantId,
-        patch: {
-          [input.dataset.scoreField]: input.value === "" ? null : Number(input.value),
-        },
-      });
-      round.sync.lastEventAt = Date.now();
-      return draft;
-    }, { reason: "score-change" });
+        captureRoundAction(draft, round, {
+          holeNumber,
+          participantId,
+          patch: {
+            [input.dataset.scoreField]: input.value === "" ? null : Number(input.value),
+          },
+        });
+        round.sync.lastEventAt = Date.now();
+        syncFinishedRoundState(draft, round, {
+          announce: input.dataset.scoreField === "strokes",
+        });
+        return draft;
+      }, { reason: "score-change" });
     pulseScoreFeedback(participantId, holeNumber);
     requestRealtimeRoundUpdate(store.getState().session.activeRoundId);
     void runPendingRoundSync({ successFeedback: false });

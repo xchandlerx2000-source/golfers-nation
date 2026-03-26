@@ -421,6 +421,27 @@ export function getNextIncompleteHoleNumber(round, participantId, currentHoleNum
   return nextHole ? nextHole.number : currentHoleNumber;
 }
 
+export function isRoundFullyScored(round) {
+  const holes = Array.isArray(round?.holes) ? round.holes : [];
+  if (!holes.length) {
+    return false;
+  }
+
+  return holes.every((hole) =>
+    Array.isArray(hole?.entries)
+    && hole.entries.length > 0
+    && hole.entries.every((entry) => Number.isFinite(entry?.strokes) && entry.strokes > 0)
+  );
+}
+
+export function getPreferredRoundScreenMode(round) {
+  if (!round) {
+    return "setup";
+  }
+
+  return isRoundFullyScored(round) ? "finished" : "score";
+}
+
 export function finishRound(draft, roundId, dataGateway, setActiveView) {
   const round = (draft?.rounds || []).find((item) => item.id === roundId) || null;
   if (!round) {

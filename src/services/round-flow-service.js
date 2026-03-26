@@ -6,6 +6,7 @@ import {
   getCourseRoundSetupState,
 } from "./course-service.js";
 import { hostRoundGroup } from "./mock-api.js";
+import { getPreferredRoundScreenMode } from "../state/round-state.js";
 
 const HOSTED_ROUND_NOTE = "Invite code is live. The original host can leave and every joined golfer still keeps a safe local card.";
 const JOINED_ROUND_NOTE = "This device now carries its own safe copy of the live round, even if the original host leaves.";
@@ -170,10 +171,13 @@ export function focusRoundView(draft, roundId, profileId, setActiveView) {
     return;
   }
 
+  const round = (draft?.rounds || []).find((entry) => entry.id === roundId) || null;
   draft.session.activeRoundId = roundId;
-  draft.session.selectedHole = 1;
+  draft.session.selectedHole = getPreferredRoundScreenMode(round) === "finished"
+    ? Math.max(1, Number(round?.holes?.length || 18))
+    : 1;
   draft.session.selectedProfileId = profileId;
-  draft.session.roundScreenMode = "score";
+  draft.session.roundScreenMode = getPreferredRoundScreenMode(round);
   setActiveView(draft, "round", "focus-round");
 }
 

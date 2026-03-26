@@ -3456,6 +3456,25 @@ function getNextIncompleteHoleNumber(round, participantId, currentHoleNumber) {
 
   return nextHole ? nextHole.number : currentHoleNumber;
 }
+function isRoundFullyScored(round) {
+  const holes = Array.isArray(round?.holes) ? round.holes : [];
+  if (!holes.length) {
+    return false;
+  }
+
+  return holes.every((hole) =>
+    Array.isArray(hole?.entries)
+    && hole.entries.length > 0
+    && hole.entries.every((entry) => Number.isFinite(entry?.strokes) && entry.strokes > 0)
+  );
+}
+function getPreferredRoundScreenMode(round) {
+  if (!round) {
+    return "setup";
+  }
+
+  return isRoundFullyScored(round) ? "finished" : "score";
+}
 function finishRound(draft, roundId, dataGateway, setActiveView) {
   const round = (draft?.rounds || []).find((item) => item.id === roundId) || null;
   if (!round) {
@@ -4713,7 +4732,7 @@ const IMPORTED_US_COURSE_CATALOG_MANIFEST = {
   "assetVersion": "e848499d01e0",
   "providerId": "imported-us-course-database",
   "providerLabel": "Imported U.S. course database",
-  "generatedAt": "2026-03-26T03:38:15.039Z",
+  "generatedAt": "2026-03-26T04:03:56.143Z",
   "recordCount": 16284,
   "sourceCount": 4,
   "qualitySummary": {
@@ -9528,10 +9547,13 @@ function focusRoundView(draft, roundId, profileId, setActiveView) {
     return;
   }
 
+  const round = (draft?.rounds || []).find((entry) => entry.id === roundId) || null;
   draft.session.activeRoundId = roundId;
-  draft.session.selectedHole = 1;
+  draft.session.selectedHole = getPreferredRoundScreenMode(round) === "finished"
+    ? Math.max(1, Number(round?.holes?.length || 18))
+    : 1;
   draft.session.selectedProfileId = profileId;
-  draft.session.roundScreenMode = "score";
+  draft.session.roundScreenMode = getPreferredRoundScreenMode(round);
   setActiveView(draft, "round", "focus-round");
 }
 function upsertJoinedRoundIntoState(draft, joined) {
@@ -16166,6 +16188,64 @@ function renderLiveRoundLobby(state, round, group) {
         </article>
       </div>
     </section>
+    `;
+}
+
+function renderFinishedRoundView(state, round) {
+  const summary = getRoundSummaryForState(state, round);
+  const leader = summary.leaderboard[0] || null;
+  const localEntry = summary.localParticipant || leader || null;
+  const saveInProgress = state.session?.cloudSync?.status === "syncing"
+    && state.session?.cloudSync?.scope === "round-finish"
+    && state.session?.cloudSync?.roundId === round.id;
+  const headline = leader?.isLocal
+    ? "You won"
+    : leader
+      ? `${summary.winnerLabel} wins`
+      : "Round complete";
+  const closingLine = leader
+    ? `${summary.winnerLabel} closes out ${round.courseName} in ${summary.roundLabel}.`
+    : `${round.courseName} is ready for final results.`;
+
+  return `
+    <section class="view-grid round-grid round-grid-live round-grid-live--score">
+      <div class="round-main-column round-main-column--score">
+        <article class="card round-card round-finished-card">
+          <div class="round-finished-hero">
+            <span class="status-pill round-finished-pill">Round complete</span>
+            <h2>${escapeHtml(headline)}</h2>
+            <p class="round-finished-copy">${escapeHtml(closingLine)}</p>
+            <p class="round-finished-subcopy">${round.holes.length} holes / ${escapeHtml(round.teeBox || "Default tee")} / ${escapeHtml(summary.roundLabel)}</p>
+          </div>
+          <div class="summary-grid compact round-finished-summary">
+            <article>
+              <span>Winner</span>
+              <strong>${escapeHtml(summary.winnerLabel)}</strong>
+            </article>
+            <article>
+              <span>Your finish</span>
+              <strong>${escapeHtml(localEntry?.displayStatus || "--")}</strong>
+            </article>
+            <article>
+              <span>Leaderboard</span>
+              <strong>${leader ? `#1 ${escapeHtml(leader.name)}` : "--"}</strong>
+            </article>
+            <article>
+              <span>Holes played</span>
+              <strong>${summary.holesPlayed}/${summary.totalHoles}</strong>
+            </article>
+          </div>
+          ${renderCompetitiveSpotlights(summary)}
+          <div class="stack-list round-finished-stack">
+            ${renderLeaderboardCard(state, round)}
+          </div>
+          <div class="finish-actions round-finished-actions">
+            <button class="button primary finish-button" type="button" data-action="finish-round" data-round-id="${round.id}" ${saveInProgress ? "disabled" : ""}>${saveInProgress ? "Saving..." : "Finish Round"}</button>
+            <button class="button secondary finish-button-secondary" type="button" data-action="review-round-card" data-round-id="${round.id}">Review Scores</button>
+          </div>
+        </article>
+      </div>
+    </section>
   `;
 }
 
@@ -16282,9 +16362,16 @@ function renderRoundView(state) {
     return renderLiveRoundLobby(state, activeRound, activeGroup);
   }
 
+  if (
+    state.session?.roundScreenMode === "finished"
+    || (state.session?.roundScreenMode !== "review" && getPreferredRoundScreenMode(activeRound) === "finished")
+  ) {
+    return renderFinishedRoundView(state, activeRound);
+  }
+
   return `
-    <section class="view-grid round-grid round-grid-live round-grid-live--score">
-      <div class="round-main-column round-main-column--score">
+      <section class="view-grid round-grid round-grid-live round-grid-live--score">
+        <div class="round-main-column round-main-column--score">
         ${renderHoleEditor(state, activeRound)}
         <div class="round-support-stack round-support-stack--accordion">
           ${renderRoundPlayersDrawer(state, activeRound, activeGroup)}
@@ -18311,6 +18398,35 @@ function getRoundHoleLimit(state) {
   return Math.max(1, Number(round?.holes?.length || round?.selectedHoleCount || 18));
 }
 
+function syncFinishedRoundState(draft, round, { announce = false } = {}) {
+  if (!draft?.session || !round || draft.session.activeRoundId !== round.id) {
+    return false;
+  }
+
+  if (!isRoundFullyScored(round)) {
+    if (["finished", "review"].includes(draft.session.roundScreenMode) && round.status !== "completed") {
+      draft.session.roundScreenMode = "score";
+    }
+    return false;
+  }
+
+  const enteringFinished = draft.session.roundScreenMode !== "finished";
+  draft.session.roundScreenMode = "finished";
+  draft.session.selectedHole = Math.max(1, Number(round?.holes?.length || draft.session.selectedHole || 18));
+
+  if (announce && enteringFinished) {
+    appendActivity(draft, `${round.courseName} reached the final card.`, "round");
+    setFeedback(
+      draft,
+      "success",
+      "Round complete",
+      `${round.courseName} is ready for final results. Check the winner, then finish the round when you are done.`
+    );
+  }
+
+  return true;
+}
+
 function buildCrashContextSnapshot(state = null, extraContext = {}) {
   const activeRound = state?.rounds?.find((round) => round.id === state?.session?.activeRoundId) || null;
   const activeGroup = state?.groups?.find((group) =>
@@ -19889,7 +20005,8 @@ function bootstrapApp({
         }
 
         if (nextView === "round") {
-          draft.session.roundScreenMode = draft.session.activeRoundId ? "score" : "setup";
+          const activeRound = findRound(draft, draft.session.activeRoundId);
+          draft.session.roundScreenMode = activeRound ? getPreferredRoundScreenMode(activeRound) : "setup";
         }
 
         setActiveView(draft, nextView, "tab");
@@ -20368,21 +20485,22 @@ function bootstrapApp({
         pulseHoleNumber = holeNumber;
 
         const defaultPutts = Math.max(1, Math.min(3, strokes - (hole.par - 2)));
-        captureRoundAction(draft, round, {
-          holeNumber,
-          participantId,
-          actionType: "score-set",
-          patch: {
+          captureRoundAction(draft, round, {
+            holeNumber,
+            participantId,
+            actionType: "score-set",
+            patch: {
           strokes,
           putts: defaultPutts,
           fairwayHit: hole.par > 3 ? strokes <= hole.par : false,
-          gir: strokes <= hole.par,
-          },
-        });
-        draft.session.selectedHole = getNextIncompleteHoleNumber(round, participantId, holeNumber);
-        appendActivity(draft, `${round.courseName} quick-scored hole ${holeNumber}.`, "round");
-        return draft;
-      }, { reason: "quick-score" });
+            gir: strokes <= hole.par,
+            },
+          });
+          draft.session.selectedHole = getNextIncompleteHoleNumber(round, participantId, holeNumber);
+          syncFinishedRoundState(draft, round, { announce: true });
+          appendActivity(draft, `${round.courseName} quick-scored hole ${holeNumber}.`, "round");
+          return draft;
+        }, { reason: "quick-score" });
       pulseScoreFeedback(pulseParticipantId, pulseHoleNumber);
       requestRealtimeRoundUpdate(store.getState().session.activeRoundId);
       void runPendingRoundSync({ successFeedback: false });
@@ -20418,15 +20536,16 @@ function bootstrapApp({
           patch.putts = Math.max(1, Math.min(3, strokes - (hole.par - 2)));
         }
 
-        captureRoundAction(draft, round, {
-          holeNumber,
-          participantId,
-          actionType: "score-set",
-          patch,
-        });
-        appendActivity(draft, `${round.courseName} adjusted hole ${holeNumber} score.`, "round");
-        return draft;
-      }, { reason: "adjust-score" });
+          captureRoundAction(draft, round, {
+            holeNumber,
+            participantId,
+            actionType: "score-set",
+            patch,
+          });
+          syncFinishedRoundState(draft, round, { announce: true });
+          appendActivity(draft, `${round.courseName} adjusted hole ${holeNumber} score.`, "round");
+          return draft;
+        }, { reason: "adjust-score" });
       pulseScoreFeedback(pulseParticipantId, pulseHoleNumber);
       requestRealtimeRoundUpdate(store.getState().session.activeRoundId);
       void runPendingRoundSync({ successFeedback: false });
@@ -20692,14 +20811,27 @@ function bootstrapApp({
       return;
     }
 
-    if (action === "resume-round") {
-      store.setState((draft) => {
-        focusRoundView(draft, actionElement.dataset.roundId, draft.currentUser.profileId, setActiveView);
-        draft.session.roundScreenMode = "score";
-        return draft;
-      }, { reason: "resume-round" });
-      return;
-    }
+      if (action === "resume-round") {
+        store.setState((draft) => {
+          focusRoundView(draft, actionElement.dataset.roundId, draft.currentUser.profileId, setActiveView);
+          return draft;
+        }, { reason: "resume-round" });
+        return;
+      }
+
+      if (action === "review-round-card") {
+        store.setState((draft) => {
+          const round = findRound(draft, actionElement.dataset.roundId || draft.session.activeRoundId);
+          if (!round) {
+            return draft;
+          }
+
+          draft.session.roundScreenMode = "review";
+          draft.session.selectedHole = Math.max(1, Number(round?.holes?.length || draft.session.selectedHole || 18));
+          return draft;
+        }, { reason: "review-round-card" });
+        return;
+      }
 
     if (action === "quick-join-code") {
       const code = actionElement.dataset.code;
@@ -21295,16 +21427,19 @@ function bootstrapApp({
         return draft;
       }
 
-      captureRoundAction(draft, round, {
-        holeNumber,
-        participantId,
-        patch: {
-          [input.dataset.scoreField]: input.value === "" ? null : Number(input.value),
-        },
-      });
-      round.sync.lastEventAt = Date.now();
-      return draft;
-    }, { reason: "score-change" });
+        captureRoundAction(draft, round, {
+          holeNumber,
+          participantId,
+          patch: {
+            [input.dataset.scoreField]: input.value === "" ? null : Number(input.value),
+          },
+        });
+        round.sync.lastEventAt = Date.now();
+        syncFinishedRoundState(draft, round, {
+          announce: input.dataset.scoreField === "strokes",
+        });
+        return draft;
+      }, { reason: "score-change" });
     pulseScoreFeedback(participantId, holeNumber);
     requestRealtimeRoundUpdate(store.getState().session.activeRoundId);
     void runPendingRoundSync({ successFeedback: false });
