@@ -8,7 +8,14 @@ import {
 } from "./account-service.js";
 import { workspaceHasPendingRoundSync } from "../domain/round-sync.js";
 import { loadPersistedState, persistAppState } from "../state/persistence.js";
-import { toBackendAccountRecord, toBackendWorkspaceSnapshot } from "./backend-models.js";
+import {
+  fromBackendCourseServiceRequestRecord,
+  fromBackendTeeTimeRequestRecord,
+  toBackendAccountRecord,
+  toBackendCourseServiceRequestRecord,
+  toBackendTeeTimeRequestRecord,
+  toBackendWorkspaceSnapshot,
+} from "./backend-models.js";
 
 function getSnapshotUserId(snapshot) {
   return snapshot.auth?.activeUserId || snapshot.currentUser?.id || null;
@@ -42,6 +49,24 @@ export function createLocalDataGateway() {
           message: "Tester feedback needs the cloud data connection to be active first.",
           code: "feedback_not_configured",
         },
+      };
+    },
+    async createTeeTimeRequestAsync(request) {
+      return {
+        status: "local-only",
+        request,
+      };
+    },
+    async createOnCourseServiceRequestAsync(request) {
+      return {
+        status: "local-only",
+        request,
+      };
+    },
+    async listRequestReviewQueueAsync() {
+      return {
+        status: "local-only",
+        items: [],
       };
     },
   };
@@ -159,6 +184,92 @@ export function createSupabaseDataGateway({ bridge, fallback = createLocalDataGa
       return {
         status: "submitted",
         record: Array.isArray(response?.data) ? response.data[0] || null : response?.data || null,
+      };
+    },
+    async createTeeTimeRequestAsync(request, userId = request?.requesterUserId || request?.userId || null) {
+      if (!bridge?.isConfigured?.()) {
+        return fallback.createTeeTimeRequestAsync?.(request, userId);
+      }
+
+      const response = await bridge.createTeeTimeRequest(
+        toBackendTeeTimeRequestRecord(request, userId)
+      );
+
+      if (response?.error) {
+        return response;
+      }
+
+      if (response?.status === "skipped-missing-table") {
+        return fallback.createTeeTimeRequestAsync?.(request, userId);
+      }
+
+      const record = Array.isArray(response?.data) ? response.data[0] || null : response?.data || null;
+      return {
+        status: "persisted",
+        request: fromBackendTeeTimeRequestRecord(record) || request,
+      };
+    },
+    async createOnCourseServiceRequestAsync(request, userId = request?.requesterUserId || request?.userId || null) {
+      if (!bridge?.isConfigured?.()) {
+        return fallback.createOnCourseServiceRequestAsync?.(request, userId);
+      }
+
+      const response = await bridge.createOnCourseServiceRequest(
+        toBackendCourseServiceRequestRecord(request, userId)
+      );
+
+      if (response?.error) {
+        return response;
+      }
+
+      if (response?.status === "skipped-missing-table") {
+        return fallback.createOnCourseServiceRequestAsync?.(request, userId);
+      }
+
+      const record = Array.isArray(response?.data) ? response.data[0] || null : response?.data || null;
+      return {
+        status: "persisted",
+        request: fromBackendCourseServiceRequestRecord(record) || request,
+      };
+    },
+    async listRequestReviewQueueAsync(userId) {
+      if (!bridge?.isConfigured?.()) {
+        return fallback.listRequestReviewQueueAsync?.(userId);
+      }
+
+      const [teeTimes, services] = await Promise.all([
+        bridge.listTeeTimeRequests({ requesterUserId: userId, limit: 30 }),
+        bridge.listOnCourseServiceRequests({ requesterUserId: userId, limit: 30 }),
+      ]);
+
+      if (teeTimes?.error) {
+        return teeTimes;
+      }
+
+      if (services?.error) {
+        return services;
+      }
+
+      if (teeTimes?.status === "skipped-missing-table" && services?.status === "skipped-missing-table") {
+        return fallback.listRequestReviewQueueAsync?.(userId);
+      }
+
+      const items = [
+        ...((Array.isArray(teeTimes?.data) ? teeTimes.data : []).map((record) => ({
+          ...fromBackendTeeTimeRequestRecord(record),
+          queueType: "tee-time",
+          queueSource: "cloud",
+        }))),
+        ...((Array.isArray(services?.data) ? services.data : []).map((record) => ({
+          ...fromBackendCourseServiceRequestRecord(record),
+          queueType: "course-service",
+          queueSource: "cloud",
+        }))),
+      ];
+
+      return {
+        status: "ready",
+        items,
       };
     },
     async hydrateAccountAsync(store, userId = store.getState().auth?.activeUserId || store.getState().currentUser?.id) {

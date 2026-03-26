@@ -33,6 +33,7 @@ export const DATA_GATEWAY_CONTRACT = Object.freeze({
     "getCourseCapabilitiesAsync",
     "createTeeTimeRequestAsync",
     "createOnCourseServiceRequestAsync",
+    "listRequestReviewQueueAsync",
   ],
 });
 
@@ -43,6 +44,7 @@ export const COURSE_OPERATIONS_GATEWAY_CONTRACT = Object.freeze({
     "listTeeTimeRequestsAsync",
     "createOnCourseServiceRequestAsync",
     "listOnCourseServiceRequestsAsync",
+    "listRequestReviewQueueAsync",
   ],
   responsibilities: [
     "Resolve course capability flags without forcing a live booking integration.",

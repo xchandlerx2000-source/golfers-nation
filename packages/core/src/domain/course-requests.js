@@ -7,6 +7,14 @@ const VALID_TEE_TIME_REQUEST_STATUSES = new Set([
   "canceled",
 ]);
 
+const VALID_COURSE_SERVICE_REQUEST_STATUSES = new Set([
+  "requested",
+  "accepted",
+  "fulfilled",
+  "rejected",
+  "canceled",
+]);
+
 function createRequestId(prefix = "request") {
   return `${prefix}-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`;
 }
@@ -80,4 +88,87 @@ export function getTeeTimeRequestStatusLabel(status = "requested") {
     default:
       return "Requested";
   }
+}
+
+export function getLatestCourseServiceRequest(requests = [], courseId = "", requestType = "") {
+  return (Array.isArray(requests) ? requests : [])
+    .filter((request) =>
+      request?.type === "course-service"
+      && request?.courseId === courseId
+      && (!requestType || request?.requestType === requestType)
+    )
+    .sort((left, right) => Number(right?.updatedAt || 0) - Number(left?.updatedAt || 0))[0] || null;
+}
+
+export function getCourseServiceRequestStatusLabel(status = "requested") {
+  switch (String(status || "").trim()) {
+    case "accepted":
+      return "Accepted";
+    case "fulfilled":
+      return "Fulfilled";
+    case "rejected":
+      return "Rejected";
+    case "canceled":
+      return "Canceled";
+    default:
+      return "Requested";
+  }
+}
+
+export function formatCourseRequestTypeLabel(requestType = "") {
+  return String(requestType || "")
+    .split("-")
+    .filter(Boolean)
+    .map((value) => value.charAt(0).toUpperCase() + value.slice(1))
+    .join(" ");
+}
+
+export function createCourseServiceRequest({
+  id = "",
+  courseId = "",
+  courseName = "",
+  roundId = "",
+  requesterUserId = "",
+  requesterProfileId = "",
+  requestType = "guest-services",
+  notes = "",
+  status = "requested",
+  createdAt = Date.now(),
+  metadata = {},
+} = {}) {
+  const nextStatus = VALID_COURSE_SERVICE_REQUEST_STATUSES.has(status) ? status : "requested";
+  const timestamp = Number(createdAt || Date.now());
+
+  return {
+    id: String(id || createRequestId("service")).trim(),
+    type: "course-service",
+    courseId: String(courseId || "").trim(),
+    courseName: String(courseName || "").trim(),
+    roundId: String(roundId || "").trim(),
+    requesterUserId: String(requesterUserId || "").trim(),
+    requesterProfileId: String(requesterProfileId || "").trim(),
+    requestType: String(requestType || "guest-services").trim() || "guest-services",
+    notes: String(notes || "").trim(),
+    status: nextStatus,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    metadata: cloneData(metadata || {}),
+  };
+}
+
+export function transitionCourseServiceRequest(request = {}, status = "requested", metadataPatch = {}) {
+  const nextStatus = String(status || "").trim();
+  if (!VALID_COURSE_SERVICE_REQUEST_STATUSES.has(nextStatus)) {
+    throw new Error(`Unsupported course service request status: ${status}`);
+  }
+
+  return {
+    ...cloneData(request),
+    status: nextStatus,
+    updatedAt: Date.now(),
+    metadata: {
+      ...cloneData(request?.metadata || {}),
+      ...cloneData(metadataPatch || {}),
+    },
+  };
 }

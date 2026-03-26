@@ -1,6 +1,6 @@
 # Developer Review Map
 
-This repo now follows one source-of-truth workflow for review and integration.
+This repo now follows a shared-core, dual-client workflow for review and integration.
 
 ## Development policy
 
@@ -17,10 +17,25 @@ For actual feature intake and planning, use:
 - [feature-planning-workflow.md](C:/Users/Bower/OneDrive/Desktop/golf%20nation/docs/feature-planning-workflow.md)
 - [feature-plan-template.md](C:/Users/Bower/OneDrive/Desktop/golf%20nation/docs/feature-plan-template.md)
 
+## Review order
+
+1. `README.md`
+2. `DEVELOPMENT_POLICY.md`
+3. `docs/feature-planning-workflow.md`
+4. `packages/core/`
+5. `packages/course/`
+6. `packages/backend/`
+7. `apps/native/`
+8. `src/`
+
+Start in shared packages first, then review the native client, then check web parity only where the feature is parity-critical.
+
 ## Edit vs generated
 
-- Edit application logic only in `src/`
-- Edit browser shell files only in `src/shell/`
+- Edit shared product logic in `packages/`
+- Edit native client code in `apps/native/`
+- Edit web application logic in `src/`
+- Edit browser shell files in `src/shell/`
 - Edit build tooling only in `scripts/`
 - Do not manually edit:
   - `app.js`
@@ -29,18 +44,16 @@ For actual feature intake and planning, use:
 
 Those are generated outputs rebuilt by the project build scripts.
 
-## Suggested review order
-
-1. `README.md`
-2. `docs/backend-ready-architecture.md`
-3. `docs/supabase-setup.md`
-4. `src/bootstrap/`
-5. `src/state/`
-6. `src/services/`
-7. `src/ui/`
-
 ## Main module seams
 
+- `packages/core/`
+  Shared round factories, scoring, sync helpers, request lifecycle, and portable product rules.
+- `packages/course/`
+  Shared course models, course capability helpers, search/ranking helpers, and template logic.
+- `packages/backend/`
+  Shared backend contracts, live-session contracts, and backend-facing record shapes.
+- `apps/native/`
+  Native screens, navigation, Zustand store, runtime integrations, mobile auth/session, and installable app behavior.
 - `src/bootstrap/`
   App boot, service worker registration, startup recovery.
 - `src/state/`
@@ -84,4 +97,4 @@ Scaffolded for later:
 
 ## Review note
 
-This project uses a generated browser bundle. Source review should happen in `src/`, not by editing `app.js`.
+This project uses generated browser output and generated deploy artifacts. Source review should happen in `packages/`, `apps/native/`, and `src/`, not by editing `app.js` or anything in `dist/`.

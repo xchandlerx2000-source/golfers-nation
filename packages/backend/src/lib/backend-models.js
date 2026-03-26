@@ -246,6 +246,9 @@ export function toBackendCourseReconciliationRecord(course = {}) {
     has_real_rating_slope: Boolean(course.metadata?.qualityFlags?.hasRealRatingSlope),
     uses_fallback_tee_data: Boolean(course.metadata?.qualityFlags?.usesFallbackTeeData),
     uses_fallback_hole_data: Boolean(course.metadata?.qualityFlags?.usesFallbackHoleData),
+    tee_times_enabled: Boolean(course.metadata?.teeTimes?.enabled || course.metadata?.booking?.enabled),
+    tee_times_mode: course.metadata?.teeTimes?.mode || course.metadata?.booking?.mode || "none",
+    on_course_services_enabled: Boolean(course.metadata?.onCourseServices?.enabled || course.metadata?.serviceCapabilities?.enabled),
     admin_override_applied: Boolean(course.metadata?.adminOverrideApplied),
     admin_review_status: course.metadata?.adminReviewStatus || "",
     quality_issues: cloneData(course.metadata?.qualityIssues || []),
@@ -285,13 +288,83 @@ export function toBackendTeeTimeRequestRecord(request = {}, userId = null) {
   return {
     id: request.id || null,
     course_id: request.courseId,
+    course_name: request.courseName || "",
     requester_user_id: userId,
+    requester_profile_id: request.requesterProfileId || null,
     round_id: request.roundId || null,
     request_mode: request.mode || "external-link",
-    requested_at: toIsoTimestamp(request.requestedAt || Date.now()),
-    status: request.status || "pending",
+    provider: request.provider || "",
+    desired_window_label: request.desiredWindowLabel || "Next available",
+    requested_at: toIsoTimestamp(request.requestedAt || request.createdAt || Date.now()),
+    status: request.status || "requested",
     notes: request.notes || "",
     metadata: cloneData(request.metadata || {}),
+  };
+}
+
+export function toBackendCourseServiceRequestRecord(request = {}, userId = null) {
+  if (!request?.courseId) {
+    return null;
+  }
+
+  return {
+    id: request.id || null,
+    course_id: request.courseId,
+    course_name: request.courseName || "",
+    round_id: request.roundId || null,
+    requester_user_id: userId,
+    requester_profile_id: request.requesterProfileId || null,
+    request_type: request.requestType || "guest-services",
+    requested_at: toIsoTimestamp(request.requestedAt || request.createdAt || Date.now()),
+    status: request.status || "requested",
+    notes: request.notes || "",
+    metadata: cloneData(request.metadata || {}),
+  };
+}
+
+export function fromBackendTeeTimeRequestRecord(record = {}) {
+  if (!record?.course_id) {
+    return null;
+  }
+
+  return {
+    id: record.id || null,
+    type: "tee-time",
+    courseId: record.course_id,
+    courseName: record.course_name || "",
+    requesterUserId: record.requester_user_id || "",
+    requesterProfileId: record.requester_profile_id || "",
+    roundId: record.round_id || "",
+    mode: record.request_mode || "request",
+    provider: record.provider || "",
+    desiredWindowLabel: record.desired_window_label || "Next available",
+    status: record.status || "requested",
+    notes: record.notes || "",
+    createdAt: record.requested_at ? Date.parse(record.requested_at) : Date.now(),
+    updatedAt: record.updated_at ? Date.parse(record.updated_at) : (record.requested_at ? Date.parse(record.requested_at) : Date.now()),
+    metadata: cloneData(record.metadata || {}),
+  };
+}
+
+export function fromBackendCourseServiceRequestRecord(record = {}) {
+  if (!record?.course_id) {
+    return null;
+  }
+
+  return {
+    id: record.id || null,
+    type: "course-service",
+    courseId: record.course_id,
+    courseName: record.course_name || "",
+    roundId: record.round_id || "",
+    requesterUserId: record.requester_user_id || "",
+    requesterProfileId: record.requester_profile_id || "",
+    requestType: record.request_type || "guest-services",
+    status: record.status || "requested",
+    notes: record.notes || "",
+    createdAt: record.requested_at ? Date.parse(record.requested_at) : Date.now(),
+    updatedAt: record.updated_at ? Date.parse(record.updated_at) : (record.requested_at ? Date.parse(record.requested_at) : Date.now()),
+    metadata: cloneData(record.metadata || {}),
   };
 }
 

@@ -1,6 +1,11 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
+import {
+  formatCourseRequestTypeLabel,
+  getCourseServiceRequestStatusLabel,
+  getTeeTimeRequestStatusLabel,
+} from "@golfers-nation/core";
 import { AppButton } from "../../src/components/AppButton";
 import { Card } from "../../src/components/Card";
 import { Screen } from "../../src/components/Screen";
@@ -25,11 +30,31 @@ export default function ProfileScreen() {
   const authHealthStatus = useAppStore((state) => state.authHealthStatus);
   const sessionExpiresAt = useAppStore((state) => state.sessionExpiresAt);
   const activeRound = useAppStore((state) => state.activeRound);
+  const teeTimeRequests = useAppStore((state) => state.teeTimeRequests);
+  const courseServiceRequests = useAppStore((state) => state.courseServiceRequests);
   const signOut = useAppStore((state) => state.signOut);
   const runtimeConfig = getNativeRuntimeConfig();
   const formattedExpiry = sessionExpiresAt
     ? new Date(Number(sessionExpiresAt) * 1000).toLocaleString()
     : "Not set";
+  const recentRequests = [
+    ...teeTimeRequests.map((request) => ({
+      id: request.id,
+      label: request.courseName,
+      status: getTeeTimeRequestStatusLabel(request.status),
+      meta: request.desiredWindowLabel,
+      createdAt: Number(request.updatedAt || request.createdAt || 0),
+    })),
+    ...courseServiceRequests.map((request) => ({
+      id: request.id,
+      label: request.courseName,
+      status: getCourseServiceRequestStatusLabel(request.status),
+      meta: formatCourseRequestTypeLabel(request.requestType),
+      createdAt: Number(request.updatedAt || request.createdAt || 0),
+    })),
+  ]
+    .sort((left, right) => right.createdAt - left.createdAt)
+    .slice(0, 5);
 
   return (
     <Screen scroll>
@@ -38,7 +63,7 @@ export default function ProfileScreen() {
         <Text style={styles.name}>{currentUser?.displayName || "Golfer"}</Text>
         <Text style={styles.username}>@{currentUser?.username || "golfer"}</Text>
         <Text style={styles.meta}>
-          {currentUser?.homeCourse || "Home course not set"} • Handicap {currentUser?.handicap ?? "--"}
+          {currentUser?.homeCourse || "Home course not set"} / Handicap {currentUser?.handicap ?? "--"}
         </Text>
       </Card>
 
@@ -62,6 +87,27 @@ export default function ProfileScreen() {
         <Text style={styles.sectionTitle}>Build</Text>
         <InfoRow label="Environment" value={runtimeConfig.appEnv} />
         <InfoRow label="Channel" value={runtimeConfig.releaseChannel} />
+      </Card>
+
+      <Card>
+        <Text style={styles.sectionTitle}>Requests</Text>
+        <InfoRow label="Tee times" value={String(teeTimeRequests.length)} />
+        <InfoRow label="Course services" value={String(courseServiceRequests.length)} />
+        {recentRequests.length ? (
+          <View style={styles.requestList}>
+            {recentRequests.map((request) => (
+              <View key={request.id} style={styles.requestRow}>
+                <View style={styles.requestCopy}>
+                  <Text style={styles.requestName}>{request.label}</Text>
+                  <Text style={styles.requestMeta}>{request.meta}</Text>
+                </View>
+                <Text style={styles.requestStatus}>{request.status}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyCopy}>No local requests saved yet.</Text>
+        )}
       </Card>
 
       <View style={styles.actions}>
@@ -121,5 +167,39 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: spacing.md,
+  },
+  requestList: {
+    gap: spacing.sm,
+  },
+  requestRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  requestCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  requestName: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  requestMeta: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  requestStatus: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  emptyCopy: {
+    color: colors.textMuted,
+    fontSize: 13,
   },
 });

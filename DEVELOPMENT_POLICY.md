@@ -121,6 +121,12 @@ Before coding a feature:
 - decide if web truly needs parity
 - classify it as `shared`, `native-first`, `web-only`, or `parity`
 
+Artifact handling:
+- never commit APK, AAB, APKS, Expo export output, or sideload bundles
+- treat installable Android/iOS files as disposable release artifacts
+- distribute test binaries through EAS artifact links or release storage, not git
+- keep `apps/native/.expo-export` and `sideload-test/` out of source control
+
 Planning artifacts:
 - `docs/feature-planning-workflow.md`
 - `docs/feature-plan-template.md`

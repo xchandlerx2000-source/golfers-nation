@@ -57,6 +57,10 @@ describe("course reconciliation pipeline", () => {
           matchConfidence: 0.98,
           adminOverrideApplied: true,
           adminReviewStatus: "approved",
+          teeTimes: {
+            enabled: true,
+            mode: "external-link",
+          },
           qualityFlags: {
             hasAddress: true,
             hasCoordinates: true,
@@ -103,6 +107,8 @@ describe("course reconciliation pipeline", () => {
     expect(report.overrideSummary.overrideRows).toBe(2);
     expect(report.overrideSummary.overriddenRecords).toBe(1);
     expect(report.overrideSummary.unmatchedOverrides).toHaveLength(1);
+    expect(report.capabilitySummary.teeTimes.enabled).toBe(1);
+    expect(report.capabilitySummary.teeTimes.externalLink).toBe(1);
     expect(report.reviewQueueSummary.priority.high).toBeGreaterThan(0);
     expect(report.reviewQueueSummary.reasons["fallback-hole-data"]).toBeGreaterThan(0);
     expect(report.reviewQueue.highPriority[0].id).toBe("course-basic");

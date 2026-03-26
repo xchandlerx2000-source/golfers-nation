@@ -32,6 +32,11 @@ describe("native app store", () => {
       courseResultsSource: "starter",
       courseCatalogNotice: "",
       selectedCourse: useAppStore.getInitialState().selectedCourse,
+      teeTimeRequests: [],
+      courseServiceRequests: [],
+      requestReviewQueue: [],
+      requestReviewQueueStatus: "idle",
+      requestReviewQueueNotice: "",
       activeRound: null,
       joinedCode: "",
       recentInviteCode: "",
@@ -81,12 +86,67 @@ describe("native app store", () => {
     expect(getCourseTeeTimeAccess(torreyPines)?.url).toContain("torreypines.com");
   });
 
+  it("creates a local tee-time request for request-enabled courses", async () => {
+    useAppStore.getState().setCourseQuery("Boston");
+    const results = await useAppStore.getState().refreshCourseSearch();
+    const requestCourse = results.find((course) => course.id === "boston-golf-club-hingham-ma");
+
+    expect(requestCourse).toBeTruthy();
+    await useAppStore.getState().selectCourse(requestCourse.id);
+
+    const request = await useAppStore.getState().createSelectedCourseTeeTimeRequest();
+
+    expect(request?.courseId).toBe("boston-golf-club-hingham-ma");
+    expect(request?.status).toBe("requested");
+    expect(request?.metadata?.syncStatus).toBe("local-only");
+    expect(useAppStore.getState().teeTimeRequests[0]?.courseId).toBe("boston-golf-club-hingham-ma");
+  });
+
   it("hosts a live round from the selected native course path", async () => {
     const round = await useAppStore.getState().hostLiveRound();
 
     expect(round.inviteCode).toBe("GN18");
     expect(round.players.length).toBeGreaterThan(1);
     expect(["connecting", "connected", "local-only"]).toContain(useAppStore.getState().liveSyncStatus);
+  });
+
+  it("creates a local on-course service request for supported active-round courses", async () => {
+    useAppStore.getState().setCourseQuery("Paiute");
+    const results = await useAppStore.getState().refreshCourseSearch();
+    const serviceCourse = results.find((course) => course.id === "las-vegas-paiute-golf-resort-las-vegas-nv");
+
+    expect(serviceCourse).toBeTruthy();
+    await useAppStore.getState().selectCourse(serviceCourse.id);
+    await useAppStore.getState().startSoloRound();
+
+    const request = await useAppStore.getState().createActiveRoundCourseServiceRequest("beverage-cart");
+
+    expect(request?.courseId).toBe("las-vegas-paiute-golf-resort-las-vegas-nv");
+    expect(request?.requestType).toBe("beverage-cart");
+    expect(request?.metadata?.syncStatus).toBe("local-only");
+    expect(useAppStore.getState().courseServiceRequests[0]?.requestType).toBe("beverage-cart");
+  });
+
+  it("builds a local-safe review queue when cloud request persistence is unavailable", async () => {
+    useAppStore.getState().setCourseQuery("Boston");
+    const results = await useAppStore.getState().refreshCourseSearch();
+    const requestCourse = results.find((course) => course.id === "boston-golf-club-hingham-ma");
+
+    await useAppStore.getState().selectCourse(requestCourse.id);
+    await useAppStore.getState().createSelectedCourseTeeTimeRequest();
+
+    useAppStore.getState().setCourseQuery("Paiute");
+    const serviceResults = await useAppStore.getState().refreshCourseSearch();
+    const serviceCourse = serviceResults.find((course) => course.id === "las-vegas-paiute-golf-resort-las-vegas-nv");
+    await useAppStore.getState().selectCourse(serviceCourse.id);
+    await useAppStore.getState().startSoloRound();
+    await useAppStore.getState().createActiveRoundCourseServiceRequest("beverage-cart");
+
+    const queue = await useAppStore.getState().refreshRequestReviewQueue();
+
+    expect(queue.length).toBeGreaterThan(1);
+    expect(useAppStore.getState().requestReviewQueueStatus).toBe("local-only");
+    expect(useAppStore.getState().requestReviewQueue[0]?.queueType).toBeTruthy();
   });
 
   it("marks an expired cloud session and keeps the active round local-safe", async () => {

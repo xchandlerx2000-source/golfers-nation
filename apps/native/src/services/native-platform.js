@@ -5,8 +5,12 @@ import {
 } from "@golfers-nation/core";
 import {
   createSupabaseRestBridge,
+  fromBackendCourseServiceRequestRecord,
+  fromBackendTeeTimeRequestRecord,
   fromBackendLiveRoundSessionRecord,
+  toBackendCourseServiceRequestRecord,
   toBackendLiveRoundSessionRecord,
+  toBackendTeeTimeRequestRecord,
 } from "@golfers-nation/backend";
 import {
   readItem,
@@ -475,6 +479,154 @@ export async function syncHostedRoundNative(round, currentUser, group = null) {
   return {
     status: result?.status || "synced",
     session: fromBackendLiveRoundSessionRecord(sourceRecord),
+  };
+}
+
+function isLocalOnlyRequestPersistenceResult(result) {
+  if (!result) {
+    return true;
+  }
+
+  if (result.status === "skipped-missing-table" || result.status === "local-only") {
+    return true;
+  }
+
+  const errorCode = String(result?.error?.code || "").trim().toLowerCase();
+  return errorCode === "missing_session" || errorCode === "supabase_not_configured";
+}
+
+export async function createTeeTimeRequestNative(request, {
+  currentUser = null,
+  authMode = "local-demo",
+} = {}) {
+  if (authMode !== "supabase" || !hasNativeSupabaseConfig() || !currentUser?.id) {
+    return {
+      status: "local-only",
+      request,
+    };
+  }
+
+  await hydrateBridgeCache();
+  const bridge = getBridge();
+  const result = await bridge.createTeeTimeRequest(
+    toBackendTeeTimeRequestRecord(request, currentUser.id)
+  );
+
+  if (isLocalOnlyRequestPersistenceResult(result)) {
+    return {
+      status: "local-only",
+      request,
+      missingTable: result?.status === "skipped-missing-table",
+    };
+  }
+
+  if (result?.error) {
+    return result;
+  }
+
+  const record = Array.isArray(result?.data) ? result.data[0] || null : result?.data || null;
+  return {
+    status: "persisted",
+    request: fromBackendTeeTimeRequestRecord(record) || request,
+  };
+}
+
+export async function createOnCourseServiceRequestNative(request, {
+  currentUser = null,
+  authMode = "local-demo",
+} = {}) {
+  if (authMode !== "supabase" || !hasNativeSupabaseConfig() || !currentUser?.id) {
+    return {
+      status: "local-only",
+      request,
+    };
+  }
+
+  await hydrateBridgeCache();
+  const bridge = getBridge();
+  const result = await bridge.createOnCourseServiceRequest(
+    toBackendCourseServiceRequestRecord(request, currentUser.id)
+  );
+
+  if (isLocalOnlyRequestPersistenceResult(result)) {
+    return {
+      status: "local-only",
+      request,
+      missingTable: result?.status === "skipped-missing-table",
+    };
+  }
+
+  if (result?.error) {
+    return result;
+  }
+
+  const record = Array.isArray(result?.data) ? result.data[0] || null : result?.data || null;
+  return {
+    status: "persisted",
+    request: fromBackendCourseServiceRequestRecord(record) || request,
+  };
+}
+
+export async function listRequestReviewQueueNative({
+  currentUser = null,
+  authMode = "local-demo",
+  limit = 25,
+} = {}) {
+  if (authMode !== "supabase" || !hasNativeSupabaseConfig() || !currentUser?.id) {
+    return {
+      status: "local-only",
+      items: [],
+    };
+  }
+
+  await hydrateBridgeCache();
+  const bridge = getBridge();
+  const [teeTimes, services] = await Promise.all([
+    bridge.listTeeTimeRequests({
+      requesterUserId: currentUser.id,
+      limit,
+    }),
+    bridge.listOnCourseServiceRequests({
+      requesterUserId: currentUser.id,
+      limit,
+    }),
+  ]);
+
+  const bothLocalOnly = isLocalOnlyRequestPersistenceResult(teeTimes) && isLocalOnlyRequestPersistenceResult(services);
+  if (bothLocalOnly) {
+    return {
+      status: "local-only",
+      items: [],
+      notice: "Cloud request tables are not ready yet.",
+    };
+  }
+
+  if (teeTimes?.error) {
+    return teeTimes;
+  }
+
+  if (services?.error) {
+    return services;
+  }
+
+  const items = [
+    ...((Array.isArray(teeTimes?.data) ? teeTimes.data : []).map((record) => ({
+      ...fromBackendTeeTimeRequestRecord(record),
+      queueType: "tee-time",
+      queueSource: "cloud",
+      queueUpdatedAt: record?.updated_at ? Date.parse(record.updated_at) : (record?.requested_at ? Date.parse(record.requested_at) : Date.now()),
+    }))),
+    ...((Array.isArray(services?.data) ? services.data : []).map((record) => ({
+      ...fromBackendCourseServiceRequestRecord(record),
+      queueType: "course-service",
+      queueSource: "cloud",
+      queueUpdatedAt: record?.updated_at ? Date.parse(record.updated_at) : (record?.requested_at ? Date.parse(record.requested_at) : Date.now()),
+    }))),
+  ].sort((left, right) => Number(right.queueUpdatedAt || 0) - Number(left.queueUpdatedAt || 0));
+
+  return {
+    status: "ready",
+    items,
   };
 }
 

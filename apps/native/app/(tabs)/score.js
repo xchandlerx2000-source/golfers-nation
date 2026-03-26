@@ -1,13 +1,19 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { GAME_MODES } from "@golfers-nation/core";
+import {
+  formatCourseRequestTypeLabel,
+  GAME_MODES,
+  getCourseServiceRequestStatusLabel,
+  getLatestCourseServiceRequest,
+} from "@golfers-nation/core";
+import { getCourseOnCourseServiceAccess } from "@golfers-nation/course";
 import { AppButton } from "../../src/components/AppButton";
 import { Card } from "../../src/components/Card";
 import { LiveStrip } from "../../src/components/LiveStrip";
 import { Screen } from "../../src/components/Screen";
 import { SectionHeader } from "../../src/components/SectionHeader";
-import { colors, radii, spacing } from "../../src/theme";
+import { colors, spacing } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
 function CollapsibleSection({ title, summary, open, onToggle, children, danger = false }) {
@@ -18,7 +24,7 @@ function CollapsibleSection({ title, summary, open, onToggle, children, danger =
           <Text style={[styles.sectionTitle, danger ? styles.sectionTitleDanger : null]}>{title}</Text>
           <Text style={styles.sectionSummary}>{summary}</Text>
         </View>
-        <Text style={styles.sectionChevron}>{open ? "−" : "+"}</Text>
+        <Text style={styles.sectionChevron}>{open ? "-" : "+"}</Text>
       </Pressable>
       {open ? <View style={styles.sectionBody}>{children}</View> : null}
     </Card>
@@ -31,6 +37,8 @@ export default function ScoreScreen() {
   const goToPreviousHole = useAppStore((state) => state.goToPreviousHole);
   const leaveRound = useAppStore((state) => state.leaveRound);
   const getRoundSummary = useAppStore((state) => state.getRoundSummary);
+  const courseServiceRequests = useAppStore((state) => state.courseServiceRequests);
+  const createActiveRoundCourseServiceRequest = useAppStore((state) => state.createActiveRoundCourseServiceRequest);
   const liveSyncStatus = useAppStore((state) => state.liveSyncStatus);
   const liveSyncNotice = useAppStore((state) => state.liveSyncNotice);
   const [score, setScore] = useState(4);
@@ -44,6 +52,11 @@ export default function ScoreScreen() {
 
     return activeRound.holes.find((hole) => hole.number === activeRound.currentHole) || activeRound.holes[0];
   }, [activeRound]);
+  const courseServiceAccess = useMemo(() => getCourseOnCourseServiceAccess({
+    id: activeRound?.courseId,
+    displayName: activeRound?.courseName,
+    metadata: activeRound?.courseMetadata || {},
+  }), [activeRound?.courseId, activeRound?.courseName, activeRound?.courseMetadata]);
 
   useEffect(() => {
     if (!currentHole) {
@@ -70,6 +83,11 @@ export default function ScoreScreen() {
     ? `${summary.leaderboard[0].name} leads`
     : "Waiting on scores";
   const finishSummary = activeRound.inviteCode ? "Leave or finish this round" : "Finish or end this round";
+  const latestServiceRequests = (courseServiceAccess?.requestTypes || [])
+    .map((requestType) => ({
+      requestType,
+      latest: getLatestCourseServiceRequest(courseServiceRequests, activeRound.courseId, requestType),
+    }));
 
   return (
     <Screen>
@@ -87,7 +105,7 @@ export default function ScoreScreen() {
         <View style={styles.holeHeader}>
           <View>
             <Text style={styles.holeLabel}>Hole {currentHole.number}</Text>
-            <Text style={styles.meta}>Par {currentHole.par} • {currentHole.yards} yds</Text>
+            <Text style={styles.meta}>Par {currentHole.par} / {currentHole.yards} yds</Text>
           </View>
           <View style={styles.scoreMeta}>
             <Text style={styles.scoreMetaLabel}>Card</Text>
@@ -122,7 +140,7 @@ export default function ScoreScreen() {
         onToggle={() => setOpenSection((value) => (value === "stats" ? "" : "stats"))}
       >
         <Text style={styles.sectionCopy}>{summary?.momentum?.detail || "Momentum builds after a few holes."}</Text>
-        <Text style={styles.sectionCopy}>Putts {summary?.averagePutts ?? "--"} • Holes played {summary?.holesPlayed ?? 0}</Text>
+        <Text style={styles.sectionCopy}>Putts {summary?.averagePutts ?? "--"} / Holes played {summary?.holesPlayed ?? 0}</Text>
       </CollapsibleSection>
 
       <CollapsibleSection
@@ -151,6 +169,45 @@ export default function ScoreScreen() {
             <Text style={styles.listMeta}>{entry.displayStatus || entry.scoreLabel || "--"}</Text>
           </View>
         ))}
+      </CollapsibleSection>
+
+      <CollapsibleSection
+        title="Course Services"
+        summary={courseServiceAccess?.enabled ? "Request support without leaving the card" : "Not available on this course"}
+        open={openSection === "services"}
+        onToggle={() => setOpenSection((value) => (value === "services" ? "" : "services"))}
+      >
+        {courseServiceAccess?.enabled ? (
+          <>
+            <Text style={styles.sectionCopy}>{courseServiceAccess.notes || "Supported requests are saved locally until partner dispatch is wired live."}</Text>
+            {(courseServiceAccess.requestTypes || []).map((requestType) => {
+              const latestRequest = latestServiceRequests.find((entry) => entry.requestType === requestType)?.latest || null;
+              const label = formatCourseRequestTypeLabel(requestType);
+              return (
+                <View key={requestType} style={styles.serviceRow}>
+                  <View style={styles.serviceCopy}>
+                    <Text style={styles.listName}>{label}</Text>
+                    <Text style={styles.listMeta}>
+                      {latestRequest
+                        ? `${getCourseServiceRequestStatusLabel(latestRequest.status)} / ${label}`
+                        : "Save a local request"}
+                    </Text>
+                  </View>
+                  <AppButton
+                    label={latestRequest ? "Saved" : "Request"}
+                    variant="secondary"
+                    disabled={Boolean(latestRequest && ["requested", "accepted", "fulfilled"].includes(latestRequest.status))}
+                    onPress={async () => {
+                      await createActiveRoundCourseServiceRequest(requestType);
+                    }}
+                  />
+                </View>
+              );
+            })}
+          </>
+        ) : (
+          <Text style={styles.sectionCopy}>This course does not expose on-course request support yet.</Text>
+        )}
       </CollapsibleSection>
 
       <CollapsibleSection
@@ -280,5 +337,15 @@ const styles = StyleSheet.create({
   listMeta: {
     color: colors.textMuted,
     fontSize: 13,
+  },
+  serviceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  serviceCopy: {
+    flex: 1,
+    gap: 2,
   },
 });

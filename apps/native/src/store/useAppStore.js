@@ -1,16 +1,30 @@
 import { create } from "zustand";
 import {
+  createCourseServiceRequest,
+  createTeeTimeRequest,
   createRound,
   GAME_MODES,
   getRoundSummary,
 } from "@golfers-nation/core";
-import { getDefaultCourseTeeBoxRecord } from "@golfers-nation/course";
+import {
+  getCourseOnCourseServiceAccess,
+  getCourseTeeTimeAccess,
+  getDefaultCourseTeeBoxRecord,
+} from "@golfers-nation/course";
 import {
   DEMO_USER,
   RECOMMENDED_COURSES,
   SAMPLE_PLAYERS,
   STARTER_COURSES,
 } from "../lib/seed-state";
+import {
+  applyRequestPersistenceResult,
+  createLocalQueueItems,
+  getCloudQueueItems,
+  getRequestQueueNotice,
+  mergeRequestById,
+  mergeReviewQueue,
+} from "../lib/request-review";
 import {
   buildNativeRoundTemplate,
   getBundledRecommendedCourses,
@@ -23,8 +37,11 @@ import {
   broadcastLiveMemberStateNative,
   broadcastLiveRoundSnapshotNative,
   clearNativeAppSession,
+  createOnCourseServiceRequestNative,
+  createTeeTimeRequestNative,
   fetchLiveRoundByCodeNative,
   joinRoundByCodeNative,
+  listRequestReviewQueueNative,
   requestPasswordResetNative,
   revalidateNativeAuthSession,
   restoreNativeAuthSession,
@@ -304,6 +321,11 @@ export const useAppStore = create((set, get) => ({
   courseResultsSource: "starter",
   courseCatalogNotice: "",
   selectedCourse: DEFAULT_COURSE,
+  teeTimeRequests: [],
+  courseServiceRequests: [],
+  requestReviewQueue: [],
+  requestReviewQueueStatus: "idle",
+  requestReviewQueueNotice: "",
   activeRound: null,
   joinedCode: "",
   recentInviteCode: "",
@@ -463,6 +485,11 @@ export const useAppStore = create((set, get) => ({
       currentUser: null,
       authMode: "local-demo",
       activeRound: null,
+      teeTimeRequests: [],
+      courseServiceRequests: [],
+      requestReviewQueue: [],
+      requestReviewQueueStatus: "idle",
+      requestReviewQueueNotice: "",
       authError: "",
       authNotice: "",
       authBusy: false,
@@ -653,6 +680,142 @@ export const useAppStore = create((set, get) => ({
         mode,
       },
     }));
+  },
+  createSelectedCourseTeeTimeRequest: async () => {
+    const currentUser = get().currentUser || DEMO_USER;
+    const selectedCourse = await get().hydrateSelectedCourse();
+    const teeTimeAccess = getCourseTeeTimeAccess(selectedCourse);
+
+    if (!selectedCourse?.id || teeTimeAccess?.mode !== "request") {
+      return null;
+    }
+
+    const request = createTeeTimeRequest({
+      courseId: selectedCourse.id,
+      courseName: selectedCourse.displayName || selectedCourse.courseName || selectedCourse.name,
+      requesterUserId: currentUser.id,
+      requesterProfileId: currentUser.profileId || currentUser.id,
+      mode: teeTimeAccess.mode,
+      provider: teeTimeAccess.provider || "",
+      desiredWindowLabel: "Next available",
+      notes: teeTimeAccess.notes || "",
+      metadata: {
+        providerLabel: teeTimeAccess.provider || "",
+      },
+    });
+    const persisted = await createTeeTimeRequestNative(request, {
+      currentUser,
+      authMode: get().authMode,
+    });
+    const nextRequest = applyRequestPersistenceResult(request, persisted);
+    const teeTimeRequests = mergeRequestById(get().teeTimeRequests, nextRequest, 20);
+
+    set((state) => ({
+      teeTimeRequests,
+      requestReviewQueue: mergeReviewQueue(
+        createLocalQueueItems({
+          teeTimeRequests,
+          courseServiceRequests: state.courseServiceRequests,
+        }),
+        getCloudQueueItems(state.requestReviewQueue)
+      ),
+      requestReviewQueueStatus: persisted?.status === "persisted" ? "ready" : state.requestReviewQueueStatus,
+      requestReviewQueueNotice: getRequestQueueNotice(persisted, state.requestReviewQueueNotice),
+      authNotice: persisted?.status === "persisted"
+        ? "Tee time request saved to the review queue."
+        : "Tee time request saved on this phone.",
+      authError: "",
+    }));
+
+    return nextRequest;
+  },
+  createActiveRoundCourseServiceRequest: async (requestType = "guest-services") => {
+    const currentUser = get().currentUser || DEMO_USER;
+    const activeRound = get().activeRound;
+    if (!activeRound?.courseId) {
+      return null;
+    }
+
+    const course = {
+      id: activeRound.courseId,
+      displayName: activeRound.courseName,
+      metadata: activeRound.courseMetadata || {},
+    };
+    const serviceAccess = getCourseOnCourseServiceAccess(course);
+    const normalizedRequestType = String(requestType || "").trim() || "guest-services";
+
+    if (!serviceAccess?.enabled || !serviceAccess.requestTypes.includes(normalizedRequestType)) {
+      return null;
+    }
+
+    const request = createCourseServiceRequest({
+      courseId: activeRound.courseId,
+      courseName: activeRound.courseName,
+      roundId: activeRound.id,
+      requesterUserId: currentUser.id,
+      requesterProfileId: currentUser.profileId || currentUser.id,
+      requestType: normalizedRequestType,
+      notes: serviceAccess.notes || "",
+      metadata: {
+        providerMode: serviceAccess.mode || "request",
+      },
+    });
+    const persisted = await createOnCourseServiceRequestNative(request, {
+      currentUser,
+      authMode: get().authMode,
+    });
+    const nextRequest = applyRequestPersistenceResult(request, persisted);
+    const courseServiceRequests = mergeRequestById(get().courseServiceRequests, nextRequest, 30);
+
+    set((state) => ({
+      courseServiceRequests,
+      requestReviewQueue: mergeReviewQueue(
+        createLocalQueueItems({
+          teeTimeRequests: state.teeTimeRequests,
+          courseServiceRequests,
+        }),
+        getCloudQueueItems(state.requestReviewQueue)
+      ),
+      requestReviewQueueStatus: persisted?.status === "persisted" ? "ready" : state.requestReviewQueueStatus,
+      requestReviewQueueNotice: getRequestQueueNotice(persisted, state.requestReviewQueueNotice),
+      authNotice: persisted?.status === "persisted"
+        ? "Course service request saved to the review queue."
+        : "Course service request saved on this phone.",
+      authError: "",
+    }));
+
+    return nextRequest;
+  },
+  refreshRequestReviewQueue: async () => {
+    set({ requestReviewQueueStatus: "loading" });
+    const remote = await listRequestReviewQueueNative({
+      currentUser: get().currentUser || DEMO_USER,
+      authMode: get().authMode,
+      limit: 30,
+    });
+    const localItems = createLocalQueueItems({
+      teeTimeRequests: get().teeTimeRequests,
+      courseServiceRequests: get().courseServiceRequests,
+    });
+
+    if (remote?.error) {
+      set({
+        requestReviewQueue: localItems,
+        requestReviewQueueStatus: "local-only",
+        requestReviewQueueNotice: remote.error.message || "Showing saved requests from this phone only.",
+      });
+      return localItems;
+    }
+
+    const merged = mergeReviewQueue(localItems, remote.items || []);
+    set({
+      requestReviewQueue: merged,
+      requestReviewQueueStatus: remote.status || "ready",
+      requestReviewQueueNotice: remote.notice || (remote.status === "ready"
+        ? "Cloud request queue loaded."
+        : "Showing saved requests from this phone only."),
+    });
+    return merged;
   },
   startSoloRound: async () => {
     const currentUser = get().currentUser || DEMO_USER;

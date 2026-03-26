@@ -121,6 +121,8 @@ const TESTER_DEFAULT_SUBSCRIPTION_TIER = "premium";
 const LIVE_ROUND_SESSIONS_TABLE = "live_round_sessions";
 const COURSE_OVERRIDES_TABLE = "course_overrides";
 const COURSE_RECONCILIATION_TABLE = "course_reconciliation_queue";
+const TEE_TIME_REQUESTS_TABLE = "tee_time_requests";
+const COURSE_SERVICE_REQUESTS_TABLE = "course_service_requests";
 const AUTH_PROVIDER_OPTIONS = [
   {
     id: "google",
@@ -4833,7 +4835,7 @@ const IMPORTED_US_COURSE_CATALOG_MANIFEST = {
   "assetVersion": "2f9b459450a3",
   "providerId": "imported-us-course-database",
   "providerLabel": "Imported U.S. course database",
-  "generatedAt": "2026-03-26T18:33:25.666Z",
+  "generatedAt": "2026-03-26T20:51:03.965Z",
   "recordCount": 16284,
   "sourceCount": 4,
   "qualitySummary": {
@@ -7699,6 +7701,20 @@ function logMissingRelation(tableName, error) {
   console.warn(`[Golfers Nation] Supabase table ${tableName} is not ready yet. Continuing with local-safe state.`, error);
 }
 
+function buildRestQuery(params = {}) {
+  const searchParams = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+
+    searchParams.set(key, String(value));
+  });
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
+}
+
 function normalizeSessionPayload(payload) {
   const source = payload?.session || payload || null;
   const user = payload?.user || source?.user || null;
@@ -8093,6 +8109,68 @@ function createSupabaseRestBridge({
     });
   }
 
+  async function createTableRecord(tableName, record) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    const result = await request(`/rest/v1/${tableName}`, {
+      method: "POST",
+      accessToken: active.session.access_token,
+      headers: {
+        Prefer: "return=representation",
+      },
+      body: record,
+    });
+
+    if (result?.error && isMissingRelationError(result.error)) {
+      logMissingRelation(`public.${tableName}`, result.error);
+      return { status: "skipped-missing-table", data: null };
+    }
+
+    return result;
+  }
+
+  async function listTableRecords(tableName, {
+    requesterUserId = "",
+    status = "",
+    limit = 25,
+    order = "requested_at.desc",
+  } = {}) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    const query = buildRestQuery({
+      select: "*",
+      ...(requesterUserId ? { requester_user_id: `eq.${requesterUserId}` } : {}),
+      ...(status ? { status: `eq.${status}` } : {}),
+      order,
+      limit,
+    });
+
+    const result = await request(`/rest/v1/${tableName}${query}`, {
+      accessToken: active.session.access_token,
+    });
+
+    if (result?.error && isMissingRelationError(result.error)) {
+      logMissingRelation(`public.${tableName}`, result.error);
+      return { status: "skipped-missing-table", data: [] };
+    }
+
+    return result;
+  }
+
   async function fetchLiveRoundSessionByInviteCode(inviteCode) {
     const active = await getActiveSession();
     if (active.error) {
@@ -8152,6 +8230,22 @@ function createSupabaseRestBridge({
     return result;
   }
 
+  async function createTeeTimeRequest(requestRecord) {
+    return createTableRecord(TEE_TIME_REQUESTS_TABLE, requestRecord);
+  }
+
+  async function listTeeTimeRequests(options = {}) {
+    return listTableRecords(TEE_TIME_REQUESTS_TABLE, options);
+  }
+
+  async function createOnCourseServiceRequest(requestRecord) {
+    return createTableRecord(COURSE_SERVICE_REQUESTS_TABLE, requestRecord);
+  }
+
+  async function listOnCourseServiceRequests(options = {}) {
+    return listTableRecords(COURSE_SERVICE_REQUESTS_TABLE, options);
+  }
+
   async function broadcastRealtimeMessage(topic, event, payload) {
     const active = await getActiveSession();
     if (active.error) {
@@ -8191,6 +8285,10 @@ function createSupabaseRestBridge({
     upsertProfile,
     upsertWorkspace,
     submitTesterFeedback,
+    createTeeTimeRequest,
+    listTeeTimeRequests,
+    createOnCourseServiceRequest,
+    listOnCourseServiceRequests,
     fetchLiveRoundSessionByInviteCode,
     upsertLiveRoundSession,
     broadcastRealtimeMessage,
@@ -10306,11 +10404,120 @@ function toBackendCourseReconciliationRecord(course = {}) {
     has_real_rating_slope: Boolean(course.metadata?.qualityFlags?.hasRealRatingSlope),
     uses_fallback_tee_data: Boolean(course.metadata?.qualityFlags?.usesFallbackTeeData),
     uses_fallback_hole_data: Boolean(course.metadata?.qualityFlags?.usesFallbackHoleData),
+    tee_times_enabled: Boolean(course.metadata?.teeTimes?.enabled || course.metadata?.booking?.enabled),
+    tee_times_mode: course.metadata?.teeTimes?.mode || course.metadata?.booking?.mode || "none",
+    on_course_services_enabled: Boolean(course.metadata?.onCourseServices?.enabled || course.metadata?.serviceCapabilities?.enabled),
     admin_override_applied: Boolean(course.metadata?.adminOverrideApplied),
     admin_review_status: course.metadata?.adminReviewStatus || "",
     quality_issues: cloneData(course.metadata?.qualityIssues || []),
     source_history: cloneData(course.metadata?.sourceHistory || []),
     updated_at: toIsoTimestamp(Date.now()),
+  };
+}
+function toBackendCourseCapabilityRecord(course = {}) {
+  if (!course?.id) {
+    return null;
+  }
+
+  const teeTimes = cloneData(course.metadata?.teeTimes || course.metadata?.booking || {});
+  const onCourseServices = cloneData(course.metadata?.onCourseServices || course.metadata?.serviceCapabilities || {});
+
+  return {
+    id: course.id,
+    canonical_course_id: course.id,
+    provider_id: course.providerId || null,
+    tee_times_enabled: Boolean(teeTimes.enabled),
+    tee_times_mode: teeTimes.mode || "none",
+    tee_times_provider: teeTimes.provider || null,
+    tee_times_url: teeTimes.url || null,
+    on_course_services_enabled: Boolean(onCourseServices.enabled),
+    on_course_services_mode: onCourseServices.mode || "none",
+    on_course_request_types: cloneData(onCourseServices.requestTypes || []),
+    updated_at: toIsoTimestamp(Date.now()),
+  };
+}
+function toBackendTeeTimeRequestRecord(request = {}, userId = null) {
+  if (!request?.courseId) {
+    return null;
+  }
+
+  return {
+    id: request.id || null,
+    course_id: request.courseId,
+    course_name: request.courseName || "",
+    requester_user_id: userId,
+    requester_profile_id: request.requesterProfileId || null,
+    round_id: request.roundId || null,
+    request_mode: request.mode || "external-link",
+    provider: request.provider || "",
+    desired_window_label: request.desiredWindowLabel || "Next available",
+    requested_at: toIsoTimestamp(request.requestedAt || request.createdAt || Date.now()),
+    status: request.status || "requested",
+    notes: request.notes || "",
+    metadata: cloneData(request.metadata || {}),
+  };
+}
+function toBackendCourseServiceRequestRecord(request = {}, userId = null) {
+  if (!request?.courseId) {
+    return null;
+  }
+
+  return {
+    id: request.id || null,
+    course_id: request.courseId,
+    course_name: request.courseName || "",
+    round_id: request.roundId || null,
+    requester_user_id: userId,
+    requester_profile_id: request.requesterProfileId || null,
+    request_type: request.requestType || "guest-services",
+    requested_at: toIsoTimestamp(request.requestedAt || request.createdAt || Date.now()),
+    status: request.status || "requested",
+    notes: request.notes || "",
+    metadata: cloneData(request.metadata || {}),
+  };
+}
+function fromBackendTeeTimeRequestRecord(record = {}) {
+  if (!record?.course_id) {
+    return null;
+  }
+
+  return {
+    id: record.id || null,
+    type: "tee-time",
+    courseId: record.course_id,
+    courseName: record.course_name || "",
+    requesterUserId: record.requester_user_id || "",
+    requesterProfileId: record.requester_profile_id || "",
+    roundId: record.round_id || "",
+    mode: record.request_mode || "request",
+    provider: record.provider || "",
+    desiredWindowLabel: record.desired_window_label || "Next available",
+    status: record.status || "requested",
+    notes: record.notes || "",
+    createdAt: record.requested_at ? Date.parse(record.requested_at) : Date.now(),
+    updatedAt: record.updated_at ? Date.parse(record.updated_at) : (record.requested_at ? Date.parse(record.requested_at) : Date.now()),
+    metadata: cloneData(record.metadata || {}),
+  };
+}
+function fromBackendCourseServiceRequestRecord(record = {}) {
+  if (!record?.course_id) {
+    return null;
+  }
+
+  return {
+    id: record.id || null,
+    type: "course-service",
+    courseId: record.course_id,
+    courseName: record.course_name || "",
+    roundId: record.round_id || "",
+    requesterUserId: record.requester_user_id || "",
+    requesterProfileId: record.requester_profile_id || "",
+    requestType: record.request_type || "guest-services",
+    status: record.status || "requested",
+    notes: record.notes || "",
+    createdAt: record.requested_at ? Date.parse(record.requested_at) : Date.now(),
+    updatedAt: record.updated_at ? Date.parse(record.updated_at) : (record.requested_at ? Date.parse(record.requested_at) : Date.now()),
+    metadata: cloneData(record.metadata || {}),
   };
 }
 function toBackendGearRecord(item, userId = null) {
@@ -10612,6 +10819,24 @@ function createLocalDataGateway() {
         },
       };
     },
+    async createTeeTimeRequestAsync(request) {
+      return {
+        status: "local-only",
+        request,
+      };
+    },
+    async createOnCourseServiceRequestAsync(request) {
+      return {
+        status: "local-only",
+        request,
+      };
+    },
+    async listRequestReviewQueueAsync() {
+      return {
+        status: "local-only",
+        items: [],
+      };
+    },
   };
 }
 function createSupabaseDataGateway({ bridge, fallback = createLocalDataGateway() } = {}) {
@@ -10726,6 +10951,92 @@ function createSupabaseDataGateway({ bridge, fallback = createLocalDataGateway()
       return {
         status: "submitted",
         record: Array.isArray(response?.data) ? response.data[0] || null : response?.data || null,
+      };
+    },
+    async createTeeTimeRequestAsync(request, userId = request?.requesterUserId || request?.userId || null) {
+      if (!bridge?.isConfigured?.()) {
+        return fallback.createTeeTimeRequestAsync?.(request, userId);
+      }
+
+      const response = await bridge.createTeeTimeRequest(
+        toBackendTeeTimeRequestRecord(request, userId)
+      );
+
+      if (response?.error) {
+        return response;
+      }
+
+      if (response?.status === "skipped-missing-table") {
+        return fallback.createTeeTimeRequestAsync?.(request, userId);
+      }
+
+      const record = Array.isArray(response?.data) ? response.data[0] || null : response?.data || null;
+      return {
+        status: "persisted",
+        request: fromBackendTeeTimeRequestRecord(record) || request,
+      };
+    },
+    async createOnCourseServiceRequestAsync(request, userId = request?.requesterUserId || request?.userId || null) {
+      if (!bridge?.isConfigured?.()) {
+        return fallback.createOnCourseServiceRequestAsync?.(request, userId);
+      }
+
+      const response = await bridge.createOnCourseServiceRequest(
+        toBackendCourseServiceRequestRecord(request, userId)
+      );
+
+      if (response?.error) {
+        return response;
+      }
+
+      if (response?.status === "skipped-missing-table") {
+        return fallback.createOnCourseServiceRequestAsync?.(request, userId);
+      }
+
+      const record = Array.isArray(response?.data) ? response.data[0] || null : response?.data || null;
+      return {
+        status: "persisted",
+        request: fromBackendCourseServiceRequestRecord(record) || request,
+      };
+    },
+    async listRequestReviewQueueAsync(userId) {
+      if (!bridge?.isConfigured?.()) {
+        return fallback.listRequestReviewQueueAsync?.(userId);
+      }
+
+      const [teeTimes, services] = await Promise.all([
+        bridge.listTeeTimeRequests({ requesterUserId: userId, limit: 30 }),
+        bridge.listOnCourseServiceRequests({ requesterUserId: userId, limit: 30 }),
+      ]);
+
+      if (teeTimes?.error) {
+        return teeTimes;
+      }
+
+      if (services?.error) {
+        return services;
+      }
+
+      if (teeTimes?.status === "skipped-missing-table" && services?.status === "skipped-missing-table") {
+        return fallback.listRequestReviewQueueAsync?.(userId);
+      }
+
+      const items = [
+        ...((Array.isArray(teeTimes?.data) ? teeTimes.data : []).map((record) => ({
+          ...fromBackendTeeTimeRequestRecord(record),
+          queueType: "tee-time",
+          queueSource: "cloud",
+        }))),
+        ...((Array.isArray(services?.data) ? services.data : []).map((record) => ({
+          ...fromBackendCourseServiceRequestRecord(record),
+          queueType: "course-service",
+          queueSource: "cloud",
+        }))),
+      ];
+
+      return {
+        status: "ready",
+        items,
       };
     },
     async hydrateAccountAsync(store, userId = store.getState().auth?.activeUserId || store.getState().currentUser?.id) {
@@ -15834,6 +16145,30 @@ function renderCourseTeeTimeLink(course = {}) {
   `;
 }
 
+function renderCourseCapabilityNotes(course = {}) {
+  const teeTimes = course?.metadata?.teeTimes || course?.metadata?.booking || course?.metadata?.capabilities?.teeTimes || {};
+  const onCourseServices = course?.metadata?.onCourseServices || course?.metadata?.serviceCapabilities || course?.metadata?.capabilities?.onCourseServices || {};
+  const notes = [];
+
+  if (Boolean(teeTimes?.enabled) && teeTimes?.mode === "request") {
+    notes.push(`<span class="mini-label">Partner request: ${escapeHtml(String(teeTimes?.label || "Request Tee Time").trim() || "Request Tee Time")}</span>`);
+  }
+
+  if (Boolean(onCourseServices?.enabled) && Array.isArray(onCourseServices?.requestTypes) && onCourseServices.requestTypes.length) {
+    notes.push(`<span class="mini-label">Course services: ${escapeHtml(onCourseServices.requestTypes.map((entry) => String(entry || "").replace(/-/g, " ")).join(", "))}</span>`);
+  }
+
+  if (!notes.length) {
+    return "";
+  }
+
+  return `
+    <div class="stack-list compact-stack-list">
+      ${notes.join("")}
+    </div>
+  `;
+}
+
 function getRoundSetupDiscovery(state, roundSetup = getRoundSetup(state)) {
   return getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {}, {
     rounds: state.rounds,
@@ -15883,6 +16218,7 @@ function renderSelectedCourseSetupCard(course, teeBox, roundSetup = {}, options 
 
   const holeCountOptions = getCourseHoleCountOptions(course);
   const teeTimeLink = renderCourseTeeTimeLink(course);
+  const capabilityNotes = renderCourseCapabilityNotes(course);
   return `
     <article class="course-selected-card" data-selected-course="true">
       <div class="course-selected-copy">
@@ -15913,6 +16249,7 @@ function renderSelectedCourseSetupCard(course, teeBox, roundSetup = {}, options 
           </select>
         </label>
       </div>
+      ${capabilityNotes}
       ${teeTimeLink ? `<div class="row-actions compact-actions">${teeTimeLink}</div>` : ""}
     </article>
   `;

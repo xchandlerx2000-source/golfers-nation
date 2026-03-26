@@ -32,6 +32,10 @@ export default function SettingsScreen() {
   const sessionExpiresAt = useAppStore((state) => state.sessionExpiresAt);
   const lastAuthCheckAt = useAppStore((state) => state.lastAuthCheckAt);
   const revalidateSession = useAppStore((state) => state.revalidateSession);
+  const requestReviewQueue = useAppStore((state) => state.requestReviewQueue);
+  const requestReviewQueueStatus = useAppStore((state) => state.requestReviewQueueStatus);
+  const requestReviewQueueNotice = useAppStore((state) => state.requestReviewQueueNotice);
+  const refreshRequestReviewQueue = useAppStore((state) => state.refreshRequestReviewQueue);
   const [crashSummary, setCrashSummary] = useState({
     count: 0,
     lastCrashAt: "",
@@ -42,7 +46,8 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     void getNativeCrashLogSummary().then(setCrashSummary);
-  }, []);
+    void refreshRequestReviewQueue();
+  }, [refreshRequestReviewQueue]);
 
   const formattedExpiry = sessionExpiresAt
     ? new Date(Number(sessionExpiresAt) * 1000).toLocaleString()
@@ -78,6 +83,26 @@ export default function SettingsScreen() {
       </Card>
 
       <Card>
+        <Text style={styles.groupTitle}>Request Queue</Text>
+        <SettingRow label="Queue status" value={requestReviewQueueStatus || "idle"} />
+        <SettingRow label="Items" value={String(requestReviewQueue.length)} />
+        {requestReviewQueueNotice ? <Text style={styles.note}>{requestReviewQueueNotice}</Text> : null}
+        {requestReviewQueue.slice(0, 5).map((item) => (
+          <View key={item.id} style={styles.queueRow}>
+            <View style={styles.queueCopy}>
+              <Text style={styles.queueTitle}>{item.courseName || "Course request"}</Text>
+              <Text style={styles.queueMeta}>
+                {(item.queueType === "tee-time" ? "Tee Time" : "Course Service")}
+                {" / "}
+                {item.queueLabel || item.requestType || item.desiredWindowLabel || "Request"}
+              </Text>
+            </View>
+            <Text style={styles.queueStatus}>{item.status || "requested"}</Text>
+          </View>
+        ))}
+      </Card>
+
+      <Card>
         <Text style={styles.groupTitle}>Crash Logs</Text>
         <SettingRow label="Stored logs" value={String(crashSummary.count || 0)} />
         <SettingRow label="Last crash" value={crashSummary.lastCrashAt || "None"} />
@@ -91,6 +116,13 @@ export default function SettingsScreen() {
           variant="secondary"
           onPress={async () => {
             await revalidateSession();
+          }}
+        />
+        <AppButton
+          label="Refresh Request Queue"
+          variant="secondary"
+          onPress={async () => {
+            await refreshRequestReviewQueue();
           }}
         />
         <AppButton
@@ -153,6 +185,33 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
+  },
+  queueRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  queueCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  queueTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  queueMeta: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  queueStatus: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
   },
   actions: {
     gap: spacing.md,

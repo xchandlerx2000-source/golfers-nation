@@ -7,6 +7,8 @@ export const TESTER_DEFAULT_SUBSCRIPTION_TIER = "premium";
 export const LIVE_ROUND_SESSIONS_TABLE = "live_round_sessions";
 export const COURSE_OVERRIDES_TABLE = "course_overrides";
 export const COURSE_RECONCILIATION_TABLE = "course_reconciliation_queue";
+export const TEE_TIME_REQUESTS_TABLE = "tee_time_requests";
+export const COURSE_SERVICE_REQUESTS_TABLE = "course_service_requests";
 
 export const AUTH_PROVIDER_OPTIONS = [
   {

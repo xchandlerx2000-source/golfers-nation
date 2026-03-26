@@ -102,6 +102,11 @@ export function getCourseTeeTimeAccess(course = {}) {
   return teeTimes.enabled ? teeTimes : null;
 }
 
+export function getCourseOnCourseServiceAccess(course = {}) {
+  const onCourseServices = getCourseCapabilities(course).onCourseServices;
+  return onCourseServices.enabled ? onCourseServices : null;
+}
+
 export function courseSupportsTeeTimeBooking(course = {}) {
   const teeTimes = getCourseTeeTimeAccess(course);
   if (!teeTimes?.enabled) {

@@ -22,3 +22,13 @@ pnpm-debug.log*
 Codex updates files.txt
 System.Drawing.Drawing2D.GraphicsPath
 ChatGPT Image*.png
+
+# Native build artifacts
+*.apk
+*.aab
+*.apks
+*.keystore
+*.jks
+apps/native/.expo/
+apps/native/.expo-export/
+sideload-test/

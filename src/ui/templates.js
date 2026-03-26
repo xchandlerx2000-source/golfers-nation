@@ -3334,6 +3334,30 @@ function renderCourseTeeTimeLink(course = {}) {
   `;
 }
 
+function renderCourseCapabilityNotes(course = {}) {
+  const teeTimes = course?.metadata?.teeTimes || course?.metadata?.booking || course?.metadata?.capabilities?.teeTimes || {};
+  const onCourseServices = course?.metadata?.onCourseServices || course?.metadata?.serviceCapabilities || course?.metadata?.capabilities?.onCourseServices || {};
+  const notes = [];
+
+  if (Boolean(teeTimes?.enabled) && teeTimes?.mode === "request") {
+    notes.push(`<span class="mini-label">Partner request: ${escapeHtml(String(teeTimes?.label || "Request Tee Time").trim() || "Request Tee Time")}</span>`);
+  }
+
+  if (Boolean(onCourseServices?.enabled) && Array.isArray(onCourseServices?.requestTypes) && onCourseServices.requestTypes.length) {
+    notes.push(`<span class="mini-label">Course services: ${escapeHtml(onCourseServices.requestTypes.map((entry) => String(entry || "").replace(/-/g, " ")).join(", "))}</span>`);
+  }
+
+  if (!notes.length) {
+    return "";
+  }
+
+  return `
+    <div class="stack-list compact-stack-list">
+      ${notes.join("")}
+    </div>
+  `;
+}
+
 function getRoundSetupDiscovery(state, roundSetup = getRoundSetup(state)) {
   return getRoundSetupDiscoveryState(roundSetup, state.session?.nearby || {}, {
     rounds: state.rounds,
@@ -3383,6 +3407,7 @@ function renderSelectedCourseSetupCard(course, teeBox, roundSetup = {}, options 
 
   const holeCountOptions = getCourseHoleCountOptions(course);
   const teeTimeLink = renderCourseTeeTimeLink(course);
+  const capabilityNotes = renderCourseCapabilityNotes(course);
   return `
     <article class="course-selected-card" data-selected-course="true">
       <div class="course-selected-copy">
@@ -3413,6 +3438,7 @@ function renderSelectedCourseSetupCard(course, teeBox, roundSetup = {}, options 
           </select>
         </label>
       </div>
+      ${capabilityNotes}
       ${teeTimeLink ? `<div class="row-actions compact-actions">${teeTimeLink}</div>` : ""}
     </article>
   `;

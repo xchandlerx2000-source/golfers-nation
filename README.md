@@ -1,6 +1,11 @@
 # Golfers Nation
 
-Golfers Nation is a phase-1 offline-first product foundation for a nationwide golf platform. It is built as a static web app today, but the code is organized so the domain logic, service layer, and data model can move into React Native or another mobile stack later.
+Golfers Nation now runs as a monorepo with two clients:
+
+- a native Expo app as the primary product target
+- a maintained web app for desktop use, testing, and fallback workflows
+
+Shared product logic lives in shared packages so scoring, course behavior, and backend-facing rules stay consistent across both clients.
 
 ## Current product areas
 
@@ -10,8 +15,21 @@ Golfers Nation is a phase-1 offline-first product foundation for a nationwide go
 - Local and social game linking
 - Gear, apparel, and accessory scaffold
 
+## Platform split
+
+- `apps/native`
+  Primary mobile product. Native polish, installable tester builds, mobile realtime, and future device features belong here first.
+- `src/` and `src/shell/`
+  Maintained web client. Keep it functional for browser testing, desktop access, and larger-screen workflows such as tournament review.
+- `packages/core`, `packages/course`, `packages/backend`
+  Shared source of truth for product logic and backend contracts.
+
 ## Architecture at a glance
 
+- `apps/native`: Expo Router app, native screens, Zustand store, and mobile runtime integrations
+- `packages/core`: shared round logic, scoring, sync helpers, and request lifecycle helpers
+- `packages/course`: shared course models, capability helpers, and search/ranking helpers
+- `packages/backend`: shared backend contracts and backend-facing models
 - `src/shell`: the only editable browser shell source for `index.html`, `styles.css`, `manifest.json`, `service-worker.js`, and `runtime-config.js`
 - `src/domain`: round factories and scoring logic
 - `src/services`: storage, mock API, and sync transport layer
@@ -22,10 +40,11 @@ Golfers Nation is a phase-1 offline-first product foundation for a nationwide go
 
 ## Source-of-truth workflow
 
-Golfers Nation now follows one editable source tree:
+Golfers Nation now follows one shared-core workflow:
 
-- Edit app logic in `src/`
-- Edit browser shell files in `src/shell/`
+- Edit shared product logic in `packages/`
+- Edit native client code in `apps/native/`
+- Edit web client code in `src/` and `src/shell/`
 - Edit build/deploy tooling in `scripts/`
 
 Do not edit these generated outputs directly:
@@ -54,15 +73,59 @@ That policy defines:
 
 Contributors should follow that policy so shared logic stays centralized, native remains the primary product target, and web stays maintained without becoming a second competing product.
 
+For Android tester builds and sideload workflow, use [docs/native-sideload-testing.md](C:/Users/Bower/OneDrive/Desktop/golf%20nation/docs/native-sideload-testing.md).
+
+## Web + APK test release
+
+The old manual chain:
+
+- `npm run build:cloudflare`
+- `git add .`
+- `git commit -m "..."`
+- `git push ...`
+
+does not reliably trigger an Android test build by itself. Use the wrapper script instead from the repo root:
+
+- `npm run release:test -- --CommitMessage "redeploy latest update"`
+- `npm run release:test:force -- -CommitMessage "redeploy latest update"`
+
+That flow:
+
+- rebuilds the Cloudflare web package
+- stages and commits current repo changes if needed
+- pushes `main`
+- triggers a new Expo sideload APK build with `--no-wait`
+- prints the latest Android build list so the new artifact can be tracked
+
+Use the force variant only when you intentionally want the same behavior as `git push -f origin main`.
+
 ## Run it
 
 1. Install dependencies:
    `npm install`
-2. Build the local browser artifacts:
+2. Start the native app:
+   `npm run native:start`
+3. Build the local browser artifacts:
    `npm run build:web`
-3. Open the generated root `index.html` in a modern browser, or serve the root folder from a local web server.
+4. Open the generated root `index.html` in a modern browser, or serve the root folder from a local web server.
 
-The editable source still lives in `src/` and `src/shell/`. The root browser files are rebuilt outputs for local use. Data persists in local storage. Browser Bluetooth is treated as an optional prototype transport, not the primary multiplayer architecture.
+Native is the primary release path. Web stays maintained for testing, desktop use, and flows that benefit from a larger screen. The root browser files are rebuilt outputs for local use. Browser Bluetooth remains an optional prototype transport, not the primary multiplayer architecture.
+
+## Build artifacts
+
+Do not commit installable build artifacts or Expo export output. Keep:
+
+- `*.apk`
+- `*.aab`
+- `*.apks`
+- `apps/native/.expo-export/`
+- `sideload-test/`
+
+out of source control. Use Expo/EAS artifact links or release storage for tester downloads.
+
+For a repeatable repo-wide verification pass, use:
+
+- `npm run validate`
 
 ## Auth and tester accounts
 

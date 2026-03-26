@@ -10,6 +10,8 @@ Golfers Nation now supports a real tester flow with:
 - cloud-backed profile and workspace persistence
 - live round session discovery by invite code
 - Supabase Realtime round broadcasts across joined devices
+- tee-time request persistence
+- on-course service request persistence
 
 ## Environment variables
 
@@ -101,6 +103,18 @@ create table if not exists public.live_round_sessions (
 );
 ```
 
+Request tables for tee-time requests and on-course service requests now live in a separate copy-pasteable file:
+
+- [docs/supabase-request-tables.sql](C:/Users/Bower/OneDrive/Desktop/golf%20nation/docs/supabase-request-tables.sql)
+
+Apply that file after the core schema above. It adds:
+
+- `tee_time_requests`
+- `course_service_requests`
+- owner-scoped RLS
+- request indexes
+- `updated_at` triggers
+
 ## Suggested row-level security
 
 ```sql
@@ -185,6 +199,8 @@ with check (true);
 - per-user tester feedback notes
 - live invite-code round sessions
 - Supabase Realtime broadcast updates between joined devices
+- tee-time request persistence when request tables exist
+- on-course service request persistence when request tables exist
 - session restore from stored auth session
 - password reset email request
 

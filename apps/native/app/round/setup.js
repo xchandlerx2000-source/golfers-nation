@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from "react";
 import { Alert, Linking, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { GAME_MODES } from "@golfers-nation/core";
+import { GAME_MODES, getLatestCourseTeeTimeRequest, getTeeTimeRequestStatusLabel } from "@golfers-nation/core";
 import { getCourseTeeTimeAccess } from "@golfers-nation/course";
 import { AppButton } from "../../src/components/AppButton";
 import { Card } from "../../src/components/Card";
@@ -31,17 +31,22 @@ export default function RoundSetupScreen() {
   const courseResultsStatus = useAppStore((state) => state.courseResultsStatus);
   const courseCatalogNotice = useAppStore((state) => state.courseCatalogNotice);
   const selectedCourse = useAppStore((state) => state.selectedCourse);
+  const teeTimeRequests = useAppStore((state) => state.teeTimeRequests);
   const setCourseQuery = useAppStore((state) => state.setCourseQuery);
   const selectCourse = useAppStore((state) => state.selectCourse);
   const setSetupMode = useAppStore((state) => state.setSetupMode);
   const prepareCourseSetup = useAppStore((state) => state.prepareCourseSetup);
   const refreshCourseSearch = useAppStore((state) => state.refreshCourseSearch);
+  const createSelectedCourseTeeTimeRequest = useAppStore((state) => state.createSelectedCourseTeeTimeRequest);
   const startSoloRound = useAppStore((state) => state.startSoloRound);
   const hostLiveRound = useAppStore((state) => state.hostLiveRound);
   const authNotice = useAppStore((state) => state.authNotice);
 
   const formatCards = useMemo(() => Object.values(GAME_MODES), []);
   const teeTimeAccess = selectedCourse ? getCourseTeeTimeAccess(selectedCourse) : null;
+  const latestTeeTimeRequest = selectedCourse?.id
+    ? getLatestCourseTeeTimeRequest(teeTimeRequests, selectedCourse.id)
+    : null;
 
   useEffect(() => {
     void prepareCourseSetup();
@@ -111,6 +116,24 @@ export default function RoundSetupScreen() {
                   }
                 }}
               />
+            </View>
+          ) : null}
+          {teeTimeAccess?.mode === "request" ? (
+            <View style={styles.teeTimeBlock}>
+              <Text style={styles.teeTimeMeta}>Partner request</Text>
+              <AppButton
+                label={latestTeeTimeRequest ? "Request saved" : (teeTimeAccess.label || "Request Tee Time")}
+                variant="secondary"
+                disabled={Boolean(latestTeeTimeRequest && ["requested", "confirmed"].includes(latestTeeTimeRequest.status))}
+                onPress={async () => {
+                  await createSelectedCourseTeeTimeRequest();
+                }}
+              />
+              <Text style={styles.teeTimeStatus}>
+                {latestTeeTimeRequest
+                  ? `${getTeeTimeRequestStatusLabel(latestTeeTimeRequest.status)} | ${latestTeeTimeRequest.desiredWindowLabel}`
+                  : (teeTimeAccess.notes || "Save a local request until partner booking is wired live.")}
+              </Text>
             </View>
           ) : null}
         </Card>
@@ -207,6 +230,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.4,
     textTransform: "uppercase",
+  },
+  teeTimeStatus: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
   },
   formatGrid: {
     gap: spacing.md,

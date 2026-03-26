@@ -244,6 +244,7 @@ function createReconciliationQueueEntry(course = {}) {
 }
 
 export function buildCourseReconciliationReport(catalog = [], overrideRows = [], { generatedAt = new Date().toISOString(), assetVersion = "" } = {}) {
+  const normalizedCatalog = Array.isArray(catalog) ? catalog : [];
   const queueEntries = (Array.isArray(catalog) ? catalog : [])
     .map((course) => createReconciliationQueueEntry(course))
     .filter((entry) => entry.reasons.length > 0)
@@ -299,11 +300,40 @@ export function buildCourseReconciliationReport(catalog = [], overrideRows = [],
     unmatchedOverrides,
   };
 
+  const capabilitySummary = normalizedCatalog.reduce((summary, course) => {
+    const teeTimes = course?.metadata?.teeTimes || course?.metadata?.booking || {};
+    const onCourseServices = course?.metadata?.onCourseServices || course?.metadata?.serviceCapabilities || {};
+    if (teeTimes?.enabled) {
+      summary.teeTimes.enabled += 1;
+      if (teeTimes.mode === "external-link") {
+        summary.teeTimes.externalLink += 1;
+      } else if (teeTimes.mode === "request") {
+        summary.teeTimes.request += 1;
+      }
+    }
+
+    if (onCourseServices?.enabled) {
+      summary.onCourseServices.enabled += 1;
+    }
+
+    return summary;
+  }, {
+    teeTimes: {
+      enabled: 0,
+      externalLink: 0,
+      request: 0,
+    },
+    onCourseServices: {
+      enabled: 0,
+    },
+  });
+
   return {
     generatedAt,
     assetVersion,
     recordCount: Array.isArray(catalog) ? catalog.length : 0,
     overrideSummary,
+    capabilitySummary,
     reviewQueueSummary,
     reviewQueue: {
       highPriority: queueEntries.filter((entry) => entry.priority === "high").slice(0, 250),

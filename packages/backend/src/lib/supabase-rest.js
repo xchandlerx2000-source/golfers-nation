@@ -1,4 +1,10 @@
-import { LIVE_ROUND_SESSIONS_TABLE, SUPABASE_SESSION_STORAGE_KEY, TESTER_FEEDBACK_TABLE } from "@golfers-nation/core";
+import {
+  COURSE_SERVICE_REQUESTS_TABLE,
+  LIVE_ROUND_SESSIONS_TABLE,
+  SUPABASE_SESSION_STORAGE_KEY,
+  TESTER_FEEDBACK_TABLE,
+  TEE_TIME_REQUESTS_TABLE,
+} from "@golfers-nation/core";
 
 function getBrowserStorage(storageOverride = null) {
   if (storageOverride) {
@@ -51,6 +57,20 @@ function isMissingRelationError(error) {
 
 function logMissingRelation(tableName, error) {
   console.warn(`[Golfers Nation] Supabase table ${tableName} is not ready yet. Continuing with local-safe state.`, error);
+}
+
+function buildRestQuery(params = {}) {
+  const searchParams = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+
+    searchParams.set(key, String(value));
+  });
+
+  const query = searchParams.toString();
+  return query ? `?${query}` : "";
 }
 
 function normalizeSessionPayload(payload) {
@@ -448,6 +468,68 @@ export function createSupabaseRestBridge({
     });
   }
 
+  async function createTableRecord(tableName, record) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    const result = await request(`/rest/v1/${tableName}`, {
+      method: "POST",
+      accessToken: active.session.access_token,
+      headers: {
+        Prefer: "return=representation",
+      },
+      body: record,
+    });
+
+    if (result?.error && isMissingRelationError(result.error)) {
+      logMissingRelation(`public.${tableName}`, result.error);
+      return { status: "skipped-missing-table", data: null };
+    }
+
+    return result;
+  }
+
+  async function listTableRecords(tableName, {
+    requesterUserId = "",
+    status = "",
+    limit = 25,
+    order = "requested_at.desc",
+  } = {}) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    const query = buildRestQuery({
+      select: "*",
+      ...(requesterUserId ? { requester_user_id: `eq.${requesterUserId}` } : {}),
+      ...(status ? { status: `eq.${status}` } : {}),
+      order,
+      limit,
+    });
+
+    const result = await request(`/rest/v1/${tableName}${query}`, {
+      accessToken: active.session.access_token,
+    });
+
+    if (result?.error && isMissingRelationError(result.error)) {
+      logMissingRelation(`public.${tableName}`, result.error);
+      return { status: "skipped-missing-table", data: [] };
+    }
+
+    return result;
+  }
+
   async function fetchLiveRoundSessionByInviteCode(inviteCode) {
     const active = await getActiveSession();
     if (active.error) {
@@ -507,6 +589,22 @@ export function createSupabaseRestBridge({
     return result;
   }
 
+  async function createTeeTimeRequest(requestRecord) {
+    return createTableRecord(TEE_TIME_REQUESTS_TABLE, requestRecord);
+  }
+
+  async function listTeeTimeRequests(options = {}) {
+    return listTableRecords(TEE_TIME_REQUESTS_TABLE, options);
+  }
+
+  async function createOnCourseServiceRequest(requestRecord) {
+    return createTableRecord(COURSE_SERVICE_REQUESTS_TABLE, requestRecord);
+  }
+
+  async function listOnCourseServiceRequests(options = {}) {
+    return listTableRecords(COURSE_SERVICE_REQUESTS_TABLE, options);
+  }
+
   async function broadcastRealtimeMessage(topic, event, payload) {
     const active = await getActiveSession();
     if (active.error) {
@@ -546,6 +644,10 @@ export function createSupabaseRestBridge({
     upsertProfile,
     upsertWorkspace,
     submitTesterFeedback,
+    createTeeTimeRequest,
+    listTeeTimeRequests,
+    createOnCourseServiceRequest,
+    listOnCourseServiceRequests,
     fetchLiveRoundSessionByInviteCode,
     upsertLiveRoundSession,
     broadcastRealtimeMessage,

@@ -276,6 +276,28 @@ describe("ui helpers", () => {
     expect(markup).toContain("torreypines.com/tee-time-reservations");
   });
 
+  it("shows partner-request capability notes for request-enabled courses in web round setup", () => {
+    const state = createDefaultState();
+    state.auth.status = "authenticated";
+    state.auth.activeUserId = state.currentUser.id;
+    state.session.activeView = "round";
+    state.rounds = [];
+    state.groups = [];
+    state.session.activeRoundId = null;
+    state.session.roundSetup = {
+      ...state.session.roundSetup,
+      step: "course",
+      courseMethod: "search",
+      courseQuery: "Boston",
+      selectedCourseId: "boston-golf-club-hingham-ma",
+      selectedTeeBoxId: "boston-golf-club-back",
+    };
+
+    const markup = renderAppTemplate(state);
+
+    expect(markup).toContain("Partner request: Request Tee Time");
+  });
+
   it("keeps score setup focused on round creation instead of community join content", () => {
     const state = createDefaultState();
     state.auth.status = "authenticated";

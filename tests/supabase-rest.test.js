@@ -128,4 +128,60 @@ describe("supabase rest bridge", () => {
     expect(result.session).toBeNull();
     expect(result.missingTable).toBe(true);
   });
+
+  it("treats missing request tables as non-blocking local-safe persistence", async () => {
+    const storage = createMemoryStorage();
+    storage.setItem(SUPABASE_SESSION_STORAGE_KEY, JSON.stringify({
+      access_token: "token",
+      refresh_token: "refresh",
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: "user-1", email: "golfer@example.com" },
+    }));
+
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(createJsonResponse({
+        code: "PGRST205",
+        message: "Could not find the table 'public.tee_time_requests' in the schema cache",
+      }, { ok: false, status: 404 }))
+      .mockResolvedValueOnce(createJsonResponse({
+        code: "PGRST205",
+        message: "Could not find the table 'public.course_service_requests' in the schema cache",
+      }, { ok: false, status: 404 }))
+      .mockResolvedValueOnce(createJsonResponse({
+        code: "PGRST205",
+        message: "Could not find the table 'public.tee_time_requests' in the schema cache",
+      }, { ok: false, status: 404 }))
+      .mockResolvedValueOnce(createJsonResponse({
+        code: "PGRST205",
+        message: "Could not find the table 'public.course_service_requests' in the schema cache",
+      }, { ok: false, status: 404 }));
+
+    const bridge = createSupabaseRestBridge({
+      config: {
+        supabaseUrl: "https://example.supabase.co",
+        supabaseAnonKey: "anon-key",
+      },
+      fetchImpl,
+      storage,
+    });
+
+    const createTeeTimeResult = await bridge.createTeeTimeRequest({
+      id: "tee-time-1",
+      course_id: "course-1",
+    });
+    const createServiceResult = await bridge.createOnCourseServiceRequest({
+      id: "service-1",
+      course_id: "course-1",
+    });
+    const teeTimeList = await bridge.listTeeTimeRequests({ requesterUserId: "user-1" });
+    const serviceList = await bridge.listOnCourseServiceRequests({ requesterUserId: "user-1" });
+
+    expect(createTeeTimeResult.status).toBe("skipped-missing-table");
+    expect(createServiceResult.status).toBe("skipped-missing-table");
+    expect(teeTimeList.status).toBe("skipped-missing-table");
+    expect(serviceList.status).toBe("skipped-missing-table");
+    expect(teeTimeList.data).toEqual([]);
+    expect(serviceList.data).toEqual([]);
+  });
 });
