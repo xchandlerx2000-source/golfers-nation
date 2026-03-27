@@ -6,10 +6,12 @@ import { Card } from "../src/components/Card";
 import { Screen } from "../src/components/Screen";
 import { SectionHeader } from "../src/components/SectionHeader";
 import { getNativeRuntimeConfig } from "../src/lib/runtime-config";
-import { colors, radii, spacing } from "../src/theme";
+import { radii, spacing, useAppTheme } from "../src/theme";
 import { useAppStore } from "../src/store/useAppStore";
 
 export default function AuthScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const signInDemo = useAppStore((state) => state.signInDemo);
   const signInWithEmail = useAppStore((state) => state.signInWithEmail);
   const signUpWithEmail = useAppStore((state) => state.signUpWithEmail);
@@ -32,7 +34,7 @@ export default function AuthScreen() {
         <TextInput
           autoCapitalize="words"
           placeholder="Display name for new account"
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={theme.colors.textMuted}
           style={styles.input}
           value={displayName}
           onChangeText={setDisplayName}
@@ -41,7 +43,7 @@ export default function AuthScreen() {
           autoCapitalize="none"
           keyboardType="email-address"
           placeholder="Email"
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={theme.colors.textMuted}
           style={styles.input}
           value={email}
           onChangeText={setEmail}
@@ -50,7 +52,7 @@ export default function AuthScreen() {
           autoCapitalize="none"
           secureTextEntry
           placeholder="Password"
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={theme.colors.textMuted}
           style={styles.input}
           value={password}
           onChangeText={setPassword}
@@ -115,14 +117,14 @@ export default function AuthScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   title: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: "800",
   },
   copy: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -130,9 +132,9 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    color: theme.colors.text,
     paddingHorizontal: spacing.md,
     fontSize: 16,
   },
@@ -140,18 +142,18 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   error: {
-    color: colors.danger,
+    color: theme.colors.danger,
     fontSize: 14,
   },
   notice: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 14,
   },
   metaRows: {
     gap: spacing.xs,
   },
   metaText: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
 });

@@ -6,9 +6,11 @@ import { Card } from "../src/components/Card";
 import { Screen } from "../src/components/Screen";
 import { SectionHeader } from "../src/components/SectionHeader";
 import { HELP_SECTIONS } from "../src/lib/help-content";
-import { colors, radii, spacing } from "../src/theme";
+import { radii, spacing, useAppTheme } from "../src/theme";
 
 export default function HelpScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const [selectedSectionId, setSelectedSectionId] = useState(HELP_SECTIONS[0]?.id || "");
   const orderedSections = useMemo(() => {
     const selected = HELP_SECTIONS.find((section) => section.id === selectedSectionId) || HELP_SECTIONS[0];
@@ -62,9 +64,9 @@ export default function HelpScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   title: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: "800",
   },
@@ -78,26 +80,26 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
   },
   jumpChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary,
   },
   jumpChipText: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 13,
     fontWeight: "700",
   },
   jumpChipTextActive: {
-    color: colors.text,
+    color: theme.colors.text,
   },
   stack: {
     gap: spacing.sm,
   },
   copy: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
   },

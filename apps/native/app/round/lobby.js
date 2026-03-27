@@ -7,10 +7,12 @@ import { Card } from "../../src/components/Card";
 import { LiveStrip } from "../../src/components/LiveStrip";
 import { Screen } from "../../src/components/Screen";
 import { SectionHeader } from "../../src/components/SectionHeader";
-import { colors, spacing } from "../../src/theme";
+import { spacing, useAppTheme } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
 export default function RoundLobbyScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const activeRound = useAppStore((state) => state.activeRound);
   const leaveRound = useAppStore((state) => state.leaveRound);
   const liveSyncStatus = useAppStore((state) => state.liveSyncStatus);
@@ -83,18 +85,18 @@ export default function RoundLobbyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   course: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 22,
     fontWeight: "800",
   },
   meta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 14,
   },
   code: {
-    color: colors.primary,
+    color: theme.colors.primary,
     fontWeight: "800",
     fontSize: 18,
   },
@@ -102,20 +104,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   statusConnected: {
-    color: colors.success,
+    color: theme.colors.success,
   },
   statusWarning: {
-    color: colors.warning,
+    color: theme.colors.warning,
   },
   statusMuted: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
   },
   notice: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   groupTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: "800",
   },
@@ -125,12 +127,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   playerName: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 15,
     fontWeight: "600",
   },
   playerMeta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     textTransform: "capitalize",
   },

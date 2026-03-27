@@ -11,10 +11,13 @@ import {
   clearNativeCrashLogEntries,
   getNativeCrashLogSummary,
 } from "../src/services/native-crash-service";
-import { colors, spacing } from "../src/theme";
+import { spacing, useAppTheme } from "../src/theme";
 import { useAppStore } from "../src/store/useAppStore";
 
 function Row({ label, value }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.row}>
       <Text style={styles.label}>{label}</Text>
@@ -24,6 +27,8 @@ function Row({ label, value }) {
 }
 
 export default function TestingScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const runtimeConfig = getNativeRuntimeConfig();
   const revalidateSession = useAppStore((state) => state.revalidateSession);
   const refreshRequestReviewQueue = useAppStore((state) => state.refreshRequestReviewQueue);
@@ -126,9 +131,9 @@ export default function TestingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   title: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: "800",
   },
@@ -138,21 +143,21 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: theme.colors.border,
   },
   label: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   value: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "600",
     flexShrink: 1,
     textAlign: "right",
   },
   notice: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },

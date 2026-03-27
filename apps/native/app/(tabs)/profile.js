@@ -17,10 +17,13 @@ import {
 } from "../../src/lib/account-state";
 import { buildCommunityFeed, buildSocialCircle } from "../../src/lib/social-state";
 import { summarizeCompletedRounds } from "../../src/lib/round-history";
-import { colors, radii, spacing } from "../../src/theme";
+import { radii, spacing, useAppTheme } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
 function InfoRow({ label, value }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.infoRow}>
       <Text style={styles.infoLabel}>{label}</Text>
@@ -30,6 +33,9 @@ function InfoRow({ label, value }) {
 }
 
 function FormField({ label, value, onChangeText, placeholder, keyboardType = "default", multiline = false }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -37,7 +43,7 @@ function FormField({ label, value, onChangeText, placeholder, keyboardType = "de
         multiline={multiline}
         keyboardType={keyboardType}
         placeholder={placeholder}
-        placeholderTextColor={colors.textMuted}
+        placeholderTextColor={theme.colors.textMuted}
         style={[styles.input, multiline ? styles.inputMultiline : null]}
         value={value}
         onChangeText={onChangeText}
@@ -47,6 +53,8 @@ function FormField({ label, value, onChangeText, placeholder, keyboardType = "de
 }
 
 export default function ProfileScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const rawCurrentUser = useAppStore((state) => state.currentUser);
   const activeRound = useAppStore((state) => state.activeRound);
   const authMode = useAppStore((state) => state.authMode);
@@ -252,24 +260,24 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   name: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 26,
     fontWeight: "800",
   },
   username: {
-    color: colors.primary,
+    color: theme.colors.primary,
     fontSize: 15,
     fontWeight: "700",
   },
   meta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
   },
   sectionTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontWeight: "800",
     fontSize: 16,
   },
@@ -277,7 +285,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   fieldLabel: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -285,9 +293,9 @@ const styles = StyleSheet.create({
     minHeight: 50,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    color: theme.colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     fontSize: 15,
@@ -302,14 +310,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: theme.colors.border,
   },
   infoLabel: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   infoValue: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "600",
     flexShrink: 1,
@@ -327,29 +335,29 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: theme.colors.border,
   },
   requestCopy: {
     flex: 1,
     gap: 2,
   },
   requestName: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "700",
   },
   requestMeta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
   },
   requestStatus: {
-    color: colors.primary,
+    color: theme.colors.primary,
     fontSize: 12,
     fontWeight: "800",
     textTransform: "uppercase",
   },
   emptyCopy: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
 });

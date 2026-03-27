@@ -1,7 +1,7 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { colors, radii } from "../../src/theme";
+import { radii, useAppTheme } from "../../src/theme";
 
 function getTabIconName(routeName, focused) {
   switch (routeName) {
@@ -19,13 +19,15 @@ function getTabIconName(routeName, focused) {
 }
 
 export default function TabsLayout() {
+  const theme = useAppTheme();
+
   return (
     <Tabs
       screenOptions={({ route }) => ({
         headerStyle: {
-          backgroundColor: colors.background,
+          backgroundColor: theme.colors.background,
         },
-        headerTintColor: colors.text,
+        headerTintColor: theme.colors.text,
         headerShadowVisible: false,
         headerTitleStyle: {
           fontWeight: "800",
@@ -40,8 +42,8 @@ export default function TabsLayout() {
           paddingBottom: 12,
           borderTopWidth: 0,
           borderRadius: radii.xl,
-          backgroundColor: colors.tabBar,
-          shadowColor: colors.shadow,
+          backgroundColor: theme.colors.tabBar,
+          shadowColor: theme.colors.shadow,
           shadowOpacity: 0.32,
           shadowRadius: 24,
           shadowOffset: {
@@ -54,9 +56,9 @@ export default function TabsLayout() {
           marginHorizontal: 4,
           borderRadius: radii.lg,
         },
-        tabBarActiveBackgroundColor: colors.surfaceRaised,
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.textMuted,
+        tabBarActiveBackgroundColor: theme.colors.surfaceRaised,
+        tabBarActiveTintColor: theme.colors.accent,
+        tabBarInactiveTintColor: theme.colors.textMuted,
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: "800",

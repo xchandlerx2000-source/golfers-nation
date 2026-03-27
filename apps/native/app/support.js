@@ -7,7 +7,7 @@ import { Card } from "../src/components/Card";
 import { Screen } from "../src/components/Screen";
 import { SectionHeader } from "../src/components/SectionHeader";
 import { getNativeRuntimeConfig } from "../src/lib/runtime-config";
-import { colors, radii, spacing } from "../src/theme";
+import { radii, spacing, useAppTheme } from "../src/theme";
 import { useAppStore } from "../src/store/useAppStore";
 
 const FEEDBACK_RATINGS = [
@@ -19,6 +19,9 @@ const FEEDBACK_RATINGS = [
 ];
 
 function ChoiceGroup({ title, options, selectedId, onSelect }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.group}>
       <Text style={styles.groupLabel}>{title}</Text>
@@ -41,6 +44,8 @@ function ChoiceGroup({ title, options, selectedId, onSelect }) {
 }
 
 export default function SupportScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const runtimeConfig = getNativeRuntimeConfig();
   const supportEmail = runtimeConfig.supportEmail || "support@golfersnation.app";
   const currentUser = useAppStore((state) => state.currentUser);
@@ -127,7 +132,7 @@ export default function SupportScreen() {
           <TextInput
             autoCapitalize="words"
             placeholder="Tester name"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={theme.colors.textMuted}
             style={styles.input}
             value={testerName}
             onChangeText={setTesterName}
@@ -136,7 +141,7 @@ export default function SupportScreen() {
             autoCapitalize="none"
             keyboardType="email-address"
             placeholder="Contact email"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={theme.colors.textMuted}
             style={styles.input}
             value={contactEmail}
             onChangeText={setContactEmail}
@@ -157,7 +162,7 @@ export default function SupportScreen() {
             multiline
             numberOfLines={4}
             placeholder="What happened, or what should change?"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={theme.colors.textMuted}
             style={[styles.input, styles.textarea]}
             value={message}
             onChangeText={setMessage}
@@ -194,19 +199,19 @@ export default function SupportScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   title: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: "800",
   },
   copy: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
   },
   meta: {
-    color: colors.primary,
+    color: theme.colors.primary,
     fontSize: 14,
     fontWeight: "700",
   },
@@ -220,9 +225,9 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderRadius: radii.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    color: theme.colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     fontSize: 15,
@@ -235,7 +240,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   groupLabel: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -249,20 +254,20 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
   },
   choiceChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary,
   },
   choiceText: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 13,
     fontWeight: "700",
   },
   choiceTextActive: {
-    color: colors.text,
+    color: theme.colors.text,
   },
   row: {
     flexDirection: "row",
@@ -270,14 +275,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: theme.colors.border,
   },
   label: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   value: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "600",
     flexShrink: 1,

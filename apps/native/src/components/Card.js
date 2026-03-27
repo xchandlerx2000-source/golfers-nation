@@ -1,8 +1,11 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { colors, radii, spacing } from "../theme";
+import { radii, spacing, useAppTheme } from "../theme";
 
 export function Card({ children, style }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={[styles.card, style]}>
       <View pointerEvents="none" style={styles.tint} />
@@ -11,17 +14,17 @@ export function Card({ children, style }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   card: {
     position: "relative",
     overflow: "hidden",
-    backgroundColor: colors.surfaceRaised,
-    borderColor: colors.borderStrong,
+    backgroundColor: theme.colors.surfaceRaised,
+    borderColor: theme.colors.borderStrong,
     borderWidth: 1,
     borderRadius: radii.xl,
     padding: spacing.lg,
     gap: spacing.md,
-    shadowColor: colors.shadow,
+    shadowColor: theme.colors.shadow,
     shadowOpacity: 0.28,
     shadowRadius: 18,
     shadowOffset: {
@@ -37,7 +40,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 999,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: theme.colors.primarySoft,
     opacity: 0.75,
   },
 });

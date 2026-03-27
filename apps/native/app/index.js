@@ -2,10 +2,11 @@ import React, { useEffect } from "react";
 import { ActivityIndicator, Text } from "react-native";
 import { Redirect } from "expo-router";
 import { Screen } from "../src/components/Screen";
-import { colors } from "../src/theme";
+import { useAppTheme } from "../src/theme";
 import { useAppStore } from "../src/store/useAppStore";
 
 export default function IndexRoute() {
+  const theme = useAppTheme();
   const bootStatus = useAppStore((state) => state.bootStatus);
   const signedIn = useAppStore((state) => state.signedIn);
   const restoreSession = useAppStore((state) => state.restoreSession);
@@ -17,8 +18,8 @@ export default function IndexRoute() {
   if (bootStatus !== "ready") {
     return (
       <Screen>
-        <ActivityIndicator color={colors.primary} />
-        <Text style={{ color: colors.text }}>Restoring session...</Text>
+        <ActivityIndicator color={theme.colors.primary} />
+        <Text style={{ color: theme.colors.text }}>Restoring session...</Text>
       </Screen>
     );
   }

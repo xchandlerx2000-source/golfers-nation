@@ -5,10 +5,12 @@ import { AppButton } from "../../src/components/AppButton";
 import { Card } from "../../src/components/Card";
 import { Screen } from "../../src/components/Screen";
 import { SectionHeader } from "../../src/components/SectionHeader";
-import { colors, spacing } from "../../src/theme";
+import { spacing, useAppTheme } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
 export default function HomeScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const activeRound = useAppStore((state) => state.activeRound);
   const liveSyncStatus = useAppStore((state) => state.liveSyncStatus);
   const liveSyncNotice = useAppStore((state) => state.liveSyncNotice);
@@ -103,17 +105,17 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   heroCard: {
     gap: spacing.lg,
   },
   title: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 30,
     fontWeight: "900",
   },
   meta: {
-    color: colors.textSoft,
+    color: theme.colors.textSoft,
     fontSize: 14,
     lineHeight: 21,
   },
@@ -127,12 +129,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: theme.colors.primarySoft,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: theme.colors.borderStrong,
   },
   statusBadgeText: {
-    color: colors.accent,
+    color: theme.colors.accent,
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
@@ -145,26 +147,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   syncBadgeText: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
   statusConnected: {
-    backgroundColor: "rgba(34,197,94,0.12)",
-    borderColor: "rgba(34,197,94,0.45)",
+    backgroundColor: theme.isDark ? "rgba(52,208,123,0.16)" : "rgba(31,157,85,0.12)",
+    borderColor: theme.isDark ? "rgba(52,208,123,0.45)" : "rgba(31,157,85,0.4)",
   },
   statusWarning: {
-    backgroundColor: "rgba(245,158,11,0.12)",
-    borderColor: "rgba(245,158,11,0.45)",
+    backgroundColor: "rgba(240,180,74,0.12)",
+    borderColor: "rgba(240,180,74,0.45)",
   },
   statusMuted: {
-    backgroundColor: colors.surfaceSoft,
-    borderColor: colors.border,
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
   },
   notice: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -176,20 +178,20 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.md,
     borderRadius: 18,
-    backgroundColor: colors.surfaceSoft,
+    backgroundColor: theme.colors.surfaceSoft,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: theme.colors.border,
     gap: 4,
   },
   heroStatLabel: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   heroStatValue: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 13,
     fontWeight: "700",
   },

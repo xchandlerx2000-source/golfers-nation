@@ -1,8 +1,10 @@
 import React from "react";
 import { SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
-import { colors, spacing } from "../theme";
+import { spacing, useAppTheme } from "../theme";
 
 export function Screen({ children, scroll = false }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const content = scroll
     ? (
       <ScrollView
@@ -31,10 +33,10 @@ export function Screen({ children, scroll = false }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: theme.colors.background,
     position: "relative",
     overflow: "hidden",
   },
@@ -67,14 +69,14 @@ const styles = StyleSheet.create({
     height: 240,
     top: -88,
     right: -72,
-    backgroundColor: colors.primary,
+    backgroundColor: theme.colors.overlayPrimary,
   },
   haloAccent: {
     width: 200,
     height: 200,
     bottom: -96,
     left: -56,
-    backgroundColor: colors.accent,
-    opacity: 0.1,
+    backgroundColor: theme.colors.overlayAccent,
+    opacity: 0.18,
   },
 });

@@ -5,7 +5,7 @@ import { AppButton } from "../../../src/components/AppButton";
 import { Card } from "../../../src/components/Card";
 import { Screen } from "../../../src/components/Screen";
 import { SectionHeader } from "../../../src/components/SectionHeader";
-import { colors, spacing } from "../../../src/theme";
+import { spacing, useAppTheme } from "../../../src/theme";
 import { useAppStore } from "../../../src/store/useAppStore";
 
 function getLeaderboardEntries(summary) {
@@ -22,6 +22,9 @@ function getLeaderboardEntries(summary) {
 }
 
 function Metric({ label, value }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.metric}>
       <Text style={styles.metricLabel}>{label}</Text>
@@ -31,6 +34,9 @@ function Metric({ label, value }) {
 }
 
 function InfoRow({ label, value }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.infoRow}>
       <Text style={styles.infoLabel}>{label}</Text>
@@ -40,6 +46,8 @@ function InfoRow({ label, value }) {
 }
 
 export default function RoundSummaryScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const { roundId } = useLocalSearchParams();
   const summaries = useAppStore((state) => state.getCompletedRoundSummaries());
   const item = summaries.find((entry) => entry.id === String(roundId || "")) || null;
@@ -184,7 +192,7 @@ export default function RoundSummaryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   metricGrid: {
     flexDirection: "row",
     gap: spacing.sm,
@@ -194,24 +202,24 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
     gap: 4,
   },
   metricLabel: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.8,
     fontWeight: "700",
   },
   metricValue: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 18,
     fontWeight: "800",
   },
   sectionTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: "800",
   },
@@ -224,14 +232,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: theme.colors.border,
   },
   infoLabel: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   infoValue: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "600",
     flexShrink: 1,
@@ -240,16 +248,16 @@ const styles = StyleSheet.create({
   callout: {
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: theme.colors.border,
     gap: 2,
   },
   calloutTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "700",
   },
   calloutCopy: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -260,16 +268,16 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingVertical: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: theme.colors.border,
   },
   scoreHole: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "700",
     width: 70,
   },
   scoreMeta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     flex: 1,
     textAlign: "right",
@@ -280,23 +288,23 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: theme.colors.border,
   },
   rowCopy: {
     flex: 1,
     gap: 2,
   },
   rowName: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "700",
   },
   rowSubcopy: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
   },
   rowMeta: {
-    color: colors.primary,
+    color: theme.colors.primary,
     fontSize: 13,
     fontWeight: "700",
   },
@@ -305,15 +313,15 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   featureRow: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: theme.colors.border,
     borderRadius: 14,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: theme.colors.surfaceMuted,
   },
   actions: {
     gap: spacing.md,

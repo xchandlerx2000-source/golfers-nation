@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { colors, radii, spacing } from "../theme";
+import { radii, spacing, useAppTheme } from "../theme";
 
 export function LiveStrip({
   live = false,
@@ -9,6 +9,8 @@ export function LiveStrip({
   format = "Strokes",
   statusLabel = "",
 }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const state = live ? "LIVE" : "LOCAL";
   const connection = statusLabel || (connected ? "Connected" : "Saved on this phone");
 
@@ -24,14 +26,14 @@ export function LiveStrip({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   wrap: {
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
     gap: spacing.xs,
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
     borderWidth: 1,
     borderRadius: radii.pill,
     paddingHorizontal: spacing.md,
@@ -42,18 +44,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   liveBadge: {
-    color: colors.success,
+    color: theme.colors.success,
   },
   localBadge: {
-    color: colors.primary,
+    color: theme.colors.primary,
   },
   text: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 12,
     fontWeight: "600",
   },
   dot: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
   },
 });

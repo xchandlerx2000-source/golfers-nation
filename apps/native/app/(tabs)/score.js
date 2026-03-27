@@ -13,10 +13,13 @@ import { Card } from "../../src/components/Card";
 import { LiveStrip } from "../../src/components/LiveStrip";
 import { Screen } from "../../src/components/Screen";
 import { SectionHeader } from "../../src/components/SectionHeader";
-import { colors, spacing } from "../../src/theme";
+import { spacing, useAppTheme } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
 function CollapsibleSection({ title, summary, open, onToggle, children, danger = false }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <Card>
       <Pressable onPress={onToggle} style={styles.sectionToggle}>
@@ -32,6 +35,9 @@ function CollapsibleSection({ title, summary, open, onToggle, children, danger =
 }
 
 function DetailRow({ label, value }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
@@ -41,6 +47,8 @@ function DetailRow({ label, value }) {
 }
 
 export default function ScoreScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const activeRound = useAppStore((state) => state.activeRound);
   const submitHoleScore = useAppStore((state) => state.submitHoleScore);
   const goToPreviousHole = useAppStore((state) => state.goToPreviousHole);
@@ -335,9 +343,9 @@ export default function ScoreScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   notice: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   heroCard: {
@@ -354,25 +362,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: theme.colors.primarySoft,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: theme.colors.borderStrong,
     marginBottom: spacing.xs,
   },
   holeBadgeText: {
-    color: colors.accent,
+    color: theme.colors.accent,
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },
   holeLabel: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 28,
     fontWeight: "800",
   },
   meta: {
-    color: colors.textSoft,
+    color: theme.colors.textSoft,
     fontSize: 14,
   },
   scoreMeta: {
@@ -380,13 +388,13 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   scoreMetaLabel: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 11,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   scoreMetaValue: {
-    color: colors.accent,
+    color: theme.colors.accent,
     fontSize: 18,
     fontWeight: "900",
   },
@@ -398,20 +406,20 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.md,
     borderRadius: 18,
-    backgroundColor: colors.surfaceSoft,
+    backgroundColor: theme.colors.surfaceSoft,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: theme.colors.border,
     gap: 4,
   },
   heroStatLabel: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   heroStatValue: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "800",
   },
@@ -423,12 +431,12 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: 22,
-    backgroundColor: colors.surfaceSoft,
+    backgroundColor: theme.colors.surfaceSoft,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: theme.colors.border,
   },
   scoreValue: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 64,
     fontWeight: "900",
   },
@@ -448,19 +456,19 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   sectionTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontWeight: "900",
     fontSize: 16,
   },
   sectionTitleDanger: {
-    color: colors.danger,
+    color: theme.colors.danger,
   },
   sectionSummary: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   sectionChevron: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 24,
     lineHeight: 24,
     width: 24,
@@ -471,7 +479,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   sectionCopy: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -481,15 +489,15 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: theme.colors.border,
   },
   listName: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 15,
     fontWeight: "600",
   },
   listMeta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   serviceRow: {
@@ -508,14 +516,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: theme.colors.border,
   },
   detailLabel: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   detailValue: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "600",
     flexShrink: 1,

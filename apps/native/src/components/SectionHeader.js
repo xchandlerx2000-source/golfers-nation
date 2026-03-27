@@ -1,8 +1,11 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { colors, radii, spacing } from "../theme";
+import { radii, spacing, useAppTheme } from "../theme";
 
 export function SectionHeader({ title, subtitle = "" }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.wrap}>
       <View style={styles.eyebrow}>
@@ -14,7 +17,7 @@ export function SectionHeader({ title, subtitle = "" }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   wrap: {
     gap: spacing.xs,
   },
@@ -24,23 +27,23 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.primarySoft,
+    borderColor: theme.colors.borderStrong,
+    backgroundColor: theme.colors.primarySoft,
   },
   eyebrowText: {
-    color: colors.accent,
+    color: theme.colors.accent,
     fontSize: 11,
     fontWeight: "800",
     letterSpacing: 0.9,
     textTransform: "uppercase",
   },
   title: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 30,
     fontWeight: "900",
   },
   subtitle: {
-    color: colors.textSoft,
+    color: theme.colors.textSoft,
     fontSize: 14,
     lineHeight: 20,
     maxWidth: 420,

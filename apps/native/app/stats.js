@@ -6,10 +6,13 @@ import { Card } from "../src/components/Card";
 import { Screen } from "../src/components/Screen";
 import { SectionHeader } from "../src/components/SectionHeader";
 import { buildFrequentPartners } from "../src/lib/round-history";
-import { colors, spacing } from "../src/theme";
+import { spacing, useAppTheme } from "../src/theme";
 import { useAppStore } from "../src/store/useAppStore";
 
 function MetricCard({ label, value, detail }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.metricCard}>
       <Text style={styles.metricLabel}>{label}</Text>
@@ -20,6 +23,8 @@ function MetricCard({ label, value, detail }) {
 }
 
 export default function StatsScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const currentUser = useAppStore((state) => state.currentUser);
   const completedRounds = useAppStore((state) => state.completedRounds);
   const stats = useAppStore((state) => state.getCompletedRoundStats());
@@ -140,7 +145,7 @@ export default function StatsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   metricGrid: {
     flexDirection: "row",
     gap: spacing.sm,
@@ -148,30 +153,30 @@ const styles = StyleSheet.create({
   metricCard: {
     flex: 1,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: theme.colors.border,
     borderRadius: 16,
     padding: spacing.md,
     gap: 4,
-    backgroundColor: colors.surfaceRaised,
+    backgroundColor: theme.colors.surfaceRaised,
   },
   metricLabel: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.8,
     fontWeight: "700",
   },
   metricValue: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 24,
     fontWeight: "800",
   },
   metricDetail: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
   },
   sectionTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: "800",
   },
@@ -187,28 +192,28 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: theme.colors.border,
   },
   copyBlock: {
     flex: 1,
     gap: 2,
   },
   name: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "700",
   },
   meta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
   },
   copy: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
   },
   sideValue: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -217,25 +222,25 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   score: {
-    color: colors.primary,
+    color: theme.colors.primary,
     fontSize: 14,
     fontWeight: "800",
   },
   empty: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
   },
   featureRow: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: theme.colors.border,
     borderRadius: 14,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: theme.colors.surfaceMuted,
   },
   actions: {
     gap: spacing.md,

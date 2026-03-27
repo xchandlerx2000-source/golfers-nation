@@ -5,11 +5,12 @@ import { StatusBar } from "expo-status-bar";
 import { CrashBoundary } from "../src/components/CrashBoundary";
 import { installNativeCrashHandlers } from "../src/services/native-crash-service";
 import { useAppStore } from "../src/store/useAppStore";
-import { colors } from "../src/theme";
+import { AppThemeProvider, useAppTheme } from "../src/theme";
 
-export default function RootLayout() {
+function ThemedRootLayout() {
   const revalidateSession = useAppStore((state) => state.revalidateSession);
   const resumeLiveRoundSession = useAppStore((state) => state.resumeLiveRoundSession);
+  const theme = useAppTheme();
 
   useEffect(() => {
     installNativeCrashHandlers(() => {
@@ -45,19 +46,27 @@ export default function RootLayout() {
 
   return (
     <CrashBoundary onReset={() => router.replace("/")}>
-      <StatusBar style="light" />
+      <StatusBar style={theme.isDark ? "light" : "dark"} />
       <Stack
         screenOptions={{
           headerStyle: {
-            backgroundColor: colors.background,
+            backgroundColor: theme.colors.background,
           },
-          headerTintColor: colors.text,
+          headerTintColor: theme.colors.text,
           headerShadowVisible: false,
           contentStyle: {
-            backgroundColor: colors.background,
+            backgroundColor: theme.colors.background,
           },
         }}
       />
     </CrashBoundary>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AppThemeProvider>
+      <ThemedRootLayout />
+    </AppThemeProvider>
   );
 }

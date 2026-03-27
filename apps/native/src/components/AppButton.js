@@ -1,8 +1,10 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors, radii, spacing } from "../theme";
+import { radii, spacing, useAppTheme } from "../theme";
 
 export function AppButton({ label, variant = "primary", size = "default", onPress, disabled = false }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const secondary = variant === "secondary";
   const compact = size === "compact";
 
@@ -27,7 +29,7 @@ export function AppButton({ label, variant = "primary", size = "default", onPres
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   base: {
     minHeight: 50,
     borderRadius: radii.lg,
@@ -42,9 +44,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   primary: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primaryPressed,
-    shadowColor: colors.primary,
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primaryPressed,
+    shadowColor: theme.colors.primary,
     shadowOpacity: 0.3,
     shadowRadius: 14,
     shadowOffset: {
@@ -54,8 +56,8 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   secondary: {
-    backgroundColor: colors.surfaceSoft,
-    borderColor: colors.borderStrong,
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.borderStrong,
   },
   pressed: {
     opacity: 0.94,
@@ -71,7 +73,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   text: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 15,
     fontWeight: "800",
     letterSpacing: 0.2,
@@ -80,10 +82,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   secondaryText: {
-    color: colors.textSoft,
+    color: theme.colors.textSoft,
   },
   chevron: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 15,
     fontWeight: "900",
   },

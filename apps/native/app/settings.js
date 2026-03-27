@@ -16,10 +16,10 @@ import {
   normalizeCurrentUser,
 } from "../src/lib/account-state";
 import { getNativeRuntimeConfig } from "../src/lib/runtime-config";
-import { colors, radii, spacing } from "../src/theme";
+import { radii, spacing, useAppTheme } from "../src/theme";
 import { useAppStore } from "../src/store/useAppStore";
 
-function SettingRow({ label, value }) {
+function SettingRow({ label, value, styles }) {
   return (
     <View style={styles.row}>
       <Text style={styles.label}>{label}</Text>
@@ -28,7 +28,7 @@ function SettingRow({ label, value }) {
   );
 }
 
-function ChoiceGroup({ title, options, selectedId, onSelect }) {
+function ChoiceGroup({ title, options, selectedId, onSelect, styles }) {
   return (
     <View style={styles.group}>
       <Text style={styles.groupLabel}>{title}</Text>
@@ -50,21 +50,23 @@ function ChoiceGroup({ title, options, selectedId, onSelect }) {
   );
 }
 
-function ToggleRow({ label, value, onValueChange }) {
+function ToggleRow({ label, value, onValueChange, styles, theme }) {
   return (
     <View style={styles.toggleRow}>
       <Text style={styles.toggleLabel}>{label}</Text>
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: colors.border, true: colors.primary }}
-        thumbColor={colors.text}
+        trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+        thumbColor={theme.colors.text}
       />
     </View>
   );
 }
 
 export default function SettingsScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const signOut = useAppStore((state) => state.signOut);
   const revalidateSession = useAppStore((state) => state.revalidateSession);
   const authMode = useAppStore((state) => state.authMode);
@@ -86,13 +88,13 @@ export default function SettingsScreen() {
 
       <Card>
         <Text style={styles.sectionTitle}>Account</Text>
-        <SettingRow label="Mode" value={authMode === "supabase" ? "Cloud account" : "Local tester"} />
-        <SettingRow label="Email" value={currentUser.email || "Not connected"} />
-        <SettingRow label="Provider" value={currentUser.provider || "email"} />
-        <SettingRow label="Plan" value={formatSubscriptionLabel(currentUser.subscription)} />
-        <SettingRow label="Visibility" value={formatProfileVisibilityLabel(currentUser.privacy?.profileVisibility)} />
-        <SettingRow label="Session source" value={sessionRestoredFrom || "Fresh launch"} />
-        <SettingRow label="Session health" value={authHealthStatus || "idle"} />
+        <SettingRow label="Mode" value={authMode === "supabase" ? "Cloud account" : "Local tester"} styles={styles} />
+        <SettingRow label="Email" value={currentUser.email || "Not connected"} styles={styles} />
+        <SettingRow label="Provider" value={currentUser.provider || "email"} styles={styles} />
+        <SettingRow label="Plan" value={formatSubscriptionLabel(currentUser.subscription)} styles={styles} />
+        <SettingRow label="Visibility" value={formatProfileVisibilityLabel(currentUser.privacy?.profileVisibility)} styles={styles} />
+        <SettingRow label="Session source" value={sessionRestoredFrom || "Fresh launch"} styles={styles} />
+        <SettingRow label="Session health" value={authHealthStatus || "idle"} styles={styles} />
       </Card>
 
       <Card>
@@ -102,28 +104,35 @@ export default function SettingsScreen() {
           options={APPEARANCE_MODE_OPTIONS}
           selectedId={currentUser.appearance.colorMode}
           onSelect={(id) => updateCurrentUserAppearance({ colorMode: id })}
+          styles={styles}
         />
         <ChoiceGroup
           title="Theme"
           options={THEME_PRESET_OPTIONS}
           selectedId={currentUser.appearance.themeId}
           onSelect={(id) => updateCurrentUserAppearance({ themeId: id })}
+          styles={styles}
         />
         <ChoiceGroup
           title="Text size"
           options={TEXT_SCALE_OPTIONS}
           selectedId={currentUser.appearance.textScale}
           onSelect={(id) => updateCurrentUserAppearance({ textScale: id })}
+          styles={styles}
         />
         <ToggleRow
           label="Compact score surfaces"
           value={currentUser.appearance.compactMode === true}
           onValueChange={(value) => updateCurrentUserAppearance({ compactMode: value })}
+          styles={styles}
+          theme={theme}
         />
         <ToggleRow
           label="High contrast"
           value={currentUser.appearance.contrastMode === "high"}
           onValueChange={(value) => updateCurrentUserAppearance({ contrastMode: value ? "high" : "standard" })}
+          styles={styles}
+          theme={theme}
         />
       </Card>
 
@@ -134,45 +143,56 @@ export default function SettingsScreen() {
           options={PROFILE_VISIBILITY_OPTIONS}
           selectedId={currentUser.privacy.profileVisibility}
           onSelect={(id) => updateCurrentUserPrivacy({ profileVisibility: id })}
+          styles={styles}
         />
         <ToggleRow
           label="Show home course"
           value={currentUser.privacy.showHomeCourse === true}
           onValueChange={(value) => updateCurrentUserPrivacy({ showHomeCourse: value })}
+          styles={styles}
+          theme={theme}
         />
         <ToggleRow
           label="Show handicap"
           value={currentUser.privacy.showHandicap === true}
           onValueChange={(value) => updateCurrentUserPrivacy({ showHandicap: value })}
+          styles={styles}
+          theme={theme}
         />
         <ToggleRow
           label="Show bio"
           value={currentUser.privacy.showBio === true}
           onValueChange={(value) => updateCurrentUserPrivacy({ showBio: value })}
+          styles={styles}
+          theme={theme}
         />
         <ToggleRow
           label="Show recent form"
           value={currentUser.privacy.showRecentForm === true}
           onValueChange={(value) => updateCurrentUserPrivacy({ showRecentForm: value })}
+          styles={styles}
+          theme={theme}
         />
         <ToggleRow
           label="Show head-to-head"
           value={currentUser.privacy.showHeadToHead === true}
           onValueChange={(value) => updateCurrentUserPrivacy({ showHeadToHead: value })}
+          styles={styles}
+          theme={theme}
         />
       </Card>
 
       <Card>
         <Text style={styles.sectionTitle}>App</Text>
-        <SettingRow label="Version" value={APP_VERSION} />
-        <SettingRow label="Environment" value={runtimeConfig.appEnv} />
-        <SettingRow label="Channel" value={runtimeConfig.releaseChannel} />
-        <SettingRow label="Live sync" value={liveSyncStatus || "idle"} />
-        <SettingRow label="Request queue" value={requestReviewQueueStatus || "idle"} />
-        <SettingRow label="Nearby location" value={nearbyLocationStatus || "idle"} />
-        <SettingRow label="Session expiry" value={sessionExpiresAt ? new Date(sessionExpiresAt).toLocaleString() : "Not set"} />
-        <SettingRow label="Last auth check" value={lastAuthCheckAt ? new Date(lastAuthCheckAt).toLocaleString() : "Not checked"} />
-        <SettingRow label="Support" value={runtimeConfig.supportEmail || "support@golfersnation.app"} />
+        <SettingRow label="Version" value={APP_VERSION} styles={styles} />
+        <SettingRow label="Environment" value={runtimeConfig.appEnv} styles={styles} />
+        <SettingRow label="Channel" value={runtimeConfig.releaseChannel} styles={styles} />
+        <SettingRow label="Live sync" value={liveSyncStatus || "idle"} styles={styles} />
+        <SettingRow label="Request queue" value={requestReviewQueueStatus || "idle"} styles={styles} />
+        <SettingRow label="Nearby location" value={nearbyLocationStatus || "idle"} styles={styles} />
+        <SettingRow label="Session expiry" value={sessionExpiresAt ? new Date(sessionExpiresAt).toLocaleString() : "Not set"} styles={styles} />
+        <SettingRow label="Last auth check" value={lastAuthCheckAt ? new Date(lastAuthCheckAt).toLocaleString() : "Not checked"} styles={styles} />
+        <SettingRow label="Support" value={runtimeConfig.supportEmail || "support@golfersnation.app"} styles={styles} />
       </Card>
 
       <Card>
@@ -201,9 +221,9 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   sectionTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontWeight: "800",
     fontSize: 16,
   },
@@ -213,21 +233,21 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: theme.colors.border,
   },
   label: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   value: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "600",
     flexShrink: 1,
     textAlign: "right",
   },
   note: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -238,7 +258,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   groupLabel: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -252,20 +272,20 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
   },
   choiceChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary,
   },
   choiceText: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 13,
     fontWeight: "700",
   },
   choiceTextActive: {
-    color: colors.text,
+    color: theme.colors.text,
   },
   toggleRow: {
     flexDirection: "row",
@@ -274,10 +294,10 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.xs,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: theme.colors.border,
   },
   toggleLabel: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     flex: 1,
   },

@@ -11,10 +11,13 @@ import {
   buildSocialCircle,
   buildSocialProfilePreview,
 } from "../../src/lib/social-state";
-import { colors, spacing } from "../../src/theme";
+import { spacing, useAppTheme } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
 function Section({ title, summary, open, onToggle, children }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <Card>
       <Pressable onPress={onToggle} style={styles.sectionHeader}>
@@ -30,6 +33,8 @@ function Section({ title, summary, open, onToggle, children }) {
 }
 
 export default function CommunityScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const activeRound = useAppStore((state) => state.activeRound);
   const recentInviteCode = useAppStore((state) => state.recentInviteCode);
   const currentUser = useAppStore((state) => state.currentUser);
@@ -109,7 +114,7 @@ export default function CommunityScreen() {
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="Post a quick golf update."
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={theme.colors.textMuted}
             value={postMessage}
             multiline
             onChangeText={setPostMessage}
@@ -117,7 +122,7 @@ export default function CommunityScreen() {
           <TextInput
             style={styles.input}
             placeholder="Optional link"
-            placeholderTextColor={colors.textMuted}
+            placeholderTextColor={theme.colors.textMuted}
             autoCapitalize="none"
             value={postLinkUrl}
             onChangeText={setPostLinkUrl}
@@ -233,7 +238,7 @@ export default function CommunityScreen() {
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   placeholder="Send a quick golf message."
-                  placeholderTextColor={colors.textMuted}
+                  placeholderTextColor={theme.colors.textMuted}
                   value={messageDraft}
                   multiline
                   onChangeText={setMessageDraft}
@@ -284,7 +289,7 @@ export default function CommunityScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -296,16 +301,16 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   sectionTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: "800",
   },
   sectionSummary: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   sectionToggle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 24,
     lineHeight: 24,
   },
@@ -317,19 +322,19 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingBottom: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: theme.colors.border,
   },
   composerTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "800",
   },
   input: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.border,
-    color: colors.text,
+    borderColor: theme.colors.border,
+    color: theme.colors.text,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
@@ -344,7 +349,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: theme.colors.border,
   },
   feedHead: {
     flexDirection: "row",
@@ -356,52 +361,52 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   feedName: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "800",
   },
   feedMeta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
   },
   inlineAction: {
-    color: colors.primary,
+    color: theme.colors.primary,
     fontSize: 12,
     fontWeight: "700",
   },
   feedBody: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     lineHeight: 20,
   },
   feedDetail: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
   },
   feedLink: {
-    color: colors.primary,
+    color: theme.colors.primary,
     fontSize: 12,
   },
   personRow: {
     gap: spacing.sm,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: theme.colors.border,
   },
   personCopy: {
     gap: 2,
   },
   personName: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 15,
     fontWeight: "700",
   },
   personMeta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
   },
   personDetail: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -412,18 +417,18 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
   },
   messageRowActive: {
-    borderColor: colors.primary,
+    borderColor: theme.colors.primary,
   },
   thread: {
     gap: spacing.sm,
     marginTop: spacing.sm,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: theme.colors.border,
   },
   messageBubble: {
     maxWidth: "88%",
@@ -432,15 +437,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   messageBubbleInbound: {
-    backgroundColor: colors.surfaceMuted,
+    backgroundColor: theme.colors.surfaceMuted,
     alignSelf: "flex-start",
   },
   messageBubbleOutbound: {
-    backgroundColor: colors.primary,
+    backgroundColor: theme.colors.primary,
     alignSelf: "flex-end",
   },
   messageText: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -448,7 +453,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   emptyCopy: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
 });

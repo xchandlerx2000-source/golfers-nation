@@ -5,10 +5,13 @@ import { AppButton } from "../../../src/components/AppButton";
 import { Card } from "../../../src/components/Card";
 import { Screen } from "../../../src/components/Screen";
 import { SectionHeader } from "../../../src/components/SectionHeader";
-import { colors, spacing } from "../../../src/theme";
+import { spacing, useAppTheme } from "../../../src/theme";
 import { useAppStore } from "../../../src/store/useAppStore";
 
 function InfoRow({ label, value }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.row}>
       <Text style={styles.label}>{label}</Text>
@@ -18,6 +21,8 @@ function InfoRow({ label, value }) {
 }
 
 export default function CommunityProfileScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const { profileId } = useLocalSearchParams();
   const profile = useAppStore((state) => state.getSocialProfile(String(profileId || "")));
   const toggleFollowProfile = useAppStore((state) => state.toggleFollowProfile);
@@ -71,23 +76,23 @@ export default function CommunityProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   name: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 24,
     fontWeight: "800",
   },
   meta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 14,
   },
   copy: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     lineHeight: 20,
   },
   sectionTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: "800",
   },
@@ -97,14 +102,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: theme.colors.border,
   },
   label: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   value: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "600",
     flexShrink: 1,

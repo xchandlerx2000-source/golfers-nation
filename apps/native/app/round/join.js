@@ -5,7 +5,7 @@ import { AppButton } from "../../src/components/AppButton";
 import { Card } from "../../src/components/Card";
 import { Screen } from "../../src/components/Screen";
 import { SectionHeader } from "../../src/components/SectionHeader";
-import { colors, radii, spacing } from "../../src/theme";
+import { radii, spacing, useAppTheme } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
 function normalizeInviteCode(value) {
@@ -31,6 +31,8 @@ function mapSyncLabel(status) {
 }
 
 export default function JoinRoundScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const joinRound = useAppStore((state) => state.joinRound);
   const authNotice = useAppStore((state) => state.authNotice);
   const liveSyncNotice = useAppStore((state) => state.liveSyncNotice);
@@ -96,7 +98,7 @@ export default function JoinRoundScreen() {
           keyboardType="ascii-capable"
           maxLength={8}
           placeholder="Enter invite code"
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={theme.colors.textMuted}
           style={styles.input}
           value={code}
           onChangeText={(value) => setCode(normalizeInviteCode(value))}
@@ -141,7 +143,7 @@ export default function JoinRoundScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   heroCard: {
     gap: spacing.lg,
   },
@@ -155,12 +157,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.primarySoft,
+    backgroundColor: theme.colors.primarySoft,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
+    borderColor: theme.colors.borderStrong,
   },
   statusBadgeText: {
-    color: colors.accent,
+    color: theme.colors.accent,
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
@@ -170,28 +172,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceSoft,
+    backgroundColor: theme.colors.surfaceSoft,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: theme.colors.border,
   },
   syncConnected: {
-    backgroundColor: "rgba(34,197,94,0.12)",
-    borderColor: "rgba(34,197,94,0.45)",
+    backgroundColor: theme.isDark ? "rgba(52,208,123,0.16)" : "rgba(31,157,85,0.12)",
+    borderColor: theme.isDark ? "rgba(52,208,123,0.45)" : "rgba(31,157,85,0.4)",
   },
   syncBadgeText: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
   title: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 30,
     fontWeight: "900",
   },
   meta: {
-    color: colors.textSoft,
+    color: theme.colors.textSoft,
     fontSize: 14,
     lineHeight: 21,
   },
@@ -203,25 +205,25 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.md,
     borderRadius: radii.lg,
-    backgroundColor: colors.surfaceSoft,
+    backgroundColor: theme.colors.surfaceSoft,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: theme.colors.border,
     gap: 4,
   },
   heroStatLabel: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 11,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   heroStatValue: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "800",
   },
   groupTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 18,
     fontWeight: "800",
   },
@@ -229,16 +231,16 @@ const styles = StyleSheet.create({
     minHeight: 56,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.surfaceMuted,
-    color: colors.text,
+    borderColor: theme.colors.borderStrong,
+    backgroundColor: theme.colors.surfaceMuted,
+    color: theme.colors.text,
     paddingHorizontal: spacing.md,
     fontSize: 18,
     fontWeight: "800",
     letterSpacing: 2,
   },
   helperText: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -246,7 +248,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   notice: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -254,7 +256,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   flowItem: {
-    color: colors.textSoft,
+    color: theme.colors.textSoft,
     fontSize: 14,
     lineHeight: 20,
   },

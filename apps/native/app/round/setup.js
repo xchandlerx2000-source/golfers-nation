@@ -7,7 +7,7 @@ import { AppButton } from "../../src/components/AppButton";
 import { Card } from "../../src/components/Card";
 import { Screen } from "../../src/components/Screen";
 import { SectionHeader } from "../../src/components/SectionHeader";
-import { colors, radii, spacing } from "../../src/theme";
+import { radii, spacing, useAppTheme } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
 const COURSE_BROWSE_MODES = [
@@ -42,6 +42,9 @@ function mapSourceLabel(source = "") {
 }
 
 function StepChip({ label, active, complete, onPress, disabled = false }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <Pressable
       disabled={disabled}
@@ -59,6 +62,9 @@ function StepChip({ label, active, complete, onPress, disabled = false }) {
 }
 
 function CourseBrowseChip({ label, selected, onPress }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <Pressable onPress={onPress} style={[styles.browseChip, selected ? styles.browseChipActive : null]}>
       <Text style={[styles.browseChipText, selected ? styles.browseChipTextActive : null]}>{label}</Text>
@@ -67,6 +73,9 @@ function CourseBrowseChip({ label, selected, onPress }) {
 }
 
 function CourseResultRow({ course, selected, onPress }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <Pressable onPress={onPress} style={[styles.courseRow, selected ? styles.courseRowActive : null]}>
       <View style={styles.courseRowHeader}>
@@ -90,6 +99,9 @@ function CourseResultRow({ course, selected, onPress }) {
 }
 
 function FormatCard({ mode, selected, onPress }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
   return (
     <Pressable onPress={onPress} style={[styles.formatCard, selected ? styles.formatCardActive : null]}>
       <View style={styles.formatHeader}>
@@ -106,6 +118,8 @@ function FormatCard({ mode, selected, onPress }) {
 }
 
 export default function RoundSetupScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const setup = useAppStore((state) => state.setup);
   const courseResults = useAppStore((state) => state.courseResults);
   const courseResultsStatus = useAppStore((state) => state.courseResultsStatus);
@@ -298,7 +312,7 @@ export default function RoundSetupScreen() {
               autoCapitalize="words"
               autoCorrect={false}
               placeholder="Search course, city, or state"
-              placeholderTextColor={colors.textMuted}
+              placeholderTextColor={theme.colors.textMuted}
               style={styles.input}
               value={setup.courseQuery}
               onChangeText={(value) => {
@@ -460,7 +474,7 @@ export default function RoundSetupScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   heroCard: {
     gap: spacing.md,
   },
@@ -471,14 +485,14 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   heroEyebrow: {
-    color: colors.accent,
+    color: theme.colors.accent,
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   heroTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 24,
     fontWeight: "900",
     marginTop: 4,
@@ -487,17 +501,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceSoft,
+    backgroundColor: theme.colors.surfaceSoft,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: theme.colors.border,
   },
   heroSourceText: {
-    color: colors.textSoft,
+    color: theme.colors.textSoft,
     fontSize: 11,
     fontWeight: "700",
   },
   heroMeta: {
-    color: colors.textSoft,
+    color: theme.colors.textSoft,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -513,32 +527,32 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSoft,
   },
   stepChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primarySoft,
   },
   stepChipComplete: {
-    borderColor: "rgba(34,197,94,0.45)",
-    backgroundColor: "rgba(34,197,94,0.12)",
+    borderColor: theme.isDark ? "rgba(52,208,123,0.45)" : "rgba(31,157,85,0.35)",
+    backgroundColor: theme.isDark ? "rgba(52,208,123,0.12)" : "rgba(31,157,85,0.1)",
   },
   stepChipDisabled: {
     opacity: 0.5,
   },
   stepChipText: {
-    color: colors.textSoft,
+    color: theme.colors.textSoft,
     fontSize: 12,
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   stepChipTextActive: {
-    color: colors.text,
+    color: theme.colors.text,
   },
   groupTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 17,
     fontWeight: "900",
   },
@@ -552,28 +566,28 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSoft,
   },
   browseChipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primaryPressed,
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primaryPressed,
   },
   browseChipText: {
-    color: colors.textSoft,
+    color: theme.colors.textSoft,
     fontSize: 13,
     fontWeight: "800",
   },
   browseChipTextActive: {
-    color: colors.text,
+    color: theme.colors.text,
   },
   input: {
     minHeight: 50,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.surfaceSoft,
-    color: colors.text,
+    borderColor: theme.colors.borderStrong,
+    backgroundColor: theme.colors.surfaceSoft,
+    color: theme.colors.text,
     paddingHorizontal: spacing.md,
     fontSize: 15,
   },
@@ -583,12 +597,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   statusLine: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
   notice: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -597,16 +611,16 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSoft,
   },
   emptyTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: "800",
   },
   emptyCopy: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -618,12 +632,12 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSoft,
   },
   courseRowActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primarySoft,
   },
   courseRowHeader: {
     flexDirection: "row",
@@ -635,12 +649,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   courseName: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 15,
     fontWeight: "800",
   },
   courseMeta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   selectedBadge: {
@@ -648,10 +662,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.primary,
+    backgroundColor: theme.colors.primary,
   },
   selectedBadgeText: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
@@ -663,17 +677,17 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   courseStat: {
-    color: colors.textSoft,
+    color: theme.colors.textSoft,
     fontSize: 12,
     fontWeight: "700",
   },
   selectedName: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 22,
     fontWeight: "900",
   },
   selectedMeta: {
-    color: colors.textSoft,
+    color: theme.colors.textSoft,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -683,7 +697,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   selectedStat: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -695,12 +709,12 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSoft,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceSoft,
   },
   formatCardActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primarySoft,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primarySoft,
   },
   formatHeader: {
     flexDirection: "row",
@@ -709,28 +723,28 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   formatTitle: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 15,
     fontWeight: "800",
   },
   formatTitleActive: {
-    color: colors.accent,
+    color: theme.colors.accent,
   },
   formatBadge: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 5,
     borderRadius: radii.pill,
-    backgroundColor: colors.primary,
+    backgroundColor: theme.colors.primary,
   },
   formatBadgeText: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.7,
   },
   formatMeta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -742,19 +756,19 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   teeTimeMeta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
   teeTimeStatus: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
   startCopy: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },

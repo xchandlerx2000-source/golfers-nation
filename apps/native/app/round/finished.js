@@ -5,7 +5,7 @@ import { AppButton } from "../../src/components/AppButton";
 import { Card } from "../../src/components/Card";
 import { Screen } from "../../src/components/Screen";
 import { SectionHeader } from "../../src/components/SectionHeader";
-import { colors, spacing } from "../../src/theme";
+import { spacing, useAppTheme } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
 function getLeaderboardEntries(summary) {
@@ -22,6 +22,8 @@ function getLeaderboardEntries(summary) {
 }
 
 export default function FinishedRoundScreen() {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
   const summary = useAppStore((state) => state.getRoundSummary());
   const finishRound = useAppStore((state) => state.finishRound);
   const leaderboard = getLeaderboardEntries(summary);
@@ -74,26 +76,26 @@ export default function FinishedRoundScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme) => StyleSheet.create({
   eyebrow: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
     textTransform: "uppercase",
     letterSpacing: 0.8,
     fontWeight: "700",
   },
   winner: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 28,
     fontWeight: "800",
   },
   meta: {
-    color: colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
   },
   title: {
-    color: colors.text,
+    color: theme.colors.text,
     fontWeight: "800",
     fontSize: 16,
   },
@@ -103,14 +105,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    borderBottomColor: theme.colors.border,
   },
   name: {
-    color: colors.text,
+    color: theme.colors.text,
     fontSize: 15,
   },
   score: {
-    color: colors.primary,
+    color: theme.colors.primary,
     fontWeight: "700",
   },
   actions: {
