@@ -8,6 +8,19 @@ import { SectionHeader } from "../../../src/components/SectionHeader";
 import { colors, spacing } from "../../../src/theme";
 import { useAppStore } from "../../../src/store/useAppStore";
 
+function getLeaderboardEntries(summary) {
+  const leaderboard = summary?.leaderboard;
+  if (Array.isArray(leaderboard)) {
+    return leaderboard;
+  }
+
+  if (Array.isArray(leaderboard?.entries)) {
+    return leaderboard.entries;
+  }
+
+  return [];
+}
+
 function Metric({ label, value }) {
   return (
     <View style={styles.metric}>
@@ -44,7 +57,7 @@ export default function RoundSummaryScreen() {
   const round = item.round || {};
   const localParticipant = summary.localParticipant || null;
   const localTotals = summary.localTotals || {};
-  const leaderboard = summary.leaderboard || [];
+  const leaderboard = getLeaderboardEntries(summary);
   const holeDetails = Array.isArray(localTotals.holeDetails) ? localTotals.holeDetails : [];
   const roundInsights = Array.isArray(summary.roundInsights) ? summary.roundInsights : [];
   const completedLabel = item.completedAt ? new Date(item.completedAt).toLocaleString() : "Saved locally";

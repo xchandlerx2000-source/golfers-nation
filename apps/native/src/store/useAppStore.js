@@ -39,6 +39,10 @@ import {
   normalizeCurrentUser,
 } from "../lib/account-state";
 import {
+  normalizeCourseServiceRequests,
+  normalizeTeeTimeRequests,
+} from "../lib/request-state";
+import {
   applyRequestPersistenceResult,
   createLocalQueueItems,
   getCloudQueueItems,
@@ -434,8 +438,8 @@ export const useAppStore = create((set, get) => ({
         socialPosts: socialState.socialPosts,
         socialConversations: socialState.socialConversations,
         socialSettings: socialState.socialSettings,
-        teeTimeRequests: Array.isArray(restored.teeTimeRequests) ? restored.teeTimeRequests : [],
-        courseServiceRequests: Array.isArray(restored.courseServiceRequests) ? restored.courseServiceRequests : [],
+        teeTimeRequests: normalizeTeeTimeRequests(restored.teeTimeRequests),
+        courseServiceRequests: normalizeCourseServiceRequests(restored.courseServiceRequests),
         lastAuthCheckAt: Date.now(),
         authNotice: restored.restoredFrom === "supabase" ? "Session restored." : "",
       });

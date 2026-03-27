@@ -5,7 +5,11 @@ import { colors, spacing } from "../theme";
 export function Screen({ children, scroll = false }) {
   const content = scroll
     ? (
-      <ScrollView contentContainerStyle={styles.scrollContent} style={styles.fill}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        style={styles.fill}
+      >
         {children}
       </ScrollView>
     )
@@ -28,6 +32,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   scrollContent: {
+    flexGrow: 1,
     padding: spacing.lg,
     gap: spacing.md,
   },

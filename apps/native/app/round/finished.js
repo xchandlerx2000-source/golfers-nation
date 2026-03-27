@@ -8,9 +8,23 @@ import { SectionHeader } from "../../src/components/SectionHeader";
 import { colors, spacing } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
+function getLeaderboardEntries(summary) {
+  const leaderboard = summary?.leaderboard;
+  if (Array.isArray(leaderboard)) {
+    return leaderboard;
+  }
+
+  if (Array.isArray(leaderboard?.entries)) {
+    return leaderboard.entries;
+  }
+
+  return [];
+}
+
 export default function FinishedRoundScreen() {
   const summary = useAppStore((state) => state.getRoundSummary());
   const finishRound = useAppStore((state) => state.finishRound);
+  const leaderboard = getLeaderboardEntries(summary);
 
   if (!summary) {
     router.replace("/(tabs)/home");
@@ -29,7 +43,7 @@ export default function FinishedRoundScreen() {
       </Card>
       <Card>
         <Text style={styles.title}>Standings</Text>
-        {(summary.leaderboard?.entries || summary.leaderboard || []).map((entry, index) => (
+        {leaderboard.map((entry, index) => (
           <View key={entry.participantId || entry.id || `${entry.name}-${index}`} style={styles.row}>
             <Text style={styles.name}>{index + 1}. {entry.name}</Text>
             <Text style={styles.score}>{entry.scoreLabel || entry.displayStatus || entry.totalLabel || "--"}</Text>

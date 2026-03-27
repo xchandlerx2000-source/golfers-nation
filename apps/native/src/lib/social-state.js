@@ -2,8 +2,74 @@ import { summarizeCompletedRounds } from "./round-history";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+function toText(value, fallback = "") {
+  const text = String(value ?? fallback).trim();
+  return text || fallback;
+}
+
+function toNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
 function uniqueIds(values) {
   return [...new Set((Array.isArray(values) ? values : []).filter(Boolean))];
+}
+
+function normalizeProfile(profile = {}) {
+  return {
+    ...profile,
+    id: toText(profile.id),
+    userId: profile.userId ? toText(profile.userId) : null,
+    displayName: toText(profile.displayName || profile.name, "Golfer"),
+    username: toText(profile.username, "golfer"),
+    avatarLabel: toText(profile.avatarLabel, "GN"),
+    homeCourse: toText(profile.homeCourse),
+    handicap: profile.handicap === null || profile.handicap === undefined
+      ? null
+      : (Number.isFinite(Number(profile.handicap)) ? Number(profile.handicap) : null),
+    city: toText(profile.city),
+    bio: toText(profile.bio),
+    stats: {
+      roundsPlayed: toNumber(profile?.stats?.roundsPlayed, 0),
+      averageScore: Number.isFinite(Number(profile?.stats?.averageScore)) ? Number(profile.stats.averageScore) : null,
+      bestRound: Number.isFinite(Number(profile?.stats?.bestRound)) ? Number(profile.stats.bestRound) : null,
+      recentFormSummary: toText(profile?.stats?.recentFormSummary, "Round history builds here."),
+    },
+  };
+}
+
+function normalizePost(post = {}) {
+  return {
+    ...post,
+    id: toText(post.id),
+    profileId: toText(post.profileId),
+    message: toText(post.message),
+    linkUrl: toText(post.linkUrl),
+    createdAt: toNumber(post.createdAt, Date.now()),
+    courseName: toText(post.courseName),
+  };
+}
+
+function normalizeConversationMessage(message = {}) {
+  return {
+    ...message,
+    id: toText(message.id),
+    authorProfileId: toText(message.authorProfileId),
+    text: toText(message.text),
+    createdAt: toNumber(message.createdAt, Date.now()),
+  };
+}
+
+function normalizeConversation(conversation = {}) {
+  return {
+    ...conversation,
+    id: toText(conversation.id),
+    participantProfileIds: uniqueIds(conversation.participantProfileIds).map((value) => toText(value)).filter(Boolean),
+    messages: (Array.isArray(conversation.messages) ? conversation.messages : [])
+      .map(normalizeConversationMessage)
+      .filter((message) => message.id && message.authorProfileId && message.text),
+  };
 }
 
 function createCurrentUserProfile(currentUser, completedRounds) {
@@ -152,7 +218,11 @@ function createSeedConversations(currentProfile, peerProfiles) {
 
 function mergeProfiles(currentProfile, storedProfiles) {
   const peerProfiles = createPeerProfiles();
-  const merged = [currentProfile, ...(Array.isArray(storedProfiles) ? storedProfiles : []), ...peerProfiles];
+  const merged = [
+    normalizeProfile(currentProfile),
+    ...(Array.isArray(storedProfiles) ? storedProfiles.map(normalizeProfile) : []),
+    ...peerProfiles.map(normalizeProfile),
+  ];
   const byId = new Map();
 
   merged.forEach((profile) => {
@@ -197,15 +267,19 @@ export function normalizeSocialState({
   const posts = (Array.isArray(socialPosts) && socialPosts.length
     ? socialPosts
     : createSeedPosts(currentProfile, peerProfiles)).filter((post) => post?.id && post?.profileId);
+  const normalizedPosts = posts
+    .map(normalizePost)
+    .filter((post) => post.id && post.profileId && post.message);
 
   const conversations = (Array.isArray(socialConversations) && socialConversations.length
     ? socialConversations
     : createSeedConversations(currentProfile, peerProfiles))
+    .map(normalizeConversation)
     .filter((conversation) => conversation?.id && Array.isArray(conversation.participantProfileIds));
 
   return {
     socialProfiles: profiles,
-    socialPosts: posts,
+    socialPosts: normalizedPosts,
     socialConversations: conversations,
     socialSettings: settings,
   };

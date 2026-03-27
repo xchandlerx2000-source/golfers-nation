@@ -15,6 +15,8 @@ import {
   formatSubscriptionLabel,
   normalizeCurrentUser,
 } from "../../src/lib/account-state";
+import { buildCommunityFeed, buildSocialCircle } from "../../src/lib/social-state";
+import { summarizeCompletedRounds } from "../../src/lib/round-history";
 import { colors, radii, spacing } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
@@ -49,15 +51,28 @@ export default function ProfileScreen() {
   const activeRound = useAppStore((state) => state.activeRound);
   const authMode = useAppStore((state) => state.authMode);
   const sessionRestoredFrom = useAppStore((state) => state.sessionRestoredFrom);
-  const completedRoundStats = useAppStore((state) => state.getCompletedRoundStats());
-  const socialCircle = useAppStore((state) => state.getSocialCircle());
-  const communityFeed = useAppStore((state) => state.getCommunityFeed());
+  const completedRounds = useAppStore((state) => state.completedRounds);
+  const socialProfiles = useAppStore((state) => state.socialProfiles);
+  const socialPosts = useAppStore((state) => state.socialPosts);
+  const socialSettings = useAppStore((state) => state.socialSettings);
   const teeTimeRequests = useAppStore((state) => state.teeTimeRequests);
   const courseServiceRequests = useAppStore((state) => state.courseServiceRequests);
   const signOut = useAppStore((state) => state.signOut);
   const updateCurrentUserProfile = useAppStore((state) => state.updateCurrentUserProfile);
 
   const currentUser = normalizeCurrentUser(rawCurrentUser || {});
+  const completedRoundStats = summarizeCompletedRounds(completedRounds, currentUser.id);
+  const socialCircle = buildSocialCircle({
+    currentUser,
+    socialProfiles,
+    socialSettings,
+  });
+  const communityFeed = buildCommunityFeed({
+    currentUser,
+    socialProfiles,
+    socialPosts,
+    socialSettings,
+  });
   const [formState, setFormState] = useState({
     displayName: currentUser.displayName,
     city: currentUser.city,

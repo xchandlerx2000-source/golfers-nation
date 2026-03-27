@@ -5,6 +5,12 @@ import { AppButton } from "../../src/components/AppButton";
 import { Card } from "../../src/components/Card";
 import { Screen } from "../../src/components/Screen";
 import { SectionHeader } from "../../src/components/SectionHeader";
+import {
+  buildCommunityFeed,
+  buildDirectInbox,
+  buildSocialCircle,
+  buildSocialProfilePreview,
+} from "../../src/lib/social-state";
 import { colors, spacing } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
@@ -26,10 +32,11 @@ function Section({ title, summary, open, onToggle, children }) {
 export default function CommunityScreen() {
   const activeRound = useAppStore((state) => state.activeRound);
   const recentInviteCode = useAppStore((state) => state.recentInviteCode);
-  const communityFeed = useAppStore((state) => state.getCommunityFeed());
-  const socialCircle = useAppStore((state) => state.getSocialCircle());
-  const directInbox = useAppStore((state) => state.getDirectInbox());
-  const currentProfile = useAppStore((state) => state.getCurrentSocialProfile());
+  const currentUser = useAppStore((state) => state.currentUser);
+  const socialProfiles = useAppStore((state) => state.socialProfiles);
+  const socialPosts = useAppStore((state) => state.socialPosts);
+  const socialConversations = useAppStore((state) => state.socialConversations);
+  const socialSettings = useAppStore((state) => state.socialSettings);
   const toggleFollowProfile = useAppStore((state) => state.toggleFollowProfile);
   const addFriendProfile = useAppStore((state) => state.addFriendProfile);
   const createSocialPost = useAppStore((state) => state.createSocialPost);
@@ -39,6 +46,30 @@ export default function CommunityScreen() {
   const [postLinkUrl, setPostLinkUrl] = useState("");
   const [messageDraft, setMessageDraft] = useState("");
   const [activeConversationId, setActiveConversationId] = useState("");
+
+  const communityFeed = useMemo(() => buildCommunityFeed({
+    currentUser,
+    socialProfiles,
+    socialPosts,
+    socialSettings,
+  }), [currentUser, socialProfiles, socialPosts, socialSettings]);
+  const socialCircle = useMemo(() => buildSocialCircle({
+    currentUser,
+    socialProfiles,
+    socialSettings,
+  }), [currentUser, socialProfiles, socialSettings]);
+  const directInbox = useMemo(() => buildDirectInbox({
+    currentUser,
+    socialProfiles,
+    socialConversations,
+    socialSettings,
+  }), [currentUser, socialProfiles, socialConversations, socialSettings]);
+  const currentProfile = useMemo(() => buildSocialProfilePreview({
+    currentUser,
+    socialProfiles,
+    socialSettings,
+    profileId: currentUser?.profileId || currentUser?.id || "",
+  }), [currentUser, socialProfiles, socialSettings]);
 
   const activeConversation = useMemo(() => {
     if (!directInbox.length) {

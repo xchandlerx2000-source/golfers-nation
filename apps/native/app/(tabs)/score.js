@@ -116,7 +116,7 @@ export default function ScoreScreen() {
     : "This round stays on this phone";
 
   return (
-    <Screen>
+    <Screen scroll>
       <SectionHeader title="Score" subtitle={activeRound.courseName} />
       <LiveStrip
         live={Boolean(activeRound.inviteCode)}
