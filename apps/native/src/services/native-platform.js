@@ -331,6 +331,18 @@ export async function clearNativeAppSession() {
   await removeItem(APP_SESSION_KEY);
 }
 
+async function clearExpiredNativeAuthSession(persisted = {}) {
+  const nextSession = mergeNativeAppSession(persisted, {
+    signedIn: false,
+    currentUser: null,
+    authMode: "local-demo",
+    restoredFrom: "",
+    sessionExpiresAt: null,
+  });
+  await writeNativeAppSession(nextSession);
+  return nextSession;
+}
+
 export async function restoreNativeAuthSession() {
   const persisted = await readNativeAppSession();
 
@@ -384,7 +396,7 @@ export async function revalidateNativeAuthSession({
   const active = await getActiveCloudSession();
   const persisted = (await readNativeAppSession()) || {};
   if (active?.error || !active?.session?.access_token) {
-    await clearNativeAppSession();
+    await clearExpiredNativeAuthSession(persisted);
     return createSessionHealthResult({
       status: "expired",
       notice: "Cloud session expired. Sign in again.",
@@ -396,7 +408,7 @@ export async function revalidateNativeAuthSession({
   const bridge = getBridge();
   const current = await bridge.getCurrentUser();
   if (current?.error || !current?.user?.id) {
-    await clearNativeAppSession();
+    await clearExpiredNativeAuthSession(persisted);
     return createSessionHealthResult({
       status: "expired",
       notice: "Cloud session expired. Sign in again.",

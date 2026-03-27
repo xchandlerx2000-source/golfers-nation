@@ -10,7 +10,32 @@ export function cloneData(value) {
     return structuredClone(value);
   }
 
-  return JSON.parse(JSON.stringify(value));
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  const valueType = typeof value;
+  if (valueType === "string" || valueType === "number" || valueType === "boolean" || valueType === "bigint") {
+    return value;
+  }
+
+  if (valueType === "function" || valueType === "symbol") {
+    throw new TypeError(`cloneData fallback cannot clone ${valueType} values without structuredClone.`);
+  }
+
+  const serialized = JSON.stringify(value, (_key, nestedValue) => {
+    const nestedType = typeof nestedValue;
+    if (nestedType === "function" || nestedType === "symbol" || nestedType === "bigint") {
+      throw new TypeError(`cloneData fallback cannot clone nested ${nestedType} values without structuredClone.`);
+    }
+    return nestedValue;
+  });
+
+  if (serialized === undefined) {
+    return value;
+  }
+
+  return JSON.parse(serialized);
 }
 
 export function escapeHtml(value) {

@@ -61,7 +61,7 @@ Those files are build artifacts generated from `src/` and `src/shell/`.
 
 ## Development policy
 
-Before adding or changing features, read [DEVELOPMENT_POLICY.md](C:/Users/Bower/OneDrive/Desktop/golf%20nation/DEVELOPMENT_POLICY.md).
+Before adding or changing features, read [DEVELOPMENT_POLICY.md](./DEVELOPMENT_POLICY.md).
 
 That policy defines:
 
@@ -73,7 +73,9 @@ That policy defines:
 
 Contributors should follow that policy so shared logic stays centralized, native remains the primary product target, and web stays maintained without becoming a second competing product.
 
-For Android tester builds and sideload workflow, use [docs/native-sideload-testing.md](C:/Users/Bower/OneDrive/Desktop/golf%20nation/docs/native-sideload-testing.md).
+For Android tester builds and sideload workflow, use [docs/native-sideload-testing.md](./docs/native-sideload-testing.md).
+
+Contributor note: keep documentation links repo-relative. Do not commit machine-specific absolute local file paths such as `C:/Users/...`.
 
 ## Web + APK test release
 
@@ -193,7 +195,7 @@ Cloudflare Pages should publish `dist/` only. Root files exist for local browser
 
 ### Supabase tester setup
 
-For a real tester build, edit [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/src/shell/runtime-config.js) before running `npm run build:cloudflare`:
+For a real tester build, edit [runtime-config.js](./src/shell/runtime-config.js) before running `npm run build:cloudflare`:
 
 - `supabaseUrl`
 - `supabaseAnonKey`
@@ -202,17 +204,17 @@ For a real tester build, edit [runtime-config.js](C:/Users/Bower/OneDrive/Deskto
 
 Cloudflare direct-upload deploy:
 
-1. Update [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/src/shell/runtime-config.js)
+1. Update [runtime-config.js](./src/shell/runtime-config.js)
 2. Run `npm run build:cloudflare`
 3. Upload the generated `dist/` folder
 
 Repo-connected deploy:
 
-1. Update [runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/src/shell/runtime-config.js) in the repo
+1. Update [runtime-config.js](./src/shell/runtime-config.js) in the repo
 2. Commit and push
 3. Trigger a new Pages deploy
 
-[runtime-config.js](C:/Users/Bower/OneDrive/Desktop/golf%20nation/src/shell/runtime-config.js) is the source of truth, and the build copies it into the generated root output and then into [dist](C:/Users/Bower/OneDrive/Desktop/golf%20nation/dist).
+[runtime-config.js](./src/shell/runtime-config.js) is the source of truth, and the build copies it into the generated root output and then into [dist](./dist/).
 
 ### Important testing note
 
@@ -234,7 +236,7 @@ The app includes an in-app tester feedback form inside:
   - theme / appearance
   - recent activity summary
 - Feedback is saved to the Supabase `tester_feedback` table for review
-- The SQL for that table and its RLS policies is in [docs/supabase-setup.md](C:/Users/Bower/OneDrive/Desktop/golf%20nation/docs/supabase-setup.md)
+- The SQL for that table and its RLS policies is in [docs/supabase-setup.md](./docs/supabase-setup.md)
 
 ### Suggested lightweight analytics plan
 
@@ -290,13 +292,13 @@ Make sure these files are published together:
 
 ## Further documentation
 
-See `docs/product-foundation.md` for:
+See [docs/product-foundation.md](./docs/product-foundation.md) for:
 
 - recommended file structure
 - architectural decisions
 - backend schema suggestion
 
-See `docs/course-quality-admin.md` for:
+See [docs/course-quality-admin.md](./docs/course-quality-admin.md) for:
 
 - manual course override workflow
 - reconciliation report outputs
@@ -304,14 +306,14 @@ See `docs/course-quality-admin.md` for:
 - native app migration plan
 - roadmap from MVP to production
 
-See `docs/developer-review-map.md` for:
+See [docs/developer-review-map.md](./docs/developer-review-map.md) for:
 
 - the source-of-truth workflow
 - the fastest way for engineers to review the repo
 - the main backend/service seams
 - what is live today vs still scaffolded
 
-See `docs/supabase-setup.md` for:
+See [docs/supabase-setup.md](./docs/supabase-setup.md) for:
 
 - Supabase table and RLS setup
 - runtime env variable details

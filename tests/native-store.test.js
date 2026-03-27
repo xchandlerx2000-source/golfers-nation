@@ -5,7 +5,7 @@ import {
   clearCachedNativeLocation,
   writeCachedNativeLocation,
 } from "../apps/native/src/services/native-location-service.js";
-import { clearNativeAppSession, writeNativeAppSession } from "../apps/native/src/services/native-platform.js";
+import { clearNativeAppSession, readNativeAppSession, writeNativeAppSession } from "../apps/native/src/services/native-platform.js";
 import { resetNativeCourseCatalogCache } from "../apps/native/src/services/native-course-service.js";
 import { useAppStore } from "../apps/native/src/store/useAppStore.js";
 
@@ -203,6 +203,18 @@ describe("native app store", () => {
   });
 
   it("marks an expired cloud session and keeps the active round local-safe", async () => {
+    await writeNativeAppSession({
+      signedIn: true,
+      currentUser: {
+        id: "cloud-user",
+        displayName: "Cloud Golfer",
+      },
+      authMode: "supabase",
+      completedRounds: [{ id: "round-1", courseName: "Pebble Beach" }],
+      teeTimeRequests: [{ id: "request-1", courseName: "Pebble Beach" }],
+      socialPosts: [{ id: "post-1" }],
+    });
+
     useAppStore.setState({
       signedIn: true,
       currentUser: {
@@ -222,6 +234,14 @@ describe("native app store", () => {
     expect(useAppStore.getState().signedIn).toBe(false);
     expect(useAppStore.getState().authHealthStatus).toBe("expired");
     expect(useAppStore.getState().liveSyncStatus).toBe("retry-needed");
+
+    const persisted = await readNativeAppSession();
+    expect(persisted.signedIn).toBe(false);
+    expect(persisted.authMode).toBe("local-demo");
+    expect(persisted.currentUser).toBeNull();
+    expect(persisted.completedRounds).toHaveLength(1);
+    expect(persisted.teeTimeRequests).toHaveLength(1);
+    expect(persisted.socialPosts).toHaveLength(1);
   });
 
   it("requires an email before starting password reset", async () => {

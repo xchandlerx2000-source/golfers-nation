@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFile, stat } from "node:fs/promises";
+import path from "node:path";
 
 import { createCourseRoundTemplateRecord, getDefaultCourseTeeBoxRecord } from "../src/domain/course-models.js";
 import { normalizeImportedCourseSourceRecord, normalizeImportedCourseSourceRecords } from "../src/services/course-normalization.js";
@@ -176,11 +177,11 @@ describe("course import pipeline", () => {
 
   it("emits runtime discovery and detail-shard assets for the imported catalog", async () => {
     const manifest = getCourseCatalogManifest();
-    const nearbyIndexPath = `${process.cwd()}\\${manifest.nearbyIndexPath.replace(/\//g, "\\")}`;
-    const discoveryIndexPath = `${process.cwd()}\\${manifest.discoveryIndexPath.replace(/\//g, "\\")}`;
-    const firstShardPath = `${process.cwd()}\\${manifest.detailShards[0].path.replace(/\//g, "\\")}`;
-    const reconciliationReportPath = `${process.cwd()}\\data\\course\\reconciliation-report.json`;
-    const adminOverridesPath = `${process.cwd()}\\data\\course\\admin-overrides.json`;
+    const nearbyIndexPath = path.resolve(process.cwd(), manifest.nearbyIndexPath);
+    const discoveryIndexPath = path.resolve(process.cwd(), manifest.discoveryIndexPath);
+    const firstShardPath = path.resolve(process.cwd(), manifest.detailShards[0].path);
+    const reconciliationReportPath = path.resolve(process.cwd(), "data", "course", "reconciliation-report.json");
+    const adminOverridesPath = path.resolve(process.cwd(), "data", "course", "admin-overrides.json");
 
     const nearbyIndex = JSON.parse(await readFile(nearbyIndexPath, "utf8"));
     const discoveryIndex = JSON.parse(await readFile(discoveryIndexPath, "utf8"));
