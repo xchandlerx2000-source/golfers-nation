@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { AppButton } from "../../src/components/AppButton";
 import { Card } from "../../src/components/Card";
 import { Screen } from "../../src/components/Screen";
@@ -14,43 +14,56 @@ import {
 import { spacing, useAppTheme } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
-function Section({ title, summary, open, onToggle, children }) {
+function Segment({ label, active, onPress }) {
   const theme = useAppTheme();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
 
   return (
-    <Card>
-      <Pressable onPress={onToggle} style={styles.sectionHeader}>
-        <View style={styles.sectionHeaderText}>
-          <Text style={styles.sectionTitle}>{title}</Text>
-          <Text style={styles.sectionSummary}>{summary}</Text>
-        </View>
-        <Text style={styles.sectionToggle}>{open ? "-" : "+"}</Text>
-      </Pressable>
-      {open ? <View style={styles.sectionBody}>{children}</View> : null}
-    </Card>
+    <Pressable onPress={onPress} style={[styles.segment, active ? styles.segmentActive : null]}>
+      <Text style={[styles.segmentText, active ? styles.segmentTextActive : null]}>{label}</Text>
+    </Pressable>
   );
 }
 
 export default function CommunityScreen() {
   const theme = useAppTheme();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
-  const activeRound = useAppStore((state) => state.activeRound);
-  const recentInviteCode = useAppStore((state) => state.recentInviteCode);
+  const authMode = useAppStore((state) => state.authMode);
   const currentUser = useAppStore((state) => state.currentUser);
   const socialProfiles = useAppStore((state) => state.socialProfiles);
   const socialPosts = useAppStore((state) => state.socialPosts);
   const socialConversations = useAppStore((state) => state.socialConversations);
   const socialSettings = useAppStore((state) => state.socialSettings);
+  const socialDiscoveryQuery = useAppStore((state) => state.socialDiscoveryQuery);
+  const socialDiscoveryResults = useAppStore((state) => state.socialDiscoveryResults);
+  const socialDiscoveryStatus = useAppStore((state) => state.socialDiscoveryStatus);
+  const socialDiscoveryNotice = useAppStore((state) => state.socialDiscoveryNotice);
+  const setSocialDiscoveryQuery = useAppStore((state) => state.setSocialDiscoveryQuery);
+  const clearSocialDiscovery = useAppStore((state) => state.clearSocialDiscovery);
+  const refreshSocialDiscovery = useAppStore((state) => state.refreshSocialDiscovery);
   const toggleFollowProfile = useAppStore((state) => state.toggleFollowProfile);
   const addFriendProfile = useAppStore((state) => state.addFriendProfile);
   const createSocialPost = useAppStore((state) => state.createSocialPost);
+  const openDirectConversation = useAppStore((state) => state.openDirectConversation);
   const sendDirectMessage = useAppStore((state) => state.sendDirectMessage);
-  const [openSection, setOpenSection] = useState("join");
+  const [tab, setTab] = useState("discover");
   const [postMessage, setPostMessage] = useState("");
   const [postLinkUrl, setPostLinkUrl] = useState("");
   const [messageDraft, setMessageDraft] = useState("");
   const [activeConversationId, setActiveConversationId] = useState("");
+
+  useEffect(() => {
+    if (socialDiscoveryStatus === "idle") {
+      void refreshSocialDiscovery("");
+    }
+  }, [refreshSocialDiscovery, socialDiscoveryStatus]);
+
+  useEffect(() => {
+    const requestedTab = String(params?.tab || "").trim().toLowerCase();
+    if (requestedTab === "messages" || requestedTab === "discover" || requestedTab === "circle" || requestedTab === "clubhouse") {
+      setTab(requestedTab);
+    }
+  }, [params]);
 
   const communityFeed = useMemo(() => buildCommunityFeed({
     currentUser,
@@ -75,7 +88,6 @@ export default function CommunityScreen() {
     socialSettings,
     profileId: currentUser?.profileId || currentUser?.id || "",
   }), [currentUser, socialProfiles, socialSettings]);
-
   const activeConversation = useMemo(() => {
     if (!directInbox.length) {
       return null;
@@ -85,220 +97,295 @@ export default function CommunityScreen() {
   }, [activeConversationId, directInbox]);
   const friends = socialCircle.filter((entry) => entry.isFriend);
   const following = socialCircle.filter((entry) => entry.isFollowed && !entry.isFriend);
-  const spotlight = friends[0] || socialCircle[0] || null;
 
   return (
     <Screen scroll>
-      <SectionHeader title="Community" subtitle="Join live rounds, follow golfers, and keep the golf chat moving." />
+      <SectionHeader title="Community" subtitle="Real golfers only. Discover profiles, follow your circle, and keep messages clean." />
 
-      <Section
-        title="Join"
-        summary={recentInviteCode ? `Recent code ${recentInviteCode}` : "Enter a code and go straight into the round"}
-        open={openSection === "join"}
-        onToggle={() => setOpenSection((value) => (value === "join" ? "" : "join"))}
-      >
-        <AppButton label="Join Game" onPress={() => router.push("/round/join")} />
-        {activeRound?.inviteCode ? (
-          <AppButton label="Open Live Round" variant="secondary" onPress={() => router.push("/round/lobby")} />
-        ) : null}
-      </Section>
+      <Card>
+        <View style={styles.segmentRow}>
+          <Segment label="Discover" active={tab === "discover"} onPress={() => setTab("discover")} />
+          <Segment label="Circle" active={tab === "circle"} onPress={() => setTab("circle")} />
+          <Segment label="Messages" active={tab === "messages"} onPress={() => setTab("messages")} />
+          <Segment label="Clubhouse" active={tab === "clubhouse"} onPress={() => setTab("clubhouse")} />
+        </View>
+      </Card>
 
-      <Section
-        title="Clubhouse"
-        summary={`${communityFeed.length} posts in your golf circle`}
-        open={openSection === "clubhouse"}
-        onToggle={() => setOpenSection((value) => (value === "clubhouse" ? "" : "clubhouse"))}
-      >
-        <View style={styles.composer}>
-          <Text style={styles.composerTitle}>Share update</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Post a quick golf update."
-            placeholderTextColor={theme.colors.textMuted}
-            value={postMessage}
-            multiline
-            onChangeText={setPostMessage}
-          />
+      {tab === "discover" ? (
+        <Card>
+          <Text style={styles.sectionTitle}>Discover golfers</Text>
+          <Text style={styles.sectionSummary}>
+            {authMode === "supabase"
+              ? "Search real player profiles from the cloud account path."
+              : "Cloud sign-in unlocks real golfer discovery. Local mode only shows golfers already saved on this phone."}
+          </Text>
           <TextInput
             style={styles.input}
-            placeholder="Optional link"
+            placeholder="Search golfers by name, username, or home course"
             placeholderTextColor={theme.colors.textMuted}
+            value={socialDiscoveryQuery}
+            onChangeText={setSocialDiscoveryQuery}
             autoCapitalize="none"
-            value={postLinkUrl}
-            onChangeText={setPostLinkUrl}
+            autoCorrect={false}
           />
-          <AppButton
-            label="Post"
-            onPress={async () => {
-              await createSocialPost({ message: postMessage, linkUrl: postLinkUrl });
-              setPostMessage("");
-              setPostLinkUrl("");
-            }}
-          />
-        </View>
-        <View style={styles.stack}>
-          {communityFeed.map((post) => (
-            <View key={post.id} style={styles.feedRow}>
-              <View style={styles.feedHead}>
-                <View style={styles.feedCopy}>
-                  <Text style={styles.feedName}>{post.author?.displayName || "Golfer"}</Text>
-                  <Text style={styles.feedMeta}>
-                    @{post.author?.username || "golfer"} / {new Date(Number(post.createdAt || 0)).toLocaleString()}
-                  </Text>
-                </View>
-                <Pressable onPress={() => router.push(`/community/profile/${post.profileId}`)}>
-                  <Text style={styles.inlineAction}>View stats</Text>
-                </Pressable>
-              </View>
-              <Text style={styles.feedBody}>{post.message}</Text>
-              {post.courseName ? <Text style={styles.feedDetail}>{post.courseName}</Text> : null}
-              {post.linkUrl ? <Text style={styles.feedLink}>{post.linkUrl}</Text> : null}
-            </View>
-          ))}
-        </View>
-      </Section>
-
-      <Section
-        title="Golf Circle"
-        summary={`${friends.length} friends / ${following.length} following`}
-        open={openSection === "friends"}
-        onToggle={() => setOpenSection((value) => (value === "friends" ? "" : "friends"))}
-      >
-        {socialCircle.map((player) => (
-          <View key={player.id} style={styles.personRow}>
-            <View style={styles.personCopy}>
-              <Text style={styles.personName}>{player.displayName}</Text>
-              <Text style={styles.personMeta}>
-                @{player.username} / {player.homeCourse || player.city || "Golf profile"}
-              </Text>
-              <Text style={styles.personDetail}>{player.stats?.recentFormSummary || player.bio}</Text>
-            </View>
-            <View style={styles.personActions}>
-              <AppButton label="View" variant="secondary" onPress={() => router.push(`/community/profile/${player.id}`)} />
-              <AppButton
-                label={player.isFriend ? "Friends" : "Add Friend"}
-                variant="secondary"
-                disabled={player.isFriend}
-                onPress={() => addFriendProfile(player.id)}
-              />
-              <AppButton
-                label={player.isFollowed ? "Following" : "Follow"}
-                variant="secondary"
-                onPress={() => toggleFollowProfile(player.id)}
-              />
-            </View>
+          <View style={styles.inlineActions}>
+            <AppButton
+              label={socialDiscoveryStatus === "loading" ? "Searching..." : "Search"}
+              size="compact"
+              onPress={() => {
+                void refreshSocialDiscovery();
+              }}
+            />
+            <AppButton
+              label="Clear"
+              size="compact"
+              variant="secondary"
+              onPress={() => {
+                clearSocialDiscovery();
+                void refreshSocialDiscovery("");
+              }}
+            />
           </View>
-        ))}
-      </Section>
-
-      <Section
-        title="Messages"
-        summary={directInbox.length ? `${directInbox.length} conversations` : "Start a chat with your golf circle"}
-        open={openSection === "messages"}
-        onToggle={() => setOpenSection((value) => (value === "messages" ? "" : "messages"))}
-      >
-        {directInbox.length ? (
-          <>
-            <View style={styles.stack}>
-              {directInbox.map((conversation) => (
-                <Pressable
-                  key={conversation.id}
-                  onPress={() => setActiveConversationId(conversation.id)}
-                  style={[
-                    styles.messageRow,
-                    conversation.id === activeConversation?.id ? styles.messageRowActive : null,
-                  ]}
-                >
+          {socialDiscoveryNotice ? <Text style={styles.notice}>{socialDiscoveryNotice}</Text> : null}
+          {socialDiscoveryResults.length ? (
+            <View style={styles.list}>
+              {socialDiscoveryResults.map((player) => (
+                <View key={player.id} style={styles.personRow}>
                   <View style={styles.personCopy}>
-                    <Text style={styles.personName}>{conversation.peer?.displayName || "Golfer"}</Text>
+                    <Text style={styles.personName}>{player.displayName}</Text>
                     <Text style={styles.personMeta}>
-                      @{conversation.peer?.username || "golfer"} / {conversation.messageCount} messages
+                      @{player.username} / {player.homeCourse || player.city || "Golf profile"}
                     </Text>
-                    <Text style={styles.personDetail}>{conversation.latestMessage?.text || "No messages yet."}</Text>
+                    <Text style={styles.personDetail}>{player.stats?.recentFormSummary || player.bio || "Profile ready."}</Text>
                   </View>
-                </Pressable>
+                  <View style={styles.personActions}>
+                    <AppButton label="View" size="compact" variant="secondary" onPress={() => router.push(`/community/profile/${player.id}`)} />
+                    <AppButton label="Add" size="compact" variant="secondary" onPress={() => addFriendProfile(player.id)} />
+                    <AppButton label="Follow" size="compact" variant="secondary" onPress={() => toggleFollowProfile(player.id)} />
+                    <AppButton
+                      label="Message"
+                      size="compact"
+                      variant="secondary"
+                      onPress={async () => {
+                        const conversationId = await openDirectConversation(player.id);
+                        setActiveConversationId(conversationId);
+                        setTab("messages");
+                      }}
+                    />
+                  </View>
+                </View>
               ))}
             </View>
-            {activeConversation ? (
-              <View style={styles.thread}>
-                <Text style={styles.composerTitle}>{activeConversation.peer?.displayName || "Conversation"}</Text>
-                <View style={styles.stack}>
-                  {(activeConversation.messages || []).slice(-6).map((message) => (
-                    <View
-                      key={message.id}
-                      style={[
-                        styles.messageBubble,
-                        message.authorProfileId === currentProfile?.id ? styles.messageBubbleOutbound : styles.messageBubbleInbound,
-                      ]}
-                    >
-                      <Text style={styles.messageText}>{message.text}</Text>
-                    </View>
-                  ))}
-                </View>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="Send a quick golf message."
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={messageDraft}
-                  multiline
-                  onChangeText={setMessageDraft}
-                />
-                <AppButton
-                  label="Send"
-                  onPress={async () => {
-                    await sendDirectMessage(activeConversation.peerProfileId, messageDraft);
-                    setMessageDraft("");
-                  }}
-                />
-              </View>
-            ) : null}
-          </>
-        ) : (
-          <Text style={styles.emptyCopy}>Add golfers to your circle to open direct messages.</Text>
-        )}
-      </Section>
+          ) : (
+            <Text style={styles.emptyCopy}>No golfer discovery results yet.</Text>
+          )}
+        </Card>
+      ) : null}
 
-      <Section
-        title="Spotlight"
-        summary={spotlight ? spotlight.displayName : "No spotlight golfer yet"}
-        open={openSection === "spotlight"}
-        onToggle={() => setOpenSection((value) => (value === "spotlight" ? "" : "spotlight"))}
-      >
-        {spotlight ? (
-          <View style={styles.spotlight}>
-            <Text style={styles.personName}>{spotlight.displayName}</Text>
-            <Text style={styles.personMeta}>@{spotlight.username}</Text>
-            <Text style={styles.personDetail}>{spotlight.bio}</Text>
-            <Text style={styles.personDetail}>{spotlight.stats?.recentFormSummary || "Recent form pending."}</Text>
-            <View style={styles.personActions}>
-              <AppButton label="View Stats" variant="secondary" onPress={() => router.push(`/community/profile/${spotlight.id}`)} />
-              <AppButton label="Message" onPress={() => {
-                setOpenSection("messages");
-                const conversation = directInbox.find((entry) => entry.peerProfileId === spotlight.id);
-                if (conversation) {
-                  setActiveConversationId(conversation.id);
-                }
-              }} />
+      {tab === "circle" ? (
+        <Card>
+          <Text style={styles.sectionTitle}>Your golf circle</Text>
+          <Text style={styles.sectionSummary}>{friends.length} friends / {following.length} following</Text>
+          {socialCircle.length ? (
+            <View style={styles.list}>
+              {socialCircle.map((player) => (
+                <View key={player.id} style={styles.personRow}>
+                  <View style={styles.personCopy}>
+                    <Text style={styles.personName}>{player.displayName}</Text>
+                    <Text style={styles.personMeta}>
+                      @{player.username} / {player.homeCourse || player.city || "Golf profile"}
+                    </Text>
+                    <Text style={styles.personDetail}>{player.stats?.recentFormSummary || player.bio || "Profile ready."}</Text>
+                  </View>
+                  <View style={styles.personActions}>
+                    <AppButton label="View" size="compact" variant="secondary" onPress={() => router.push(`/community/profile/${player.id}`)} />
+                    <AppButton
+                      label={player.isFriend ? "Friends" : "Add"}
+                      size="compact"
+                      variant="secondary"
+                      disabled={player.isFriend}
+                      onPress={() => addFriendProfile(player.id)}
+                    />
+                    <AppButton
+                      label={player.isFollowed ? "Following" : "Follow"}
+                      size="compact"
+                      variant="secondary"
+                      onPress={() => toggleFollowProfile(player.id)}
+                    />
+                    <AppButton
+                      label="Message"
+                      size="compact"
+                      variant="secondary"
+                      onPress={async () => {
+                        const conversationId = await openDirectConversation(player.id);
+                        setActiveConversationId(conversationId);
+                        setTab("messages");
+                      }}
+                    />
+                  </View>
+                </View>
+              ))}
             </View>
+          ) : (
+            <Text style={styles.emptyCopy}>Search for golfers first. Nothing is seeded here.</Text>
+          )}
+        </Card>
+      ) : null}
+
+      {tab === "messages" ? (
+        <Card>
+          <Text style={styles.sectionTitle}>Direct messages</Text>
+          <Text style={styles.sectionSummary}>
+            {directInbox.length ? `${directInbox.length} conversations` : "Start from a real golfer card or your circle."}
+          </Text>
+          {directInbox.length ? (
+            <>
+              <View style={styles.list}>
+                {directInbox.map((conversation) => (
+                  <Pressable
+                    key={conversation.id}
+                    onPress={() => setActiveConversationId(conversation.id)}
+                    style={[
+                      styles.messageRow,
+                      conversation.id === activeConversation?.id ? styles.messageRowActive : null,
+                    ]}
+                  >
+                    <View style={styles.personCopy}>
+                      <Text style={styles.personName}>{conversation.peer?.displayName || "Golfer"}</Text>
+                      <Text style={styles.personMeta}>
+                        @{conversation.peer?.username || "golfer"} / {conversation.messageCount} messages
+                      </Text>
+                      <Text style={styles.personDetail}>{conversation.latestMessage?.text || "No messages yet."}</Text>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+              {activeConversation ? (
+                <View style={styles.thread}>
+                  <Text style={styles.sectionTitle}>{activeConversation.peer?.displayName || "Conversation"}</Text>
+                  <View style={styles.list}>
+                    {(activeConversation.messages || []).slice(-8).map((message) => (
+                      <View
+                        key={message.id}
+                        style={[
+                          styles.messageBubble,
+                          message.authorProfileId === currentProfile?.id ? styles.messageBubbleOutbound : styles.messageBubbleInbound,
+                        ]}
+                      >
+                        <Text style={styles.messageText}>{message.text}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder="Send a quick golf message"
+                    placeholderTextColor={theme.colors.textMuted}
+                    value={messageDraft}
+                    onChangeText={setMessageDraft}
+                    multiline
+                  />
+                  <AppButton
+                    label="Send"
+                    onPress={async () => {
+                      const saved = await sendDirectMessage(activeConversation.peerProfileId, messageDraft);
+                      if (saved) {
+                        setMessageDraft("");
+                      }
+                    }}
+                  />
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <Text style={styles.emptyCopy}>No real conversations yet.</Text>
+          )}
+        </Card>
+      ) : null}
+
+      {tab === "clubhouse" ? (
+        <Card>
+          <Text style={styles.sectionTitle}>Clubhouse</Text>
+          <Text style={styles.sectionSummary}>Text-only golf updates from you and golfers you actually follow.</Text>
+          <View style={styles.composer}>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              placeholder="Post a golf update"
+              placeholderTextColor={theme.colors.textMuted}
+              value={postMessage}
+              onChangeText={setPostMessage}
+              multiline
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Optional link"
+              placeholderTextColor={theme.colors.textMuted}
+              value={postLinkUrl}
+              onChangeText={setPostLinkUrl}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <AppButton
+              label="Post"
+              onPress={async () => {
+                const post = await createSocialPost({ message: postMessage, linkUrl: postLinkUrl });
+                if (post) {
+                  setPostMessage("");
+                  setPostLinkUrl("");
+                }
+              }}
+            />
           </View>
-        ) : (
-          <Text style={styles.emptyCopy}>Your golf circle will surface here as it grows.</Text>
-        )}
-      </Section>
+          {communityFeed.length ? (
+            <View style={styles.list}>
+              {communityFeed.map((post) => (
+                <View key={post.id} style={styles.feedRow}>
+                  <View style={styles.feedHead}>
+                    <View style={styles.personCopy}>
+                      <Text style={styles.personName}>{post.author?.displayName || "Golfer"}</Text>
+                      <Text style={styles.personMeta}>@{post.author?.username || "golfer"}</Text>
+                    </View>
+                    <AppButton label="View" size="compact" variant="secondary" onPress={() => router.push(`/community/profile/${post.profileId}`)} />
+                  </View>
+                  <Text style={styles.feedBody}>{post.message}</Text>
+                  {post.courseName ? <Text style={styles.personMeta}>{post.courseName}</Text> : null}
+                  {post.linkUrl ? <Text style={styles.linkText}>{post.linkUrl}</Text> : null}
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.emptyCopy}>No real golf updates yet.</Text>
+          )}
+        </Card>
+      ) : null}
     </Screen>
   );
 }
 
 const createStyles = (theme) => StyleSheet.create({
-  sectionHeader: {
+  segmentRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: spacing.md,
+    flexWrap: "wrap",
+    gap: spacing.sm,
   },
-  sectionHeaderText: {
-    flex: 1,
-    gap: 2,
+  segment: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  segmentActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary,
+  },
+  segmentText: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  segmentTextActive: {
+    color: theme.colors.text,
   },
   sectionTitle: {
     color: theme.colors.text,
@@ -308,26 +395,7 @@ const createStyles = (theme) => StyleSheet.create({
   sectionSummary: {
     color: theme.colors.textMuted,
     fontSize: 13,
-  },
-  sectionToggle: {
-    color: theme.colors.text,
-    fontSize: 24,
-    lineHeight: 24,
-  },
-  sectionBody: {
-    marginTop: spacing.md,
-    gap: spacing.sm,
-  },
-  composer: {
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  composerTitle: {
-    color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: "800",
+    lineHeight: 18,
   },
   input: {
     backgroundColor: theme.colors.surfaceMuted,
@@ -342,50 +410,17 @@ const createStyles = (theme) => StyleSheet.create({
     minHeight: 88,
     textAlignVertical: "top",
   },
-  stack: {
+  inlineActions: {
+    flexDirection: "row",
     gap: spacing.sm,
   },
-  feedRow: {
-    gap: spacing.xs,
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-  },
-  feedHead: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
-  feedCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  feedName: {
-    color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  feedMeta: {
+  notice: {
     color: theme.colors.textMuted,
-    fontSize: 12,
+    fontSize: 13,
+    lineHeight: 18,
   },
-  inlineAction: {
-    color: theme.colors.primary,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  feedBody: {
-    color: theme.colors.text,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  feedDetail: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-  },
-  feedLink: {
-    color: theme.colors.primary,
-    fontSize: 12,
+  list: {
+    gap: spacing.sm,
   },
   personRow: {
     gap: spacing.sm,
@@ -395,6 +430,7 @@ const createStyles = (theme) => StyleSheet.create({
   },
   personCopy: {
     gap: 2,
+    flex: 1,
   },
   personName: {
     color: theme.colors.text,
@@ -411,6 +447,8 @@ const createStyles = (theme) => StyleSheet.create({
     lineHeight: 18,
   },
   personActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm,
   },
   messageRow: {
@@ -449,11 +487,37 @@ const createStyles = (theme) => StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
-  spotlight: {
+  composer: {
     gap: spacing.sm,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  feedRow: {
+    gap: spacing.xs,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  feedHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    alignItems: "flex-start",
+  },
+  feedBody: {
+    color: theme.colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  linkText: {
+    color: theme.colors.primary,
+    fontSize: 12,
   },
   emptyCopy: {
     color: theme.colors.textMuted,
     fontSize: 13,
+    lineHeight: 18,
   },
 });
+  const params = useLocalSearchParams();

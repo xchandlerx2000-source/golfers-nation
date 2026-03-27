@@ -5,6 +5,7 @@ import {
 } from "@golfers-nation/core";
 import {
   createSupabaseRestBridge,
+  toBackendProfileRecord,
   fromBackendCourseServiceRequestRecord,
   fromBackendTeeTimeRequestRecord,
   fromBackendLiveRoundSessionRecord,
@@ -12,6 +13,7 @@ import {
   toBackendLiveRoundSessionRecord,
   toBackendTeeTimeRequestRecord,
 } from "@golfers-nation/backend";
+import { createSocialProfileFromDirectoryRecord } from "../lib/social-state";
 import {
   readItem,
   readMemoryItem,
@@ -460,6 +462,101 @@ export async function requestPasswordResetNative(email) {
   await hydrateBridgeCache();
   const bridge = getBridge();
   return bridge.requestPasswordReset(email);
+}
+
+export async function searchPlayerProfilesNative({
+  query = "",
+  currentUser = null,
+  limit = 12,
+} = {}) {
+  if (!hasNativeSupabaseConfig() || !currentUser?.id) {
+    return {
+      status: "local-only",
+      profiles: [],
+    };
+  }
+
+  await hydrateBridgeCache();
+  const bridge = getBridge();
+  const result = await bridge.searchPlayerProfiles({
+    query,
+    limit,
+    excludeProfileId: currentUser.profileId || currentUser.id,
+    excludeUserId: currentUser.id,
+  });
+
+  if (result?.status === "skipped-missing-table") {
+    return {
+      status: "local-only",
+      profiles: [],
+      notice: "Golfer discovery is not ready in Supabase yet.",
+    };
+  }
+
+  if (result?.error) {
+    return result;
+  }
+
+  return {
+    status: "ready",
+    profiles: (Array.isArray(result?.data) ? result.data : [])
+      .map((record) => createSocialProfileFromDirectoryRecord(record))
+      .filter((profile) => profile?.id),
+  };
+}
+
+export async function upsertCurrentUserProfileNative({
+  currentUser = null,
+  stats = null,
+  authMode = "local-demo",
+} = {}) {
+  if (authMode !== "supabase" || !hasNativeSupabaseConfig() || !currentUser?.id) {
+    return {
+      status: "local-only",
+      profile: null,
+    };
+  }
+
+  await hydrateBridgeCache();
+  const bridge = getBridge();
+  const profileRecord = toBackendProfileRecord({
+    id: currentUser.profileId || currentUser.id,
+    userId: currentUser.id,
+    publicProfile: {
+      displayName: currentUser.displayName || currentUser.name || "Golfer",
+      username: currentUser.username || "golfer",
+      avatarLabel: currentUser.avatarLabel || "GN",
+      homeCourse: currentUser.homeCourse || "",
+      handicap: currentUser.handicap ?? null,
+      bio: currentUser.bio || "",
+    },
+    publicStats: {
+      roundsPlayed: Number(stats?.roundsPlayed || 0),
+      averageScore: Number.isFinite(Number(stats?.averageScore)) ? Number(stats.averageScore) : null,
+      bestRound: Number.isFinite(Number(stats?.bestRound)) ? Number(stats.bestRound) : null,
+      recentFormSummary: String(stats?.recentFormSummary || "Round history builds here.").trim(),
+    },
+    privacy: currentUser.privacy || {},
+  });
+
+  const result = await bridge.upsertProfile(profileRecord);
+  if (result?.status === "skipped-missing-table") {
+    return {
+      status: "local-only",
+      profile: null,
+      notice: "Player profiles table is not ready in Supabase yet.",
+    };
+  }
+
+  if (result?.error) {
+    return result;
+  }
+
+  const record = Array.isArray(result?.data) ? result.data[0] || null : result?.data || null;
+  return {
+    status: "persisted",
+    profile: record ? createSocialProfileFromDirectoryRecord(record) : null,
+  };
 }
 
 export async function syncHostedRoundNative(round, currentUser, group = null) {

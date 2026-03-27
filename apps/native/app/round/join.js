@@ -53,8 +53,10 @@ export default function JoinRoundScreen() {
 
     setJoinBusy(true);
     try {
-      await joinRound(nextCode);
-      router.replace("/round/lobby");
+      const round = await joinRound(nextCode);
+      if (round) {
+        router.replace("/round/lobby");
+      }
     } finally {
       setJoinBusy(false);
     }
@@ -75,7 +77,7 @@ export default function JoinRoundScreen() {
         </View>
         <Text style={styles.title}>{joinedCode || recentInviteCode || "Enter a room code"}</Text>
         <Text style={styles.meta}>
-          Codes are uppercase and fast to recover. Your most recent code stays here so rejoining does not start from zero.
+          Codes are uppercase and fast to recover. If the room is not live, the app stays here instead of fabricating a fallback round.
         </Text>
         <View style={styles.heroStats}>
           <View style={styles.heroStat}>

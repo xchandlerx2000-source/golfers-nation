@@ -36,6 +36,9 @@ describe("native app store", () => {
       courseResultsStatus: "idle",
       courseResultsSource: "starter",
       courseCatalogNotice: "",
+      homeNearbyCourses: [],
+      homeNearbyStatus: "idle",
+      homeNearbyNotice: "",
       nearbyLocation: null,
       nearbyLocationStatus: "idle",
       nearbyLocationSource: "",
@@ -46,6 +49,10 @@ describe("native app store", () => {
       socialPosts: useAppStore.getInitialState().socialPosts,
       socialConversations: useAppStore.getInitialState().socialConversations,
       socialSettings: useAppStore.getInitialState().socialSettings,
+      socialDiscoveryQuery: "",
+      socialDiscoveryResults: [],
+      socialDiscoveryStatus: "idle",
+      socialDiscoveryNotice: "",
       teeTimeRequests: [],
       courseServiceRequests: [],
       requestReviewQueue: [],
@@ -136,7 +143,7 @@ describe("native app store", () => {
     const round = await useAppStore.getState().hostLiveRound();
 
     expect(round.inviteCode).toBe("GN18");
-    expect(round.players.length).toBeGreaterThan(1);
+    expect(round.players.length).toBe(1);
     expect(["connecting", "connected", "local-only"]).toContain(useAppStore.getState().liveSyncStatus);
   });
 
@@ -247,17 +254,33 @@ describe("native app store", () => {
     expect(useAppStore.getState().getCompletedRoundStats().roundsPlayed).toBe(1);
   });
 
-  it("creates native social posts and direct messages that persist in store state", async () => {
+  it("creates native social posts and direct messages against real saved profiles only", async () => {
     await useAppStore.getState().signInDemo();
-    const circle = useAppStore.getState().getSocialCircle();
+    useAppStore.setState((state) => ({
+      socialProfiles: [
+        ...state.socialProfiles,
+        {
+          id: "profile-real-peer",
+          displayName: "Taylor Reed",
+          username: "taylorreed",
+          avatarLabel: "TR",
+          homeCourse: "Torrey Pines Golf Course",
+          stats: {
+            roundsPlayed: 4,
+            recentFormSummary: "Playing more clean cards lately.",
+          },
+        },
+      ],
+    }));
 
-    expect(circle.length).toBeGreaterThan(0);
+    await useAppStore.getState().toggleFollowProfile("profile-real-peer");
+    await useAppStore.getState().addFriendProfile("profile-real-peer");
 
     await useAppStore.getState().createSocialPost({
       message: "Testing the Clubhouse post flow.",
       linkUrl: "",
     });
-    await useAppStore.getState().sendDirectMessage(circle[0].id, "You free for a round this week?");
+    await useAppStore.getState().sendDirectMessage("profile-real-peer", "You free for a round this week?");
 
     const feed = useAppStore.getState().getCommunityFeed();
     const inbox = useAppStore.getState().getDirectInbox();
@@ -268,7 +291,18 @@ describe("native app store", () => {
 
   it("promotes followed golfers to friends and exposes their preview state", async () => {
     await useAppStore.getState().signInDemo();
-    const target = useAppStore.getState().getSocialCircle()[0];
+    useAppStore.setState((state) => ({
+      socialProfiles: [
+        ...state.socialProfiles,
+        {
+          id: "profile-real-peer",
+          displayName: "Taylor Reed",
+          username: "taylorreed",
+          avatarLabel: "TR",
+        },
+      ],
+    }));
+    const target = { id: "profile-real-peer" };
 
     await useAppStore.getState().toggleFollowProfile(target.id);
     await useAppStore.getState().addFriendProfile(target.id);
@@ -277,6 +311,14 @@ describe("native app store", () => {
 
     expect(preview.isFriend).toBe(true);
     expect(preview.isFollowed).toBe(true);
+  });
+
+  it("does not fabricate a fallback round when a live code is missing", async () => {
+    const joined = await useAppStore.getState().joinRound("MISS1234");
+
+    expect(joined).toBeNull();
+    expect(useAppStore.getState().activeRound).toBeNull();
+    expect(useAppStore.getState().recentInviteCode).toBe("MISS1234");
   });
 
   it("updates profile, appearance, and privacy state on the current golfer", async () => {

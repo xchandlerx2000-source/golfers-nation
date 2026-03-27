@@ -1,6 +1,10 @@
 import { summarizeCompletedRounds } from "./round-history";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const LEGACY_SEEDED_PROFILE_IDS = new Set([
+  "profile-maya",
+  "profile-theo",
+  "profile-jordan",
+]);
 
 function toText(value, fallback = "") {
   const text = String(value ?? fallback).trim();
@@ -10,6 +14,10 @@ function toText(value, fallback = "") {
 function toNumber(value, fallback = 0) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function normalizeUsername(value = "", fallback = "golfer") {
+  return toText(value, fallback).replace(/^@/, "") || fallback;
 }
 
 function uniqueIds(values) {
@@ -22,7 +30,7 @@ function normalizeProfile(profile = {}) {
     id: toText(profile.id),
     userId: profile.userId ? toText(profile.userId) : null,
     displayName: toText(profile.displayName || profile.name, "Golfer"),
-    username: toText(profile.username, "golfer"),
+    username: normalizeUsername(profile.username),
     avatarLabel: toText(profile.avatarLabel, "GN"),
     homeCourse: toText(profile.homeCourse),
     handicap: profile.handicap === null || profile.handicap === undefined
@@ -72,10 +80,36 @@ function normalizeConversation(conversation = {}) {
   };
 }
 
-function createCurrentUserProfile(currentUser, completedRounds) {
-  const stats = summarizeCompletedRounds(completedRounds || [], currentUser?.id);
+function mergeProfiles(...groups) {
+  const byId = new Map();
 
-  return {
+  groups.flat().forEach((profile) => {
+    const normalized = normalizeProfile(profile);
+    if (!normalized?.id) {
+      return;
+    }
+
+    byId.set(normalized.id, {
+      ...byId.get(normalized.id),
+      ...normalized,
+      stats: {
+        ...(byId.get(normalized.id)?.stats || {}),
+        ...(normalized.stats || {}),
+      },
+    });
+  });
+
+  return [...byId.values()];
+}
+
+function createCurrentUserProfile(currentUser = {}, completedRounds = []) {
+  if (!currentUser?.id && !currentUser?.profileId) {
+    return null;
+  }
+
+  const stats = summarizeCompletedRounds(completedRounds, currentUser?.id);
+
+  return normalizeProfile({
     id: currentUser?.profileId || currentUser?.id || "native-profile-self",
     userId: currentUser?.id || null,
     displayName: currentUser?.displayName || currentUser?.name || "Golfer",
@@ -84,163 +118,42 @@ function createCurrentUserProfile(currentUser, completedRounds) {
     homeCourse: currentUser?.homeCourse || "",
     handicap: currentUser?.handicap ?? null,
     city: currentUser?.city || "",
-    bio: "Playing more rounds, tracking better stats, and keeping the group chat in one place.",
+    bio: currentUser?.bio || "",
     stats: {
       roundsPlayed: stats.roundsPlayed || 0,
       averageScore: stats.averageScore || null,
       bestRound: stats.bestRound || null,
       recentFormSummary: stats.recentFormSummary || "Round history builds here.",
     },
-  };
-}
-
-function createPeerProfiles() {
-  return [
-    {
-      id: "profile-maya",
-      userId: null,
-      displayName: "Maya Chen",
-      username: "mayachen",
-      avatarLabel: "MC",
-      homeCourse: "Pebble Beach Golf Links",
-      handicap: 5.2,
-      city: "Monterey",
-      bio: "Short game specialist who travels for marquee public tracks.",
-      stats: {
-        roundsPlayed: 14,
-        averageScore: 78.9,
-        bestRound: 74,
-        recentFormSummary: "Two clean cards in the last three rounds.",
-      },
-    },
-    {
-      id: "profile-theo",
-      userId: null,
-      displayName: "Theo Grant",
-      username: "theogrant",
-      avatarLabel: "TG",
-      homeCourse: "Shadow Creek Golf Course",
-      handicap: 9.8,
-      city: "Las Vegas",
-      bio: "Reliable fairway finder who always wants a live game going.",
-      stats: {
-        roundsPlayed: 11,
-        averageScore: 82.3,
-        bestRound: 77,
-        recentFormSummary: "Trending steady and closing rounds stronger.",
-      },
-    },
-    {
-      id: "profile-jordan",
-      userId: null,
-      displayName: "Jordan Wells",
-      username: "jordanwells",
-      avatarLabel: "JW",
-      homeCourse: "Torrey Pines Golf Course",
-      handicap: 7.1,
-      city: "San Diego",
-      bio: "Weekend match player who likes skins, side games, and quick join codes.",
-      stats: {
-        roundsPlayed: 9,
-        averageScore: 79.8,
-        bestRound: 75,
-        recentFormSummary: "Fresh off a good scramble weekend.",
-      },
-    },
-  ];
-}
-
-function createSeedPosts(currentProfile, peerProfiles) {
-  const now = Date.now();
-  return [
-    {
-      id: "post-self-1",
-      profileId: currentProfile.id,
-      message: "Locked in a round and keeping this one tidy. Looking for another live match later.",
-      linkUrl: "",
-      createdAt: now - 2 * 60 * 60 * 1000,
-      courseName: currentProfile.homeCourse || "",
-    },
-    {
-      id: "post-maya-1",
-      profileId: peerProfiles[0].id,
-      message: "Booked an early time for the weekend. Anybody else making the trip?",
-      linkUrl: "https://www.pebblebeach.com/golf/pebble-beach-golf-links/",
-      createdAt: now - DAY_MS,
-      courseName: peerProfiles[0].homeCourse,
-    },
-    {
-      id: "post-theo-1",
-      profileId: peerProfiles[1].id,
-      message: "Need one more for a money game this week. Fast players only.",
-      linkUrl: "",
-      createdAt: now - (DAY_MS + 3 * 60 * 60 * 1000),
-      courseName: peerProfiles[1].homeCourse,
-    },
-  ];
-}
-
-function createSeedConversations(currentProfile, peerProfiles) {
-  const now = Date.now();
-  return [
-    {
-      id: `conversation-${currentProfile.id}-${peerProfiles[0].id}`,
-      participantProfileIds: [currentProfile.id, peerProfiles[0].id],
-      messages: [
-        {
-          id: "message-maya-1",
-          authorProfileId: peerProfiles[0].id,
-          text: "You in for a morning tee time if I grab one?",
-          createdAt: now - 4 * 60 * 60 * 1000,
-        },
-        {
-          id: "message-self-1",
-          authorProfileId: currentProfile.id,
-          text: "Yes. Send it if you find a good slot.",
-          createdAt: now - 3 * 60 * 60 * 1000,
-        },
-      ],
-    },
-    {
-      id: `conversation-${currentProfile.id}-${peerProfiles[2].id}`,
-      participantProfileIds: [currentProfile.id, peerProfiles[2].id],
-      messages: [
-        {
-          id: "message-jordan-1",
-          authorProfileId: peerProfiles[2].id,
-          text: "Join code is live if you want in after work.",
-          createdAt: now - 90 * 60 * 1000,
-        },
-      ],
-    },
-  ];
-}
-
-function mergeProfiles(currentProfile, storedProfiles) {
-  const peerProfiles = createPeerProfiles();
-  const merged = [
-    normalizeProfile(currentProfile),
-    ...(Array.isArray(storedProfiles) ? storedProfiles.map(normalizeProfile) : []),
-    ...peerProfiles.map(normalizeProfile),
-  ];
-  const byId = new Map();
-
-  merged.forEach((profile) => {
-    if (!profile?.id) {
-      return;
-    }
-
-    byId.set(profile.id, {
-      ...byId.get(profile.id),
-      ...profile,
-      stats: {
-        ...(byId.get(profile.id)?.stats || {}),
-        ...(profile.stats || {}),
-      },
-    });
   });
+}
 
-  return [...byId.values()];
+export function createSocialProfileFromDirectoryRecord(record = {}) {
+  return normalizeProfile({
+    id: record.id || record.profileId,
+    userId: record.userId || record.user_id || null,
+    displayName: record.displayName || record.display_name || record.username || "Golfer",
+    username: record.username,
+    avatarLabel: record.avatarLabel || record.avatar_label || "GN",
+    homeCourse: record.homeCourse || record.home_course || "",
+    handicap: record.handicap,
+    bio: record.bio || "",
+    stats: {
+      roundsPlayed: record.roundsPlayed ?? record.rounds_played ?? 0,
+      averageScore: record.averageScore ?? record.average_score ?? null,
+      bestRound: record.bestRound ?? record.best_round ?? null,
+      recentFormSummary: record.recentFormSummary || record.recent_form_summary || "Round history builds here.",
+    },
+  });
+}
+
+export function mergeSocialProfiles(existingProfiles = [], incomingProfiles = [], currentProfileId = "") {
+  return mergeProfiles(
+    (Array.isArray(existingProfiles) ? existingProfiles : []).filter(Boolean),
+    (Array.isArray(incomingProfiles) ? incomingProfiles : [])
+      .map(createSocialProfileFromDirectoryRecord)
+      .filter((profile) => profile.id && profile.id !== currentProfileId)
+  );
 }
 
 export function normalizeSocialState({
@@ -252,36 +165,31 @@ export function normalizeSocialState({
   socialSettings,
 }) {
   const currentProfile = createCurrentUserProfile(currentUser || {}, completedRounds || []);
-  const profiles = mergeProfiles(currentProfile, socialProfiles);
-  const peerProfiles = profiles.filter((profile) => profile.id !== currentProfile.id);
-  const settings = {
-    followedProfileIds: uniqueIds(socialSettings?.followedProfileIds?.length
-      ? socialSettings.followedProfileIds
-      : peerProfiles.slice(0, 2).map((profile) => profile.id)),
-    friendProfileIds: uniqueIds(socialSettings?.friendProfileIds?.length
-      ? socialSettings.friendProfileIds
-      : peerProfiles.slice(0, 2).map((profile) => profile.id)),
-    pendingFriendProfileIds: uniqueIds(socialSettings?.pendingFriendProfileIds),
-  };
-
-  const posts = (Array.isArray(socialPosts) && socialPosts.length
-    ? socialPosts
-    : createSeedPosts(currentProfile, peerProfiles)).filter((post) => post?.id && post?.profileId);
-  const normalizedPosts = posts
-    .map(normalizePost)
-    .filter((post) => post.id && post.profileId && post.message);
-
-  const conversations = (Array.isArray(socialConversations) && socialConversations.length
-    ? socialConversations
-    : createSeedConversations(currentProfile, peerProfiles))
-    .map(normalizeConversation)
-    .filter((conversation) => conversation?.id && Array.isArray(conversation.participantProfileIds));
+  const currentProfileId = currentProfile?.id || "";
+  const profiles = mergeProfiles(
+    currentProfile ? [currentProfile] : [],
+    (Array.isArray(socialProfiles) ? socialProfiles : []).filter((profile) =>
+      profile?.id !== currentProfileId && !LEGACY_SEEDED_PROFILE_IDS.has(String(profile?.id || ""))
+    )
+  );
 
   return {
     socialProfiles: profiles,
-    socialPosts: normalizedPosts,
-    socialConversations: conversations,
-    socialSettings: settings,
+    socialPosts: (Array.isArray(socialPosts) ? socialPosts : [])
+      .map(normalizePost)
+      .filter((post) => post.id && post.profileId && post.message && !LEGACY_SEEDED_PROFILE_IDS.has(post.profileId)),
+    socialConversations: (Array.isArray(socialConversations) ? socialConversations : [])
+      .map(normalizeConversation)
+      .filter((conversation) =>
+        conversation?.id
+        && Array.isArray(conversation.participantProfileIds)
+        && !conversation.participantProfileIds.some((profileId) => LEGACY_SEEDED_PROFILE_IDS.has(String(profileId || "")))
+      ),
+    socialSettings: {
+      followedProfileIds: uniqueIds(socialSettings?.followedProfileIds),
+      friendProfileIds: uniqueIds(socialSettings?.friendProfileIds),
+      pendingFriendProfileIds: uniqueIds(socialSettings?.pendingFriendProfileIds),
+    },
   };
 }
 
@@ -447,4 +355,40 @@ export function upsertDirectConversationMessage(conversations, currentUser, peer
     },
     ...nextConversations,
   ];
+}
+
+export function ensureDirectConversation(conversations, currentUser, peerProfileId) {
+  const currentProfileId = currentUser?.profileId || currentUser?.id;
+  const cleanedPeerProfileId = String(peerProfileId || "").trim();
+  if (!currentProfileId || !cleanedPeerProfileId) {
+    return {
+      conversationId: "",
+      conversations: Array.isArray(conversations) ? conversations : [],
+    };
+  }
+
+  const nextConversations = [...(Array.isArray(conversations) ? conversations : [])];
+  const existing = nextConversations.find((conversation) => {
+    const ids = uniqueIds(conversation?.participantProfileIds);
+    return ids.includes(currentProfileId) && ids.includes(cleanedPeerProfileId);
+  });
+
+  if (existing?.id) {
+    return {
+      conversationId: existing.id,
+      conversations: nextConversations,
+    };
+  }
+
+  const conversationId = `conversation-${currentProfileId}-${cleanedPeerProfileId}`;
+  nextConversations.unshift({
+    id: conversationId,
+    participantProfileIds: [currentProfileId, cleanedPeerProfileId],
+    messages: [],
+  });
+
+  return {
+    conversationId,
+    conversations: nextConversations,
+  };
 }

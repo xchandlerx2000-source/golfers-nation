@@ -73,6 +73,13 @@ function buildRestQuery(params = {}) {
   return query ? `?${query}` : "";
 }
 
+function sanitizeSearchValue(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/[(),]/g, " ")
+    .replace(/\s+/g, " ");
+}
+
 function normalizeSessionPayload(payload) {
   const source = payload?.session || payload || null;
   const user = payload?.user || source?.user || null;
@@ -562,6 +569,47 @@ export function createSupabaseRestBridge({
     };
   }
 
+  async function searchPlayerProfiles({
+    query = "",
+    limit = 12,
+    excludeProfileId = "",
+    excludeUserId = "",
+  } = {}) {
+    const active = await getActiveSession();
+    if (active.error) {
+      return active;
+    }
+
+    if (!active.session?.access_token) {
+      return { error: { status: 401, message: "No active session was found.", code: "missing_session" } };
+    }
+
+    const safeQuery = sanitizeSearchValue(query);
+    const queryParams = {
+      select: "id,user_id,display_name,username,avatar_label,home_course,handicap,bio,rounds_played,average_score,best_round,recent_form_summary,updated_at",
+      order: "rounds_played.desc.nullslast",
+      limit,
+      ...(excludeProfileId ? { id: `neq.${excludeProfileId}` } : {}),
+      ...(excludeUserId ? { user_id: `neq.${excludeUserId}` } : {}),
+      ...(safeQuery
+        ? {
+            or: `(display_name.ilike.*${safeQuery}*,username.ilike.*${safeQuery}*,home_course.ilike.*${safeQuery}*)`,
+          }
+        : {}),
+    };
+
+    const result = await request(`/rest/v1/player_profiles${buildRestQuery(queryParams)}`, {
+      accessToken: active.session.access_token,
+    });
+
+    if (result?.error && isMissingRelationError(result.error)) {
+      logMissingRelation("public.player_profiles", result.error);
+      return { status: "skipped-missing-table", data: [] };
+    }
+
+    return result;
+  }
+
   async function upsertLiveRoundSession(sessionRecord) {
     const active = await getActiveSession();
     if (active.error) {
@@ -648,6 +696,7 @@ export function createSupabaseRestBridge({
     listTeeTimeRequests,
     createOnCourseServiceRequest,
     listOnCourseServiceRequests,
+    searchPlayerProfiles,
     fetchLiveRoundSessionByInviteCode,
     upsertLiveRoundSession,
     broadcastRealtimeMessage,

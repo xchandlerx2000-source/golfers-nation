@@ -406,10 +406,10 @@ export async function searchNativeCourseCatalog(query = "", { limit = 20 } = {})
   };
 }
 
-export async function findNearbyNativeCourses(lat, lng, { limit = 6, radiusMiles = 50 } = {}) {
+export async function findNearbyNativeCourses(lat, lng, { limit = 6, radiusMiles = 50, allowFallback = true } = {}) {
   const catalog = await loadNearbyCatalog();
   const nearby = findNearbyCourseCatalog(catalog, lat, lng, { limit, radiusMiles });
-  return nearby.length ? nearby : getBundledRecommendedCourses(limit);
+  return nearby.length || !allowFallback ? nearby : getBundledRecommendedCourses(limit);
 }
 
 export async function loadNativeCourseById(courseId = "") {

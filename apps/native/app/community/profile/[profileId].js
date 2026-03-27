@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { AppButton } from "../../../src/components/AppButton";
 import { Card } from "../../../src/components/Card";
 import { Screen } from "../../../src/components/Screen";
@@ -27,6 +27,7 @@ export default function CommunityProfileScreen() {
   const profile = useAppStore((state) => state.getSocialProfile(String(profileId || "")));
   const toggleFollowProfile = useAppStore((state) => state.toggleFollowProfile);
   const addFriendProfile = useAppStore((state) => state.addFriendProfile);
+  const openDirectConversation = useAppStore((state) => state.openDirectConversation);
 
   if (!profile) {
     return (
@@ -68,6 +69,14 @@ export default function CommunityProfileScreen() {
               label={profile.isFollowed ? "Following" : "Follow"}
               variant="secondary"
               onPress={() => toggleFollowProfile(profile.id)}
+            />
+            <AppButton
+              label="Message"
+              variant="secondary"
+              onPress={async () => {
+                await openDirectConversation(profile.id);
+                router.push("/(tabs)/community?tab=messages");
+              }}
             />
           </>
         ) : null}

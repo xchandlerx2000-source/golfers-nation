@@ -1,5 +1,5 @@
-import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useEffect } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { AppButton } from "../../src/components/AppButton";
 import { Card } from "../../src/components/Card";
@@ -8,14 +8,41 @@ import { SectionHeader } from "../../src/components/SectionHeader";
 import { spacing, useAppTheme } from "../../src/theme";
 import { useAppStore } from "../../src/store/useAppStore";
 
+function NearbyCourseRow({ course, onPress }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
+  return (
+    <Pressable onPress={onPress} style={styles.courseRow}>
+      <View style={styles.courseCopy}>
+        <Text style={styles.courseName}>{course.displayName || course.courseName || course.name}</Text>
+        <Text style={styles.courseMeta}>
+          {[course.city, course.state].filter(Boolean).join(", ") || "Location pending"}
+        </Text>
+      </View>
+      <Text style={styles.courseLink}>Open</Text>
+    </Pressable>
+  );
+}
+
 export default function HomeScreen() {
   const theme = useAppTheme();
   const styles = React.useMemo(() => createStyles(theme), [theme]);
   const activeRound = useAppStore((state) => state.activeRound);
+  const recentInviteCode = useAppStore((state) => state.recentInviteCode);
   const liveSyncStatus = useAppStore((state) => state.liveSyncStatus);
   const liveSyncNotice = useAppStore((state) => state.liveSyncNotice);
   const lastLiveSyncAt = useAppStore((state) => state.lastLiveSyncAt);
   const refreshLiveRound = useAppStore((state) => state.refreshLiveRound);
+  const homeNearbyCourses = useAppStore((state) => state.homeNearbyCourses);
+  const homeNearbyStatus = useAppStore((state) => state.homeNearbyStatus);
+  const homeNearbyNotice = useAppStore((state) => state.homeNearbyNotice);
+  const loadHomeNearbyCourses = useAppStore((state) => state.loadHomeNearbyCourses);
+  const selectCourse = useAppStore((state) => state.selectCourse);
+
+  useEffect(() => {
+    void loadHomeNearbyCourses({ requestPermission: false });
+  }, [loadHomeNearbyCourses]);
 
   const syncLabel = liveSyncStatus === "connected"
     ? "Connected"
@@ -31,37 +58,36 @@ export default function HomeScreen() {
       : styles.statusMuted;
 
   return (
-    <Screen>
-      <SectionHeader title="Home" subtitle="Fast launch, live status, and the next action without clutter." />
+    <Screen scroll>
+      <SectionHeader title="Home" subtitle="Live rounds, nearby courses, and the fastest next step." />
+
       {activeRound ? (
-        <>
-          <Card style={styles.heroCard}>
-            <View style={styles.badgeRow}>
-              <View style={styles.statusBadge}>
-                <Text style={styles.statusBadgeText}>Live Round</Text>
-              </View>
-              <View style={[styles.syncBadge, syncToneStyle]}>
-                <Text style={styles.syncBadgeText}>{syncLabel}</Text>
-              </View>
+        <Card style={styles.heroCard}>
+          <View style={styles.badgeRow}>
+            <View style={styles.statusBadge}>
+              <Text style={styles.statusBadgeText}>Live Round</Text>
             </View>
-            <Text style={styles.title}>{activeRound.courseName}</Text>
-            <Text style={styles.meta}>Hole {activeRound.currentHole} / {activeRound.teeBox}</Text>
-            <View style={styles.heroStats}>
-              <View style={styles.heroStat}>
-                <Text style={styles.heroStatLabel}>Room</Text>
-                <Text style={styles.heroStatValue}>{activeRound.inviteCode || "Local"}</Text>
-              </View>
-              <View style={styles.heroStat}>
-                <Text style={styles.heroStatLabel}>Players</Text>
-                <Text style={styles.heroStatValue}>{activeRound.players.length}</Text>
-              </View>
+            <View style={[styles.syncBadge, syncToneStyle]}>
+              <Text style={styles.syncBadgeText}>{syncLabel}</Text>
             </View>
-            {lastLiveSyncAt ? <Text style={styles.notice}>Last sync {new Date(lastLiveSyncAt).toLocaleTimeString()}</Text> : null}
-            {liveSyncNotice ? <Text style={styles.notice}>{liveSyncNotice}</Text> : null}
-          </Card>
-          <View style={styles.actions}>
+          </View>
+          <Text style={styles.title}>{activeRound.courseName}</Text>
+          <Text style={styles.meta}>Hole {activeRound.currentHole} / {activeRound.teeBox}</Text>
+          <View style={styles.heroStats}>
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatLabel}>Room</Text>
+              <Text style={styles.heroStatValue}>{activeRound.inviteCode || "Local"}</Text>
+            </View>
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatLabel}>Players</Text>
+              <Text style={styles.heroStatValue}>{activeRound.players.length}</Text>
+            </View>
+          </View>
+          {lastLiveSyncAt ? <Text style={styles.notice}>Last sync {new Date(lastLiveSyncAt).toLocaleTimeString()}</Text> : null}
+          {liveSyncNotice ? <Text style={styles.notice}>{liveSyncNotice}</Text> : null}
+          <View style={styles.actionGrid}>
             <AppButton label="Open Score" onPress={() => router.push("/(tabs)/score")} />
-            <AppButton label="Invite" variant="secondary" onPress={() => router.push("/round/lobby")} />
+            <AppButton label="Open Lobby" variant="secondary" onPress={() => router.push("/round/lobby")} />
             {activeRound.inviteCode ? (
               <AppButton
                 label="Refresh Live Round"
@@ -72,35 +98,67 @@ export default function HomeScreen() {
               />
             ) : null}
           </View>
-        </>
+        </Card>
       ) : (
         <Card style={styles.heroCard}>
           <View style={styles.badgeRow}>
             <View style={styles.statusBadge}>
               <Text style={styles.statusBadgeText}>Launch Pad</Text>
             </View>
+            {recentInviteCode ? (
+              <View style={styles.syncBadge}>
+                <Text style={styles.syncBadgeText}>Recent {recentInviteCode}</Text>
+              </View>
+            ) : null}
           </View>
           <Text style={styles.title}>Ready when the group is.</Text>
-          <Text style={styles.meta}>Start a round fast, or jump straight into a live game with a code.</Text>
-          <View style={styles.heroStats}>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatLabel}>Flow</Text>
-              <Text style={styles.heroStatValue}>Course / Format / Play</Text>
-            </View>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatLabel}>Nearby</Text>
-              <Text style={styles.heroStatValue}>Phone location ready</Text>
-            </View>
+          <Text style={styles.meta}>Start a round fast or join a live room with a real code. Nearby stays tied to your phone location.</Text>
+          <View style={styles.actionGrid}>
+            <AppButton label="Start Round" onPress={() => router.push("/round/setup")} />
+            <AppButton label="Join Game" variant="secondary" onPress={() => router.push("/round/join")} />
           </View>
         </Card>
       )}
 
-      {!activeRound ? (
-        <View style={styles.actions}>
-          <AppButton label="Start Round" onPress={() => router.push("/round/setup")} />
-          <AppButton label="Join Game" variant="secondary" onPress={() => router.push("/round/join")} />
+      <Card>
+        <View style={styles.sectionHead}>
+          <View style={styles.sectionCopy}>
+            <Text style={styles.sectionTitle}>Nearby Courses</Text>
+            <Text style={styles.sectionSummary}>Real courses only. No seeded placeholders.</Text>
+          </View>
+          <AppButton
+            label="Use My Location"
+            size="compact"
+            variant="secondary"
+            onPress={() => {
+              void loadHomeNearbyCourses({ requestPermission: true });
+            }}
+          />
         </View>
-      ) : null}
+        {homeNearbyNotice ? <Text style={styles.notice}>{homeNearbyNotice}</Text> : null}
+        {homeNearbyCourses.length ? (
+          <View style={styles.courseList}>
+            {homeNearbyCourses.map((course) => (
+              <NearbyCourseRow
+                key={course.id}
+                course={course}
+                onPress={async () => {
+                  await selectCourse(course.id);
+                  router.push("/round/setup");
+                }}
+              />
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyCopy}>
+            {homeNearbyStatus === "loading" || homeNearbyStatus === "checking" || homeNearbyStatus === "locating"
+              ? "Looking for nearby courses..."
+              : homeNearbyStatus === "ready"
+                ? "No nearby courses were found in range yet."
+              : "Allow location to show real nearby courses here."}
+          </Text>
+        )}
+      </Card>
     </Screen>
   );
 }
@@ -145,6 +203,8 @@ const createStyles = (theme) => StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
+    backgroundColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.border,
   },
   syncBadgeText: {
     color: theme.colors.text,
@@ -164,11 +224,6 @@ const createStyles = (theme) => StyleSheet.create({
   statusMuted: {
     backgroundColor: theme.colors.surfaceSoft,
     borderColor: theme.colors.border,
-  },
-  notice: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
   },
   heroStats: {
     flexDirection: "row",
@@ -195,7 +250,67 @@ const createStyles = (theme) => StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
-  actions: {
+  notice: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  actionGrid: {
+    gap: spacing.sm,
+  },
+  sectionHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
     gap: spacing.md,
+  },
+  sectionCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  sectionTitle: {
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  sectionSummary: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+  },
+  courseList: {
+    gap: spacing.sm,
+  },
+  courseRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+  },
+  courseCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  courseName: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  courseMeta: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+  },
+  courseLink: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  emptyCopy: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

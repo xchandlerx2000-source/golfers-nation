@@ -56,8 +56,8 @@ function compareCourses(left = {}, right = {}) {
 }
 
 function pickSeedCourses(courses = [], {
-  targetCount = 500,
-  perStateMinimum = 6,
+  targetCount = 240,
+  perStateMinimum = 4,
 } = {}) {
   const sorted = [...courses].sort(compareCourses);
   const byState = new Map();

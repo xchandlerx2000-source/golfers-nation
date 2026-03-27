@@ -14,7 +14,6 @@ import {
 import {
   DEMO_USER,
   RECOMMENDED_COURSES,
-  SAMPLE_PLAYERS,
   STARTER_COURSES,
 } from "../lib/seed-state";
 import {
@@ -29,6 +28,8 @@ import {
   buildSocialCircle,
   buildSocialProfilePreview,
   createSocialPostRecord,
+  ensureDirectConversation,
+  mergeSocialProfiles,
   normalizeSocialState,
   toggleFollowedProfileIds,
   upsertDirectConversationMessage,
@@ -74,9 +75,11 @@ import {
   requestPasswordResetNative,
   revalidateNativeAuthSession,
   restoreNativeAuthSession,
+  searchPlayerProfilesNative,
   signInWithEmailNative,
   signOutNative,
   signUpWithEmailNative,
+  upsertCurrentUserProfileNative,
   writeNativeAppSession,
 } from "../services/native-platform";
 import {
@@ -87,7 +90,7 @@ import {
 const DEFAULT_RECOMMENDED_COURSES = getBundledRecommendedCourses(6);
 const DEFAULT_COURSE = DEFAULT_RECOMMENDED_COURSES[0] || STARTER_COURSES[0] || null;
 const DEFAULT_SOCIAL_STATE = normalizeSocialState({
-  currentUser: normalizeCurrentUser(DEMO_USER),
+  currentUser: null,
   completedRounds: [],
 });
 const LIVE_SYNC_POLL_INTERVAL_MS = 12_000;
@@ -168,18 +171,15 @@ async function buildRoundFromSetup(setup, currentUser, selectedCourse, options =
     courseRating: template?.rating ?? teeBox?.rating ?? null,
     courseSlope: template?.slope ?? teeBox?.slope ?? null,
     mode: setup.mode,
-    players: live
-      ? [
-          (currentUser || DEMO_USER).displayName,
-          ...SAMPLE_PLAYERS.map((player) => ({
-            id: player.id,
-            profileId: player.id,
-            displayName: player.displayName,
-            username: player.username,
-            avatarLabel: player.avatarLabel,
-          })),
-        ]
-      : [(currentUser || DEMO_USER).displayName],
+    players: [
+      {
+        profileId: (currentUser || DEMO_USER).profileId || (currentUser || DEMO_USER).id,
+        userId: (currentUser || DEMO_USER).id,
+        displayName: (currentUser || DEMO_USER).displayName,
+        username: (currentUser || DEMO_USER).username,
+        avatarLabel: (currentUser || DEMO_USER).avatarLabel,
+      },
+    ],
     syncTransport: live ? "cloud" : "local",
     inviteCode: live ? "GN18" : null,
   });
@@ -252,6 +252,31 @@ function buildPersistedUserPatch(currentUser, overrides = {}) {
     teeTimeRequests: overrides.teeTimeRequests,
     courseServiceRequests: overrides.courseServiceRequests,
   };
+}
+
+async function syncCurrentUserProfile(get, set, currentUser = get().currentUser) {
+  if (!currentUser?.id) {
+    return { status: "skipped" };
+  }
+
+  const stats = summarizeCompletedRounds(get().completedRounds, currentUser.id);
+  const result = await upsertCurrentUserProfileNative({
+    currentUser,
+    stats,
+    authMode: get().authMode,
+  });
+
+  if (result?.status === "persisted" && result.profile?.id) {
+    set((state) => ({
+      socialProfiles: mergeSocialProfiles(
+        state.socialProfiles,
+        [result.profile],
+        currentUser.profileId || currentUser.id
+      ),
+    }));
+  }
+
+  return result;
 }
 
 function stopLiveSyncLoop() {
@@ -460,6 +485,9 @@ export const useAppStore = create((set, get) => ({
   courseResultsStatus: "idle",
   courseResultsSource: "starter",
   courseCatalogNotice: "",
+  homeNearbyCourses: [],
+  homeNearbyStatus: "idle",
+  homeNearbyNotice: "",
   nearbyLocation: null,
   nearbyLocationStatus: "idle",
   nearbyLocationSource: "",
@@ -470,6 +498,10 @@ export const useAppStore = create((set, get) => ({
   socialPosts: DEFAULT_SOCIAL_STATE.socialPosts,
   socialConversations: DEFAULT_SOCIAL_STATE.socialConversations,
   socialSettings: DEFAULT_SOCIAL_STATE.socialSettings,
+  socialDiscoveryQuery: "",
+  socialDiscoveryResults: [],
+  socialDiscoveryStatus: "idle",
+  socialDiscoveryNotice: "",
   teeTimeRequests: [],
   courseServiceRequests: [],
   requestReviewQueue: [],
@@ -516,12 +548,19 @@ export const useAppStore = create((set, get) => ({
         courseServiceRequests: normalizeCourseServiceRequests(restored.courseServiceRequests),
         lastAuthCheckAt: Date.now(),
         authNotice: restored.restoredFrom === "supabase" ? "Session restored." : "",
+        homeNearbyCourses: [],
+        homeNearbyStatus: "idle",
+        homeNearbyNotice: "",
+        socialDiscoveryQuery: "",
+        socialDiscoveryResults: [],
+        socialDiscoveryStatus: "idle",
+        socialDiscoveryNotice: "",
       });
       return;
     }
 
     const socialState = normalizeSocialState({
-      currentUser: normalizeCurrentUser(DEMO_USER),
+      currentUser: null,
       completedRounds: [],
     });
     set({
@@ -537,6 +576,13 @@ export const useAppStore = create((set, get) => ({
       socialPosts: socialState.socialPosts,
       socialConversations: socialState.socialConversations,
       socialSettings: socialState.socialSettings,
+      homeNearbyCourses: [],
+      homeNearbyStatus: "idle",
+      homeNearbyNotice: "",
+      socialDiscoveryQuery: "",
+      socialDiscoveryResults: [],
+      socialDiscoveryStatus: "idle",
+      socialDiscoveryNotice: "",
       lastAuthCheckAt: Date.now(),
     });
   },
@@ -576,8 +622,16 @@ export const useAppStore = create((set, get) => ({
       socialPosts: socialState.socialPosts,
       socialConversations: socialState.socialConversations,
       socialSettings: socialState.socialSettings,
+      homeNearbyCourses: [],
+      homeNearbyStatus: "idle",
+      homeNearbyNotice: "",
+      socialDiscoveryQuery: "",
+      socialDiscoveryResults: [],
+      socialDiscoveryStatus: "idle",
+      socialDiscoveryNotice: "",
       lastAuthCheckAt: Date.now(),
     });
+    return syncCurrentUserProfile(get, set, currentUser);
   },
   signInWithEmail: async ({ email, password }) => {
     set({ authBusy: true, authError: "", authNotice: "" });
@@ -630,6 +684,7 @@ export const useAppStore = create((set, get) => ({
       teeTimeRequests: get().teeTimeRequests,
       courseServiceRequests: get().courseServiceRequests,
     });
+    await syncCurrentUserProfile(get, set, currentUser);
     return result;
   },
   signUpWithEmail: async ({ email, password, displayName }) => {
@@ -684,6 +739,7 @@ export const useAppStore = create((set, get) => ({
         teeTimeRequests: get().teeTimeRequests,
         courseServiceRequests: get().courseServiceRequests,
       });
+      await syncCurrentUserProfile(get, set, currentUser);
       return result;
     }
 
@@ -731,7 +787,7 @@ export const useAppStore = create((set, get) => ({
     await signOutNative();
     await clearNativeAppSession();
     const socialState = normalizeSocialState({
-      currentUser: normalizeCurrentUser(DEMO_USER),
+      currentUser: null,
       completedRounds: [],
     });
     set({
@@ -749,6 +805,13 @@ export const useAppStore = create((set, get) => ({
       requestReviewQueue: [],
       requestReviewQueueStatus: "idle",
       requestReviewQueueNotice: "",
+      homeNearbyCourses: [],
+      homeNearbyStatus: "idle",
+      homeNearbyNotice: "",
+      socialDiscoveryQuery: "",
+      socialDiscoveryResults: [],
+      socialDiscoveryStatus: "idle",
+      socialDiscoveryNotice: "",
       authError: "",
       authNotice: "",
       authBusy: false,
@@ -809,6 +872,7 @@ export const useAppStore = create((set, get) => ({
         teeTimeRequests: get().teeTimeRequests,
         courseServiceRequests: get().courseServiceRequests,
       });
+      await syncCurrentUserProfile(get, set, currentUser);
       return result;
     }
 
@@ -837,7 +901,7 @@ export const useAppStore = create((set, get) => ({
         lastAuthCheckAt: Date.now(),
         authNotice: result.notice,
         ...normalizeSocialState({
-          currentUser: normalizeCurrentUser(DEMO_USER),
+          currentUser: null,
           completedRounds: state.completedRounds,
           socialProfiles: state.socialProfiles,
           socialPosts: state.socialPosts,
@@ -852,13 +916,127 @@ export const useAppStore = create((set, get) => ({
       return result;
     }
 
-    set({
+  set({
       authHealthStatus: result.status,
       authHealthNotice: result.notice,
       sessionExpiresAt: Number(result.sessionExpiresAt || 0),
       lastAuthCheckAt: Date.now(),
     });
     return result;
+  },
+  setSocialDiscoveryQuery: (query) => {
+    set({
+      socialDiscoveryQuery: String(query || ""),
+    });
+  },
+  clearSocialDiscovery: () => {
+    set({
+      socialDiscoveryQuery: "",
+      socialDiscoveryResults: [],
+      socialDiscoveryStatus: "idle",
+      socialDiscoveryNotice: "",
+    });
+  },
+  refreshSocialDiscovery: async (queryOverride = null) => {
+    const currentUser = get().currentUser || DEMO_USER;
+    const currentProfileId = currentUser.profileId || currentUser.id;
+    const rawQuery = queryOverride === null ? get().socialDiscoveryQuery : String(queryOverride || "");
+    const query = String(rawQuery || "").trim();
+    const existingProfiles = (get().socialProfiles || []).filter((profile) => profile?.id && profile.id !== currentProfileId);
+    const localMatches = existingProfiles.filter((profile) => {
+      if (!query) {
+        return true;
+      }
+
+      const haystack = [
+        profile.displayName,
+        profile.username,
+        profile.homeCourse,
+        profile.city,
+      ].join(" ").toLowerCase();
+      return haystack.includes(query.toLowerCase());
+    }).slice(0, 12);
+
+    set({
+      socialDiscoveryQuery: rawQuery,
+      socialDiscoveryStatus: "loading",
+      socialDiscoveryNotice: "",
+    });
+
+    if (get().authMode !== "supabase") {
+      set({
+        socialDiscoveryResults: localMatches,
+        socialDiscoveryStatus: "local-only",
+        socialDiscoveryNotice: localMatches.length
+          ? "Showing golfers already saved on this phone."
+          : "Sign in with a cloud account to discover real golfers.",
+      });
+      return localMatches;
+    }
+
+    const remote = await searchPlayerProfilesNative({
+      query,
+      currentUser,
+      limit: 12,
+    });
+
+    if (remote?.error) {
+      set({
+        socialDiscoveryResults: localMatches,
+        socialDiscoveryStatus: "error",
+        socialDiscoveryNotice: remote.error.message || "Golfer discovery is unavailable right now.",
+      });
+      return localMatches;
+    }
+
+    const results = (remote.profiles || []).filter((profile) => profile?.id).slice(0, 12);
+    set((state) => ({
+      socialProfiles: mergeSocialProfiles(state.socialProfiles, results, currentProfileId),
+      socialDiscoveryResults: results,
+      socialDiscoveryStatus: remote.status || "ready",
+      socialDiscoveryNotice: results.length
+        ? `Found ${results.length} real golfer${results.length === 1 ? "" : "s"}.`
+        : (remote.notice || (query ? "No golfers matched that search yet." : "No golfer profiles are available yet.")),
+    }));
+    return results;
+  },
+  loadHomeNearbyCourses: async ({ requestPermission = false } = {}) => {
+    set((state) => ({
+      homeNearbyStatus: requestPermission ? "locating" : (state.homeNearbyStatus === "idle" ? "checking" : state.homeNearbyStatus),
+      homeNearbyNotice: requestPermission ? "Finding courses near your phone..." : state.homeNearbyNotice,
+    }));
+
+    const locationResult = await refreshNativeLocation({ requestPermission });
+    const coords = locationResult?.coords || null;
+
+    set({
+      nearbyLocation: coords,
+      nearbyLocationStatus: locationResult?.status || "idle",
+      nearbyLocationSource: locationResult?.source || "",
+      nearbyLocationNotice: locationResult?.notice || "",
+    });
+
+    if (!coords) {
+      set({
+        homeNearbyCourses: [],
+        homeNearbyStatus: locationResult?.status || "idle",
+        homeNearbyNotice: locationResult?.notice || "Use your phone location to show nearby courses.",
+      });
+      return [];
+    }
+
+    const courses = await findNearbyNativeCourses(coords.latitude, coords.longitude, {
+      limit: 6,
+      radiusMiles: 50,
+      allowFallback: false,
+    });
+
+    set({
+      homeNearbyCourses: courses,
+      homeNearbyStatus: "ready",
+      homeNearbyNotice: locationResult?.notice || "Nearby courses matched to your phone location.",
+    });
+    return courses;
   },
   prepareCourseSetup: async () => {
     if (String(get().setup.courseQuery || "").trim()) {
@@ -1323,24 +1501,15 @@ export const useAppStore = create((set, get) => ({
       return round;
     }
 
-    const fallbackRound = await buildRoundFromSetup({
-      courseId: DEFAULT_RECOMMENDED_COURSES[1]?.id || DEFAULT_COURSE?.id || null,
-      mode: "stroke",
-    }, get().currentUser || DEMO_USER, DEFAULT_RECOMMENDED_COURSES[1] || DEFAULT_COURSE, {
-      live: true,
-    });
-    fallbackRound.inviteCode = cleanedCode;
-    fallbackRound.sync.state = "connected";
-    fallbackRound.sync.label = "Live cloud sync";
     set({
-      activeRound: fallbackRound,
-      joinedCode: cleanedCode,
+      activeRound: null,
+      joinedCode: "",
       recentInviteCode: cleanedCode,
       authNotice: remote?.error?.message || "",
       liveSyncStatus: remote?.status === "local-only" ? "local-only" : "retry-needed",
-      liveSyncNotice: remote?.error?.message || "Live join fell back to a local-safe copy.",
+      liveSyncNotice: remote?.error?.message || "That live room was not found.",
     });
-    return fallbackRound;
+    return null;
   },
   refreshLiveRound: async (force = false) => {
     const round = get().activeRound;
@@ -1501,11 +1670,12 @@ export const useAppStore = create((set, get) => ({
       teeTimeRequests: get().teeTimeRequests,
       courseServiceRequests: get().courseServiceRequests,
     });
+    await syncCurrentUserProfile(get, set, get().currentUser);
     return completedRound;
   },
   toggleFollowProfile: async (profileId) => {
     const cleanedProfileId = String(profileId || "").trim();
-    if (!cleanedProfileId) {
+    if (!cleanedProfileId || !(get().socialProfiles || []).some((profile) => profile.id === cleanedProfileId)) {
       return null;
     }
 
@@ -1524,7 +1694,7 @@ export const useAppStore = create((set, get) => ({
   },
   addFriendProfile: async (profileId) => {
     const cleanedProfileId = String(profileId || "").trim();
-    if (!cleanedProfileId) {
+    if (!cleanedProfileId || !(get().socialProfiles || []).some((profile) => profile.id === cleanedProfileId)) {
       return null;
     }
 
@@ -1564,16 +1734,61 @@ export const useAppStore = create((set, get) => ({
     });
     return post;
   },
+  openDirectConversation: async (profileId) => {
+    const cleanedProfileId = String(profileId || "").trim();
+    if (!cleanedProfileId || !(get().socialProfiles || []).some((profile) => profile.id === cleanedProfileId)) {
+      return "";
+    }
+
+    const result = ensureDirectConversation(
+      get().socialConversations,
+      get().currentUser || DEMO_USER,
+      cleanedProfileId
+    );
+
+    set({
+      socialConversations: result.conversations,
+      authNotice: "",
+      authError: "",
+    });
+    await persistNativeStoreSession({
+      socialProfiles: get().socialProfiles,
+      socialPosts: get().socialPosts,
+      socialConversations: result.conversations,
+      socialSettings: get().socialSettings,
+      completedRounds: get().completedRounds,
+      teeTimeRequests: get().teeTimeRequests,
+      courseServiceRequests: get().courseServiceRequests,
+    });
+    return result.conversationId;
+  },
   sendDirectMessage: async (profileId, text) => {
+    const cleanedProfileId = String(profileId || "").trim();
+    if (!cleanedProfileId || !(get().socialProfiles || []).some((profile) => profile.id === cleanedProfileId)) {
+      set({
+        authError: "Pick a real golfer before sending a message.",
+        authNotice: "",
+      });
+      return null;
+    }
+
     const socialConversations = upsertDirectConversationMessage(
       get().socialConversations,
       get().currentUser || DEMO_USER,
-      profileId,
+      cleanedProfileId,
       text
     );
+    if (socialConversations === get().socialConversations) {
+      set({
+        authError: "Write a message first.",
+        authNotice: "",
+      });
+      return null;
+    }
+
     set({
       socialConversations,
-      authNotice: "Message saved.",
+      authNotice: "Message saved on this phone.",
       authError: "",
     });
     await persistNativeStoreSession({
@@ -1607,6 +1822,7 @@ export const useAppStore = create((set, get) => ({
       teeTimeRequests: get().teeTimeRequests,
       courseServiceRequests: get().courseServiceRequests,
     }));
+    await syncCurrentUserProfile(get, set, currentUser);
     return currentUser;
   },
   updateCurrentUserAppearance: async (fields = {}) => {

@@ -30,6 +30,7 @@ export const DATA_GATEWAY_CONTRACT = Object.freeze({
     "submitTesterFeedbackAsync",
     "hydrateAccountAsync",
     "flushSyncAsync",
+    "searchPlayerProfilesAsync",
     "getCourseCapabilitiesAsync",
     "createTeeTimeRequestAsync",
     "createOnCourseServiceRequestAsync",
@@ -39,6 +40,7 @@ export const DATA_GATEWAY_CONTRACT = Object.freeze({
 
 export const COURSE_OPERATIONS_GATEWAY_CONTRACT = Object.freeze({
   optionalMethods: [
+    "searchPlayerProfilesAsync",
     "getCourseCapabilitiesAsync",
     "createTeeTimeRequestAsync",
     "listTeeTimeRequestsAsync",
