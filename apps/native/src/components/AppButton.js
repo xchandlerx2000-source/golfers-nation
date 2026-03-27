@@ -2,8 +2,9 @@ import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { colors, radii, spacing } from "../theme";
 
-export function AppButton({ label, variant = "primary", onPress, disabled = false }) {
+export function AppButton({ label, variant = "primary", size = "default", onPress, disabled = false }) {
   const secondary = variant === "secondary";
+  const compact = size === "compact";
 
   return (
     <Pressable
@@ -12,14 +13,15 @@ export function AppButton({ label, variant = "primary", onPress, disabled = fals
       onPress={onPress}
       style={({ pressed }) => [
         styles.base,
+        compact ? styles.baseCompact : null,
         secondary ? styles.secondary : styles.primary,
         pressed && !disabled ? styles.pressed : null,
         disabled ? styles.disabled : null,
       ]}
     >
       <View style={styles.content}>
-        <Text style={[styles.text, secondary ? styles.secondaryText : null]}>{label}</Text>
-        {!secondary ? <Text style={styles.chevron}>></Text> : null}
+        <Text style={[styles.text, compact ? styles.textCompact : null, secondary ? styles.secondaryText : null]}>{label}</Text>
+        {!secondary ? <Text style={[styles.chevron, compact ? styles.chevronCompact : null]}>{">"}</Text> : null}
       </View>
     </Pressable>
   );
@@ -27,12 +29,17 @@ export function AppButton({ label, variant = "primary", onPress, disabled = fals
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 56,
+    minHeight: 50,
     borderRadius: radii.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
     borderWidth: 1,
     justifyContent: "center",
+  },
+  baseCompact: {
+    minHeight: 44,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
   },
   primary: {
     backgroundColor: colors.primary,
@@ -65,16 +72,22 @@ const styles = StyleSheet.create({
   },
   text: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "800",
     letterSpacing: 0.2,
+  },
+  textCompact: {
+    fontSize: 14,
   },
   secondaryText: {
     color: colors.textSoft,
   },
   chevron: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "900",
+  },
+  chevronCompact: {
+    fontSize: 13,
   },
 });

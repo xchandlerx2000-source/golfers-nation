@@ -6,8 +6,13 @@ export function Screen({ children, scroll = false }) {
   const content = scroll
     ? (
       <ScrollView
+        automaticallyAdjustKeyboardInsets
         contentContainerStyle={styles.scrollContent}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
         style={styles.fill}
       >
         {children}

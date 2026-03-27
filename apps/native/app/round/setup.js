@@ -16,6 +16,12 @@ const COURSE_BROWSE_MODES = [
   { id: "search", label: "Search" },
 ];
 
+const SETUP_STEPS = [
+  { id: "course", label: "Course" },
+  { id: "format", label: "Format" },
+  { id: "play", label: "Play" },
+];
+
 function mapSourceLabel(source = "") {
   switch (source) {
     case "device-nearby":
@@ -35,6 +41,23 @@ function mapSourceLabel(source = "") {
   }
 }
 
+function StepChip({ label, active, complete, onPress, disabled = false }) {
+  return (
+    <Pressable
+      disabled={disabled}
+      onPress={onPress}
+      style={[
+        styles.stepChip,
+        active ? styles.stepChipActive : null,
+        complete ? styles.stepChipComplete : null,
+        disabled ? styles.stepChipDisabled : null,
+      ]}
+    >
+      <Text style={[styles.stepChipText, active || complete ? styles.stepChipTextActive : null]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 function CourseBrowseChip({ label, selected, onPress }) {
   return (
     <Pressable onPress={onPress} style={[styles.browseChip, selected ? styles.browseChipActive : null]}>
@@ -49,9 +72,7 @@ function CourseResultRow({ course, selected, onPress }) {
       <View style={styles.courseRowHeader}>
         <View style={styles.courseCopy}>
           <Text style={styles.courseName}>{course.displayName}</Text>
-          <Text style={styles.courseMeta}>
-            {[course.city, course.state].filter(Boolean).join(", ") || "Course location"}
-          </Text>
+          <Text style={styles.courseMeta}>{[course.city, course.state].filter(Boolean).join(", ") || "Course location"}</Text>
         </View>
         {selected ? (
           <View style={styles.selectedBadge}>
@@ -75,7 +96,7 @@ function FormatCard({ mode, selected, onPress }) {
         <Text style={[styles.formatTitle, selected ? styles.formatTitleActive : null]}>{mode.label}</Text>
         {selected ? (
           <View style={styles.formatBadge}>
-            <Text style={styles.formatBadgeText}>In play</Text>
+            <Text style={styles.formatBadgeText}>Selected</Text>
           </View>
         ) : null}
       </View>
@@ -105,15 +126,22 @@ export default function RoundSetupScreen() {
   const startSoloRound = useAppStore((state) => state.startSoloRound);
   const hostLiveRound = useAppStore((state) => state.hostLiveRound);
   const authNotice = useAppStore((state) => state.authNotice);
+
   const searchInputRef = useRef(null);
   const initializedRef = useRef(false);
   const [browseMode, setBrowseMode] = useState("nearby");
+  const [setupStep, setSetupStepLocal] = useState("course");
 
   const formatCards = useMemo(() => Object.values(GAME_MODES), []);
   const teeTimeAccess = selectedCourse ? getCourseTeeTimeAccess(selectedCourse) : null;
   const latestTeeTimeRequest = selectedCourse?.id
     ? getLatestCourseTeeTimeRequest(teeTimeRequests, selectedCourse.id)
     : null;
+  const browseSummary = browseMode === "search"
+    ? (setup.courseQuery ? `Searching ${courseResults.length} matches` : "Type a course, city, or state")
+    : browseMode === "recent"
+      ? "Recent rounds stay pinned here"
+      : "Phone location and saved nearby picks";
 
   useEffect(() => {
     void prepareCourseSetup();
@@ -151,7 +179,7 @@ export default function RoundSetupScreen() {
   }, [browseMode, loadRecentCourseResults, prepareCourseSetup, refreshCourseSearch, setup.courseQuery]);
 
   useEffect(() => {
-    if (browseMode !== "search") {
+    if (browseMode !== "search" || setupStep !== "course") {
       return;
     }
 
@@ -160,241 +188,300 @@ export default function RoundSetupScreen() {
     }, 120);
 
     return () => clearTimeout(timeoutId);
-  }, [browseMode]);
+  }, [browseMode, setupStep]);
 
-  const browseSummary = browseMode === "search"
-    ? (setup.courseQuery ? `Searching ${courseResults.length} matches` : "Type a course, city, or state")
-    : browseMode === "recent"
-      ? "Your last courses stay easy to find here"
-      : "Use phone location or saved nearby picks";
+  useEffect(() => {
+    if (!selectedCourse && setupStep !== "course") {
+      setSetupStepLocal("course");
+    }
+  }, [selectedCourse, setupStep]);
+
+  function goToStep(stepId) {
+    if (stepId === "course") {
+      setSetupStepLocal("course");
+      return;
+    }
+
+    if (stepId === "format" && selectedCourse) {
+      setSetupStepLocal("format");
+      return;
+    }
+
+    if (stepId === "play" && selectedCourse) {
+      setSetupStepLocal("play");
+    }
+  }
+
+  async function handleCourseSelect(courseId) {
+    await selectCourse(courseId);
+    setSetupStepLocal("format");
+  }
+
+  function handleFormatSelect(modeId) {
+    setSetupMode(modeId);
+    setSetupStepLocal("play");
+  }
+
+  async function handleStartSolo() {
+    await startSoloRound();
+    router.replace("/(tabs)/score");
+  }
+
+  async function handleStartLive() {
+    await hostLiveRound();
+    router.replace("/round/lobby");
+  }
 
   return (
     <Screen scroll>
-      <SectionHeader title="Start Round" subtitle="Choose a course, lock the format, then go solo or live without extra steps." />
+      <SectionHeader title="Start Round" subtitle="Move through course, format, and play as separate steps instead of one long page." />
 
       <Card style={styles.heroCard}>
         <View style={styles.heroHeader}>
-          <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>Round Setup</Text>
+          <View>
+            <Text style={styles.heroEyebrow}>Round setup</Text>
+            <Text style={styles.heroTitle}>
+              {setupStep === "course" ? "Pick a course" : setupStep === "format" ? "Pick a format" : "Start the round"}
+            </Text>
           </View>
           <View style={styles.heroSource}>
             <Text style={styles.heroSourceText}>{mapSourceLabel(courseResultsSource)}</Text>
           </View>
         </View>
-        <Text style={styles.heroTitle}>
-          {selectedCourse?.displayName || "Choose a course"}
-        </Text>
         <Text style={styles.heroMeta}>
           {selectedCourse
-            ? `${[selectedCourse.city, selectedCourse.state].filter(Boolean).join(", ")} / ${selectedCourse.teeBoxes?.[0]?.name || "Default tee"}`
-            : "Nearby and recent picks show first. Nationwide search only kicks in when you type."}
+            ? `${selectedCourse.displayName} / ${[selectedCourse.city, selectedCourse.state].filter(Boolean).join(", ")}`
+            : browseSummary}
         </Text>
-        <View style={styles.heroStats}>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroStatLabel}>Browse</Text>
-            <Text style={styles.heroStatValue}>{browseSummary}</Text>
-          </View>
-          <View style={styles.heroStat}>
-            <Text style={styles.heroStatLabel}>Format</Text>
-            <Text style={styles.heroStatValue}>{GAME_MODES[setup.mode]?.label || "Strokes"}</Text>
-          </View>
+        <View style={styles.stepRow}>
+          {SETUP_STEPS.map((step, index) => {
+            const currentIndex = SETUP_STEPS.findIndex((item) => item.id === setupStep);
+            const active = step.id === setupStep;
+            const complete = index < currentIndex;
+            const disabled = (step.id === "format" || step.id === "play") && !selectedCourse;
+            return (
+              <StepChip
+                key={step.id}
+                label={step.label}
+                active={active}
+                complete={complete}
+                disabled={disabled}
+                onPress={() => goToStep(step.id)}
+              />
+            );
+          })}
         </View>
       </Card>
 
-      <Card>
-        <Text style={styles.groupTitle}>Course</Text>
-        <View style={styles.browseChipRow}>
-          {COURSE_BROWSE_MODES.map((mode) => (
-            <CourseBrowseChip
-              key={mode.id}
-              label={mode.label}
-              selected={browseMode === mode.id}
-              onPress={() => {
-                setBrowseMode(mode.id);
-                if (mode.id !== "search") {
-                  setCourseQuery("");
-                }
-              }}
-            />
-          ))}
-        </View>
-
-        {browseMode === "search" ? (
-          <TextInput
-            ref={searchInputRef}
-            autoCapitalize="words"
-            autoCorrect={false}
-            placeholder="Search course, city, or state"
-            placeholderTextColor={colors.textMuted}
-            style={styles.input}
-            value={setup.courseQuery}
-            onChangeText={(value) => {
-              setBrowseMode("search");
-              setCourseQuery(value);
-            }}
-          />
-        ) : (
-          <View style={styles.inlineActions}>
-            <AppButton
-              label={nearbyLocationStatus === "locating" ? "Locating..." : "Use My Location"}
-              variant="secondary"
-              disabled={nearbyLocationStatus === "locating"}
-              onPress={() => {
-                setBrowseMode("nearby");
-                setCourseQuery("");
-                void refreshNearbyCoursesFromLocation({ requestPermission: true, forceResults: true });
-              }}
-            />
-            <AppButton
-              label="Search All Courses"
-              variant="secondary"
-              onPress={() => {
-                setBrowseMode("search");
-              }}
-            />
-          </View>
-        )}
-
-        {courseResultsStatus === "loading" || courseResultsStatus === "searching" ? (
-          <Text style={styles.statusLine}>
-            {courseResultsStatus === "searching" ? "Searching the nationwide catalog..." : "Loading your course picks..."}
-          </Text>
-        ) : null}
-        {nearbyLocationNotice && browseMode === "nearby" ? <Text style={styles.statusLine}>{nearbyLocationNotice}</Text> : null}
-        {courseCatalogNotice ? <Text style={styles.notice}>{courseCatalogNotice}</Text> : null}
-
-        {browseMode === "search" && !setup.courseQuery ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>Search stays manual by design</Text>
-            <Text style={styles.emptyCopy}>Type a course, city, or state to open nationwide results. This keeps the default setup fast.</Text>
-          </View>
-        ) : (
-          <View style={styles.resultsList}>
-            {courseResults.map((course) => (
-              <CourseResultRow
-                key={course.id}
-                course={course}
-                selected={selectedCourse?.id === course.id}
+      {setupStep === "course" ? (
+        <Card>
+          <Text style={styles.groupTitle}>Course</Text>
+          <View style={styles.browseChipRow}>
+            {COURSE_BROWSE_MODES.map((mode) => (
+              <CourseBrowseChip
+                key={mode.id}
+                label={mode.label}
+                selected={browseMode === mode.id}
                 onPress={() => {
-                  void selectCourse(course.id);
+                  setBrowseMode(mode.id);
+                  if (mode.id !== "search") {
+                    setCourseQuery("");
+                  }
                 }}
               />
             ))}
           </View>
-        )}
-      </Card>
 
-      {selectedCourse ? (
-        <Card>
-          <Text style={styles.groupTitle}>Selected course</Text>
-          <Text style={styles.selectedName}>{selectedCourse.displayName}</Text>
-          <Text style={styles.selectedMeta}>
-            {[selectedCourse.city, selectedCourse.state].filter(Boolean).join(", ")} / {selectedCourse.teeBoxes?.[0]?.name || "Default tee"} / Rating {selectedCourse.teeBoxes?.[0]?.rating ?? "--"}
-          </Text>
-          <View style={styles.selectedStats}>
-            <Text style={styles.selectedStat}>Slope {selectedCourse.teeBoxes?.[0]?.slope ?? "--"}</Text>
-            <Text style={styles.selectedStat}>Holes {selectedCourse.holes?.length || 18}</Text>
-            <Text style={styles.selectedStat}>{selectedCourse.country || "USA"}</Text>
-          </View>
-          {teeTimeAccess?.mode === "external-link" && teeTimeAccess.url ? (
-            <View style={styles.teeTimeBlock}>
-              <Text style={styles.teeTimeMeta}>External booking</Text>
+          {browseMode === "search" ? (
+            <TextInput
+              ref={searchInputRef}
+              autoCapitalize="words"
+              autoCorrect={false}
+              placeholder="Search course, city, or state"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+              value={setup.courseQuery}
+              onChangeText={(value) => {
+                setBrowseMode("search");
+                setCourseQuery(value);
+              }}
+            />
+          ) : (
+            <View style={styles.inlineActions}>
               <AppButton
-                label={teeTimeAccess.label || "Book Tee Time"}
+                label={nearbyLocationStatus === "locating" ? "Locating..." : "Use My Location"}
+                size="compact"
                 variant="secondary"
-                onPress={async () => {
-                  try {
-                    await Linking.openURL(teeTimeAccess.url);
-                  } catch {
-                    Alert.alert("Booking link unavailable", "This tee-time link could not be opened on this device.");
-                  }
+                disabled={nearbyLocationStatus === "locating"}
+                onPress={() => {
+                  setBrowseMode("nearby");
+                  setCourseQuery("");
+                  void refreshNearbyCoursesFromLocation({ requestPermission: true, forceResults: true });
+                }}
+              />
+              <AppButton
+                label="Search All"
+                size="compact"
+                variant="secondary"
+                onPress={() => {
+                  setBrowseMode("search");
                 }}
               />
             </View>
+          )}
+
+          {courseResultsStatus === "loading" || courseResultsStatus === "searching" ? (
+            <Text style={styles.statusLine}>
+              {courseResultsStatus === "searching" ? "Searching the nationwide catalog..." : "Loading course picks..."}
+            </Text>
           ) : null}
-          {teeTimeAccess?.mode === "request" ? (
-            <View style={styles.teeTimeBlock}>
-              <Text style={styles.teeTimeMeta}>Partner request</Text>
-              <AppButton
-                label={latestTeeTimeRequest ? "Request saved" : (teeTimeAccess.label || "Request Tee Time")}
-                variant="secondary"
-                disabled={Boolean(latestTeeTimeRequest && ["requested", "confirmed"].includes(latestTeeTimeRequest.status))}
-                onPress={async () => {
-                  await createSelectedCourseTeeTimeRequest();
-                }}
-              />
-              <Text style={styles.teeTimeStatus}>
-                {latestTeeTimeRequest
-                  ? `${getTeeTimeRequestStatusLabel(latestTeeTimeRequest.status)} / ${latestTeeTimeRequest.desiredWindowLabel}`
-                  : (teeTimeAccess.notes || "Save a local request until partner booking is wired live.")}
-              </Text>
+          {nearbyLocationNotice && browseMode === "nearby" ? <Text style={styles.statusLine}>{nearbyLocationNotice}</Text> : null}
+          {courseCatalogNotice ? <Text style={styles.notice}>{courseCatalogNotice}</Text> : null}
+
+          {browseMode === "search" && !setup.courseQuery ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>Search opens only when you type</Text>
+              <Text style={styles.emptyCopy}>That keeps nearby and recent picks fast by default.</Text>
             </View>
-          ) : null}
+          ) : (
+            <View style={styles.resultsList}>
+              {courseResults.map((course) => (
+                <CourseResultRow
+                  key={course.id}
+                  course={course}
+                  selected={selectedCourse?.id === course.id}
+                  onPress={() => {
+                    void handleCourseSelect(course.id);
+                  }}
+                />
+              ))}
+            </View>
+          )}
         </Card>
       ) : null}
 
-      <Card>
-        <Text style={styles.groupTitle}>Format</Text>
-        <View style={styles.formatGrid}>
-          {formatCards.map((mode) => (
-            <FormatCard
-              key={mode.id}
-              mode={mode}
-              selected={setup.mode === mode.id}
-              onPress={() => setSetupMode(mode.id)}
-            />
-          ))}
-        </View>
-      </Card>
+      {setupStep === "format" && selectedCourse ? (
+        <>
+          <Card>
+            <Text style={styles.groupTitle}>Selected course</Text>
+            <Text style={styles.selectedName}>{selectedCourse.displayName}</Text>
+            <Text style={styles.selectedMeta}>
+              {[selectedCourse.city, selectedCourse.state].filter(Boolean).join(", ")} / {selectedCourse.teeBoxes?.[0]?.name || "Default tee"}
+            </Text>
+            <View style={styles.selectedStats}>
+              <Text style={styles.selectedStat}>Rating {selectedCourse.teeBoxes?.[0]?.rating ?? "--"}</Text>
+              <Text style={styles.selectedStat}>Slope {selectedCourse.teeBoxes?.[0]?.slope ?? "--"}</Text>
+              <Text style={styles.selectedStat}>Holes {selectedCourse.holes?.length || 18}</Text>
+            </View>
+          </Card>
 
-      <Card>
-        <Text style={styles.groupTitle}>Start</Text>
-        <Text style={styles.startCopy}>Solo keeps the card on this phone. Live creates a room code and opens the lobby.</Text>
-        <AppButton
-          label="Solo Round"
-          onPress={async () => {
-            await startSoloRound();
-            router.replace("/(tabs)/score");
-          }}
-        />
-        <AppButton
-          label="Live Round"
-          variant="secondary"
-          onPress={async () => {
-            await hostLiveRound();
-            router.replace("/round/lobby");
-          }}
-        />
-        {authNotice ? <Text style={styles.notice}>{authNotice}</Text> : null}
-      </Card>
+          <Card>
+            <Text style={styles.groupTitle}>Format</Text>
+            <View style={styles.formatGrid}>
+              {formatCards.map((mode) => (
+                <FormatCard
+                  key={mode.id}
+                  mode={mode}
+                  selected={setup.mode === mode.id}
+                  onPress={() => handleFormatSelect(mode.id)}
+                />
+              ))}
+            </View>
+            <View style={styles.stepActions}>
+              <AppButton label="Back to Course" size="compact" variant="secondary" onPress={() => setSetupStepLocal("course")} />
+            </View>
+          </Card>
+        </>
+      ) : null}
+
+      {setupStep === "play" && selectedCourse ? (
+        <>
+          <Card>
+            <Text style={styles.groupTitle}>Round summary</Text>
+            <Text style={styles.selectedName}>{selectedCourse.displayName}</Text>
+            <Text style={styles.selectedMeta}>
+              {GAME_MODES[setup.mode]?.label || "Strokes"} / {selectedCourse.teeBoxes?.[0]?.name || "Default tee"} / {[selectedCourse.city, selectedCourse.state].filter(Boolean).join(", ")}
+            </Text>
+            <View style={styles.selectedStats}>
+              <Text style={styles.selectedStat}>Source {mapSourceLabel(courseResultsSource)}</Text>
+              <Text style={styles.selectedStat}>{selectedCourse.country || "USA"}</Text>
+            </View>
+            {teeTimeAccess?.mode === "external-link" && teeTimeAccess.url ? (
+              <View style={styles.teeTimeBlock}>
+                <Text style={styles.teeTimeMeta}>Booking</Text>
+                <AppButton
+                  label={teeTimeAccess.label || "Book Tee Time"}
+                  size="compact"
+                  variant="secondary"
+                  onPress={async () => {
+                    try {
+                      await Linking.openURL(teeTimeAccess.url);
+                    } catch {
+                      Alert.alert("Booking link unavailable", "This tee-time link could not be opened on this device.");
+                    }
+                  }}
+                />
+              </View>
+            ) : null}
+            {teeTimeAccess?.mode === "request" ? (
+              <View style={styles.teeTimeBlock}>
+                <Text style={styles.teeTimeMeta}>Partner request</Text>
+                <AppButton
+                  label={latestTeeTimeRequest ? "Request saved" : (teeTimeAccess.label || "Request Tee Time")}
+                  size="compact"
+                  variant="secondary"
+                  disabled={Boolean(latestTeeTimeRequest && ["requested", "confirmed"].includes(latestTeeTimeRequest.status))}
+                  onPress={async () => {
+                    await createSelectedCourseTeeTimeRequest();
+                  }}
+                />
+                <Text style={styles.teeTimeStatus}>
+                  {latestTeeTimeRequest
+                    ? `${getTeeTimeRequestStatusLabel(latestTeeTimeRequest.status)} / ${latestTeeTimeRequest.desiredWindowLabel}`
+                    : (teeTimeAccess.notes || "Save a local request until partner booking is wired live.")}
+                </Text>
+              </View>
+            ) : null}
+          </Card>
+
+          <Card>
+            <Text style={styles.groupTitle}>Play</Text>
+            <Text style={styles.startCopy}>Solo keeps scoring on this phone. Live opens a room code and lobby for the group.</Text>
+            <View style={styles.startStack}>
+              <AppButton label="Start Solo Round" onPress={() => { void handleStartSolo(); }} />
+              <AppButton label="Create Live Round" variant="secondary" onPress={() => { void handleStartLive(); }} />
+              <AppButton label="Back to Format" size="compact" variant="secondary" onPress={() => setSetupStepLocal("format")} />
+            </View>
+            {authNotice ? <Text style={styles.notice}>{authNotice}</Text> : null}
+          </Card>
+        </>
+      ) : null}
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   heroCard: {
-    gap: spacing.lg,
+    gap: spacing.md,
   },
   heroHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: spacing.sm,
   },
-  heroBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-    backgroundColor: colors.primarySoft,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-  },
-  heroBadgeText: {
+  heroEyebrow: {
     color: colors.accent,
     fontSize: 11,
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.8,
+  },
+  heroTitle: {
+    color: colors.text,
+    fontSize: 24,
+    fontWeight: "900",
+    marginTop: 4,
   },
   heroSource: {
     paddingHorizontal: spacing.sm,
@@ -408,46 +495,51 @@ const styles = StyleSheet.create({
     color: colors.textSoft,
     fontSize: 11,
     fontWeight: "700",
-    letterSpacing: 0.4,
-  },
-  heroTitle: {
-    color: colors.text,
-    fontSize: 28,
-    fontWeight: "900",
   },
   heroMeta: {
     color: colors.textSoft,
     fontSize: 14,
     lineHeight: 20,
   },
-  heroStats: {
+  stepRow: {
     flexDirection: "row",
     gap: spacing.sm,
   },
-  heroStat: {
+  stepChip: {
     flex: 1,
-    padding: spacing.md,
-    borderRadius: radii.lg,
+    minHeight: 40,
+    paddingHorizontal: spacing.sm,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceSoft,
-    gap: 4,
   },
-  heroStatLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: "700",
+  stepChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primarySoft,
+  },
+  stepChipComplete: {
+    borderColor: "rgba(34,197,94,0.45)",
+    backgroundColor: "rgba(34,197,94,0.12)",
+  },
+  stepChipDisabled: {
+    opacity: 0.5,
+  },
+  stepChipText: {
+    color: colors.textSoft,
+    fontSize: 12,
+    fontWeight: "800",
     textTransform: "uppercase",
-    letterSpacing: 0.7,
+    letterSpacing: 0.5,
   },
-  heroStatValue: {
+  stepChipTextActive: {
     color: colors.text,
-    fontSize: 13,
-    fontWeight: "700",
   },
   groupTitle: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "900",
   },
   browseChipRow: {
@@ -457,7 +549,7 @@ const styles = StyleSheet.create({
   },
   browseChip: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: 8,
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.border,
@@ -476,19 +568,44 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   input: {
-    minHeight: 54,
+    minHeight: 50,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderStrong,
     backgroundColor: colors.surfaceSoft,
     color: colors.text,
     paddingHorizontal: spacing.md,
-    fontSize: 16,
+    fontSize: 15,
   },
   inlineActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: spacing.sm,
   },
   statusLine: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  notice: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  emptyState: {
+    gap: spacing.xs,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSoft,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  emptyCopy: {
     color: colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
@@ -550,24 +667,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
   },
-  emptyState: {
-    gap: spacing.xs,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceSoft,
-  },
-  emptyTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  emptyCopy: {
-    color: colors.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
-  },
   selectedName: {
     color: colors.text,
     fontSize: 22,
@@ -587,22 +686,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     fontWeight: "700",
-  },
-  teeTimeBlock: {
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-  },
-  teeTimeMeta: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-  },
-  teeTimeStatus: {
-    color: colors.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
   },
   formatGrid: {
     gap: spacing.sm,
@@ -651,14 +734,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
+  stepActions: {
+    gap: spacing.sm,
+  },
+  teeTimeBlock: {
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  teeTimeMeta: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  teeTimeStatus: {
+    color: colors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
   startCopy: {
     color: colors.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
-  notice: {
-    color: colors.textMuted,
-    fontSize: 13,
-    lineHeight: 18,
+  startStack: {
+    gap: spacing.sm,
   },
 });
