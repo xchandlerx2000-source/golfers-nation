@@ -9,12 +9,8 @@ import { SectionHeader } from "../src/components/SectionHeader";
 import {
   APPEARANCE_MODE_OPTIONS,
   DEFAULT_APPEARANCE,
-  DEFAULT_PRIVACY,
-  PROFILE_VISIBILITY_OPTIONS,
   TEXT_SCALE_OPTIONS,
   THEME_PRESET_OPTIONS,
-  formatProfileVisibilityLabel,
-  formatSubscriptionLabel,
   normalizeCurrentUser,
 } from "../src/lib/account-state";
 import { getNativeRuntimeConfig } from "../src/lib/runtime-config";
@@ -83,32 +79,16 @@ export default function SettingsScreen() {
   const lastAuthCheckAt = useAppStore((state) => state.lastAuthCheckAt);
   const rawCurrentUser = useAppStore((state) => state.currentUser);
   const updateCurrentUserAppearance = useAppStore((state) => state.updateCurrentUserAppearance);
-  const updateCurrentUserPrivacy = useAppStore((state) => state.updateCurrentUserPrivacy);
   const runtimeConfig = getNativeRuntimeConfig();
   const currentUser = normalizeCurrentUser(rawCurrentUser || {});
   const appearance = {
     ...DEFAULT_APPEARANCE,
     ...(currentUser.appearance || {}),
   };
-  const privacy = {
-    ...DEFAULT_PRIVACY,
-    ...(currentUser.privacy || {}),
-  };
 
   return (
     <Screen scroll>
-      <SectionHeader title="Settings" subtitle="Account, appearance, privacy, and support tools." />
-
-      <Card>
-        <Text style={styles.sectionTitle}>Account</Text>
-        <SettingRow label="Mode" value={authMode === "supabase" ? "Cloud account" : "Local tester"} styles={styles} />
-        <SettingRow label="Email" value={currentUser.email || "Not connected"} styles={styles} />
-        <SettingRow label="Provider" value={currentUser.provider || "email"} styles={styles} />
-        <SettingRow label="Plan" value={formatSubscriptionLabel(currentUser.subscription)} styles={styles} />
-        <SettingRow label="Visibility" value={formatProfileVisibilityLabel(currentUser.privacy?.profileVisibility)} styles={styles} />
-        <SettingRow label="Session source" value={sessionRestoredFrom || "Fresh launch"} styles={styles} />
-        <SettingRow label="Session health" value={authHealthStatus || "idle"} styles={styles} />
-      </Card>
+      <SectionHeader title="App Settings" subtitle="Appearance, runtime status, support, and device tools." />
 
       <Card>
         <Text style={styles.sectionTitle}>Appearance</Text>
@@ -148,48 +128,10 @@ export default function SettingsScreen() {
       </Card>
 
       <Card>
-        <Text style={styles.sectionTitle}>Privacy</Text>
-        <ChoiceGroup
-          title="Profile visibility"
-          options={PROFILE_VISIBILITY_OPTIONS}
-          selectedId={privacy.profileVisibility}
-          onSelect={(id) => updateCurrentUserPrivacy({ profileVisibility: id })}
-          styles={styles}
-        />
-        <BinaryChoiceRow
-          label="Show home course"
-          value={privacy.showHomeCourse === true}
-          onValueChange={(value) => updateCurrentUserPrivacy({ showHomeCourse: value })}
-          styles={styles}
-        />
-        <BinaryChoiceRow
-          label="Show handicap"
-          value={privacy.showHandicap === true}
-          onValueChange={(value) => updateCurrentUserPrivacy({ showHandicap: value })}
-          styles={styles}
-        />
-        <BinaryChoiceRow
-          label="Show bio"
-          value={privacy.showBio === true}
-          onValueChange={(value) => updateCurrentUserPrivacy({ showBio: value })}
-          styles={styles}
-        />
-        <BinaryChoiceRow
-          label="Show recent form"
-          value={privacy.showRecentForm === true}
-          onValueChange={(value) => updateCurrentUserPrivacy({ showRecentForm: value })}
-          styles={styles}
-        />
-        <BinaryChoiceRow
-          label="Show head-to-head"
-          value={privacy.showHeadToHead === true}
-          onValueChange={(value) => updateCurrentUserPrivacy({ showHeadToHead: value })}
-          styles={styles}
-        />
-      </Card>
-
-      <Card>
         <Text style={styles.sectionTitle}>App</Text>
+        <SettingRow label="Mode" value={authMode === "supabase" ? "Cloud account" : "Local tester"} styles={styles} />
+        <SettingRow label="Session source" value={sessionRestoredFrom || "Fresh launch"} styles={styles} />
+        <SettingRow label="Session health" value={authHealthStatus || "idle"} styles={styles} />
         <SettingRow label="Version" value={APP_VERSION} styles={styles} />
         <SettingRow label="Environment" value={runtimeConfig.appEnv} styles={styles} />
         <SettingRow label="Channel" value={runtimeConfig.releaseChannel} styles={styles} />
@@ -203,7 +145,7 @@ export default function SettingsScreen() {
 
       <Card>
         <Text style={styles.sectionTitle}>Support</Text>
-        <Text style={styles.note}>Help covers the product flow. Testing covers diagnostics. Support is for actual issue reporting.</Text>
+        <Text style={styles.note}>Golfer profile controls stay on the Profile tab. This screen is only for app behavior, diagnostics, and support.</Text>
         <View style={styles.actions}>
           <AppButton label="Open Help" variant="secondary" onPress={() => router.push("/help")} />
           <AppButton label="Open Support" variant="secondary" onPress={() => router.push("/support")} />
