@@ -28,6 +28,7 @@
     "native:ios": "npm run ios --workspace golfers-nation-native",
     "native:web": "npm run web --workspace golfers-nation-native",
     "native:export:android": "npm run export:android --workspace golfers-nation-native",
+    "native:build:local:android": "powershell -ExecutionPolicy Bypass -File ./scripts/build-local-android.ps1",
     "native:build:internal:android": "npm exec --workspace golfers-nation-native -- eas build --platform android --profile internal-android",
     "native:build:sideload:android": "npm exec --workspace golfers-nation-native -- eas build --platform android --profile sideload-android",
     "native:build:sideload:android:nowait": "npm exec --workspace golfers-nation-native -- eas build --platform android --profile sideload-android --no-wait",

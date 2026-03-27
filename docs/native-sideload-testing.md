@@ -55,6 +55,18 @@ Local Gradle builds are optional. They require:
 
 If local SDK tooling is missing, use EAS sideload builds instead.
 
+For this repo on Windows, use the repo root command:
+
+- `npm run native:build:local:android`
+
+That command:
+- syncs the repo into a short local build path at `C:\gn-local`
+- installs workspace deps there
+- forces Expo to bundle from the native workspace instead of the monorepo root
+- builds a local Android release APK with Gradle
+- copies the finished APK back to:
+  - `artifacts\android\golfers-nation-local-release.apk`
+
 ## Repo Hygiene
 Keep these out of git:
 - `*.apk`
