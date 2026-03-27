@@ -817,6 +817,32 @@ export const useAppStore = create((set, get) => ({
     }));
     return courses;
   },
+  loadRecentCourseResults: async () => {
+    set({
+      courseResultsStatus: "loading",
+      courseCatalogNotice: "",
+    });
+
+    const recentCourses = await getRecentNativeCourses(8);
+    const courses = recentCourses.length ? recentCourses : DEFAULT_RECOMMENDED_COURSES;
+    const selectedCourse = courses.find((course) => course.id === get().setup.courseId) || courses[0] || DEFAULT_COURSE;
+
+    set((state) => ({
+      setup: {
+        ...state.setup,
+        courseId: selectedCourse?.id || state.setup.courseId,
+      },
+      courseResults: courses,
+      courseResultsStatus: "ready",
+      courseResultsSource: recentCourses.length ? "recent-only" : "starter-recent",
+      selectedCourse,
+      courseCatalogNotice: recentCourses.length
+        ? "Recent courses saved on this device."
+        : "Play a course once and it will stay easy to find here.",
+    }));
+
+    return courses;
+  },
   refreshNearbyCoursesFromLocation: async ({ requestPermission = false, forceResults = false } = {}) => {
     const query = String(get().setup.courseQuery || "").trim();
     const shouldReplaceResults = forceResults || !query;
