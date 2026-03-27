@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { AppButton } from "../../../src/components/AppButton";
 import { Card } from "../../../src/components/Card";
@@ -16,6 +16,17 @@ function InfoRow({ label, value }) {
     <View style={styles.row}>
       <Text style={styles.label}>{label}</Text>
       <Text style={styles.value}>{value}</Text>
+    </View>
+  );
+}
+
+function Badge({ label, accent = false }) {
+  const theme = useAppTheme();
+  const styles = React.useMemo(() => createStyles(theme), [theme]);
+
+  return (
+    <View style={[styles.badge, accent ? styles.badgeAccent : null]}>
+      <Text style={styles.badgeText}>{label}</Text>
     </View>
   );
 }
@@ -41,11 +52,23 @@ export default function CommunityProfileScreen() {
     <Screen scroll>
       <SectionHeader title={profile.displayName} subtitle={`@${profile.username}`} />
       <Card>
-        <Text style={styles.name}>{profile.displayName}</Text>
-        <Text style={styles.meta}>
-          {profile.homeCourse || "Home course not set"} / Handicap {profile.handicap ?? "--"}
-        </Text>
-        <Text style={styles.copy}>{profile.bio || "Golf profile"}</Text>
+        <View style={styles.heroRow}>
+          <View style={styles.avatarBadge}>
+            <Text style={styles.avatarBadgeText}>{String(profile.avatarLabel || profile.displayName || "GN").slice(0, 2).toUpperCase()}</Text>
+          </View>
+          <View style={styles.personCopy}>
+            <Text style={styles.name}>{profile.displayName}</Text>
+            <Text style={styles.meta}>
+              @{profile.username} / {profile.homeCourse || profile.city || "Home course not set"}
+            </Text>
+            <Text style={styles.copy}>{profile.bio || "Golf profile"}</Text>
+          </View>
+        </View>
+        <View style={styles.badgeRow}>
+          {profile.isFriend ? <Badge label="Friend" accent /> : null}
+          {profile.isFollowed ? <Badge label="Following" accent /> : null}
+          <Badge label={`Handicap ${profile.handicap ?? "--"}`} />
+        </View>
       </Card>
 
       <Card>
@@ -78,6 +101,9 @@ export default function CommunityProfileScreen() {
                 router.push("/(tabs)/community?tab=messages");
               }}
             />
+            <Pressable onPress={() => router.push("/(tabs)/community?tab=discover")} style={styles.backLink}>
+              <Text style={styles.backLinkText}>Back to discovery</Text>
+            </Pressable>
           </>
         ) : null}
       </View>
@@ -90,6 +116,30 @@ const createStyles = (theme) => StyleSheet.create({
     color: theme.colors.text,
     fontSize: 24,
     fontWeight: "800",
+  },
+  heroRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+    alignItems: "flex-start",
+  },
+  avatarBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: theme.colors.primarySoft,
+    borderWidth: 1,
+    borderColor: theme.colors.borderStrong,
+  },
+  avatarBadgeText: {
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  personCopy: {
+    flex: 1,
+    gap: 4,
   },
   meta: {
     color: theme.colors.textMuted,
@@ -104,6 +154,28 @@ const createStyles = (theme) => StyleSheet.create({
     color: theme.colors.text,
     fontSize: 16,
     fontWeight: "800",
+  },
+  badgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
+  },
+  badge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: theme.colors.surfaceSoft,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  badgeAccent: {
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.primary,
+  },
+  badgeText: {
+    color: theme.colors.textSoft,
+    fontSize: 11,
+    fontWeight: "700",
   },
   row: {
     flexDirection: "row",
@@ -126,5 +198,14 @@ const createStyles = (theme) => StyleSheet.create({
   },
   actions: {
     gap: spacing.md,
+  },
+  backLink: {
+    paddingVertical: spacing.xs,
+    alignSelf: "flex-start",
+  },
+  backLinkText: {
+    color: theme.colors.primary,
+    fontSize: 13,
+    fontWeight: "700",
   },
 });
