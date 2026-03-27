@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { APP_VERSION } from "@golfers-nation/core";
 import { AppButton } from "../src/components/AppButton";
@@ -8,6 +8,8 @@ import { Screen } from "../src/components/Screen";
 import { SectionHeader } from "../src/components/SectionHeader";
 import {
   APPEARANCE_MODE_OPTIONS,
+  DEFAULT_APPEARANCE,
+  DEFAULT_PRIVACY,
   PROFILE_VISIBILITY_OPTIONS,
   TEXT_SCALE_OPTIONS,
   THEME_PRESET_OPTIONS,
@@ -50,16 +52,18 @@ function ChoiceGroup({ title, options, selectedId, onSelect, styles }) {
   );
 }
 
-function ToggleRow({ label, value, onValueChange, styles, theme }) {
+function BinaryChoiceRow({ label, value, onValueChange, styles }) {
   return (
     <View style={styles.toggleRow}>
       <Text style={styles.toggleLabel}>{label}</Text>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
-        thumbColor={theme.colors.text}
-      />
+      <View style={styles.binaryWrap}>
+        <Pressable onPress={() => onValueChange(true)} style={[styles.binaryChip, value ? styles.binaryChipActive : null]}>
+          <Text style={[styles.binaryText, value ? styles.binaryTextActive : null]}>On</Text>
+        </Pressable>
+        <Pressable onPress={() => onValueChange(false)} style={[styles.binaryChip, !value ? styles.binaryChipActive : null]}>
+          <Text style={[styles.binaryText, !value ? styles.binaryTextActive : null]}>Off</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -77,10 +81,19 @@ export default function SettingsScreen() {
   const nearbyLocationStatus = useAppStore((state) => state.nearbyLocationStatus);
   const sessionExpiresAt = useAppStore((state) => state.sessionExpiresAt);
   const lastAuthCheckAt = useAppStore((state) => state.lastAuthCheckAt);
-  const currentUser = useAppStore((state) => normalizeCurrentUser(state.currentUser || {}));
+  const rawCurrentUser = useAppStore((state) => state.currentUser);
   const updateCurrentUserAppearance = useAppStore((state) => state.updateCurrentUserAppearance);
   const updateCurrentUserPrivacy = useAppStore((state) => state.updateCurrentUserPrivacy);
   const runtimeConfig = getNativeRuntimeConfig();
+  const currentUser = normalizeCurrentUser(rawCurrentUser || {});
+  const appearance = {
+    ...DEFAULT_APPEARANCE,
+    ...(currentUser.appearance || {}),
+  };
+  const privacy = {
+    ...DEFAULT_PRIVACY,
+    ...(currentUser.privacy || {}),
+  };
 
   return (
     <Screen scroll>
@@ -102,37 +115,35 @@ export default function SettingsScreen() {
         <ChoiceGroup
           title="Color mode"
           options={APPEARANCE_MODE_OPTIONS}
-          selectedId={currentUser.appearance.colorMode}
+          selectedId={appearance.colorMode}
           onSelect={(id) => updateCurrentUserAppearance({ colorMode: id })}
           styles={styles}
         />
         <ChoiceGroup
           title="Theme"
           options={THEME_PRESET_OPTIONS}
-          selectedId={currentUser.appearance.themeId}
+          selectedId={appearance.themeId}
           onSelect={(id) => updateCurrentUserAppearance({ themeId: id })}
           styles={styles}
         />
         <ChoiceGroup
           title="Text size"
           options={TEXT_SCALE_OPTIONS}
-          selectedId={currentUser.appearance.textScale}
+          selectedId={appearance.textScale}
           onSelect={(id) => updateCurrentUserAppearance({ textScale: id })}
           styles={styles}
         />
-        <ToggleRow
+        <BinaryChoiceRow
           label="Compact score surfaces"
-          value={currentUser.appearance.compactMode === true}
+          value={appearance.compactMode === true}
           onValueChange={(value) => updateCurrentUserAppearance({ compactMode: value })}
           styles={styles}
-          theme={theme}
         />
-        <ToggleRow
+        <BinaryChoiceRow
           label="High contrast"
-          value={currentUser.appearance.contrastMode === "high"}
+          value={appearance.contrastMode === "high"}
           onValueChange={(value) => updateCurrentUserAppearance({ contrastMode: value ? "high" : "standard" })}
           styles={styles}
-          theme={theme}
         />
       </Card>
 
@@ -141,44 +152,39 @@ export default function SettingsScreen() {
         <ChoiceGroup
           title="Profile visibility"
           options={PROFILE_VISIBILITY_OPTIONS}
-          selectedId={currentUser.privacy.profileVisibility}
+          selectedId={privacy.profileVisibility}
           onSelect={(id) => updateCurrentUserPrivacy({ profileVisibility: id })}
           styles={styles}
         />
-        <ToggleRow
+        <BinaryChoiceRow
           label="Show home course"
-          value={currentUser.privacy.showHomeCourse === true}
+          value={privacy.showHomeCourse === true}
           onValueChange={(value) => updateCurrentUserPrivacy({ showHomeCourse: value })}
           styles={styles}
-          theme={theme}
         />
-        <ToggleRow
+        <BinaryChoiceRow
           label="Show handicap"
-          value={currentUser.privacy.showHandicap === true}
+          value={privacy.showHandicap === true}
           onValueChange={(value) => updateCurrentUserPrivacy({ showHandicap: value })}
           styles={styles}
-          theme={theme}
         />
-        <ToggleRow
+        <BinaryChoiceRow
           label="Show bio"
-          value={currentUser.privacy.showBio === true}
+          value={privacy.showBio === true}
           onValueChange={(value) => updateCurrentUserPrivacy({ showBio: value })}
           styles={styles}
-          theme={theme}
         />
-        <ToggleRow
+        <BinaryChoiceRow
           label="Show recent form"
-          value={currentUser.privacy.showRecentForm === true}
+          value={privacy.showRecentForm === true}
           onValueChange={(value) => updateCurrentUserPrivacy({ showRecentForm: value })}
           styles={styles}
-          theme={theme}
         />
-        <ToggleRow
+        <BinaryChoiceRow
           label="Show head-to-head"
-          value={currentUser.privacy.showHeadToHead === true}
+          value={privacy.showHeadToHead === true}
           onValueChange={(value) => updateCurrentUserPrivacy({ showHeadToHead: value })}
           styles={styles}
-          theme={theme}
         />
       </Card>
 
@@ -288,10 +294,7 @@ const createStyles = (theme) => StyleSheet.create({
     color: theme.colors.text,
   },
   toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
+    gap: spacing.sm,
     paddingVertical: spacing.xs,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
@@ -299,6 +302,32 @@ const createStyles = (theme) => StyleSheet.create({
   toggleLabel: {
     color: theme.colors.text,
     fontSize: 14,
-    flex: 1,
+  },
+  binaryWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  binaryChip: {
+    minWidth: 68,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceMuted,
+    alignItems: "center",
+  },
+  binaryChipActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary,
+  },
+  binaryText: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  binaryTextActive: {
+    color: theme.colors.text,
   },
 });

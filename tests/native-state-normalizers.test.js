@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { normalizeCurrentUser } from "../apps/native/src/lib/account-state.js";
 import { normalizeCourseServiceRequests, normalizeTeeTimeRequests } from "../apps/native/src/lib/request-state.js";
 import { buildCommunityFeed, buildDirectInbox, normalizeSocialState } from "../apps/native/src/lib/social-state.js";
 
@@ -91,5 +92,20 @@ describe("native state normalizers", () => {
     expect(services[0].courseName).toBe("bad");
     expect(services[0].requestType).toBe("[object Object]");
     expect(services[0].status).toBe("requested");
+  });
+
+  it("fills missing appearance and privacy defaults for legacy native users", () => {
+    const user = normalizeCurrentUser({
+      id: "user-1",
+      displayName: "Casey",
+      appearance: null,
+      privacy: null,
+      subscription: null,
+    });
+
+    expect(user.appearance.colorMode).toBe("system");
+    expect(user.appearance.themeId).toBe("forest");
+    expect(user.privacy.profileVisibility).toBe("friends");
+    expect(user.subscription.tier).toBe("free");
   });
 });
