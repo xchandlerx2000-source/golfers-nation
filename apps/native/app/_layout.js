@@ -9,6 +9,7 @@ import { colors } from "../src/theme";
 
 export default function RootLayout() {
   const revalidateSession = useAppStore((state) => state.revalidateSession);
+  const resumeLiveRoundSession = useAppStore((state) => state.resumeLiveRoundSession);
 
   useEffect(() => {
     installNativeCrashHandlers(() => {
@@ -30,14 +31,17 @@ export default function RootLayout() {
       void revalidateSession({ quiet: true }).then((result) => {
         if (result?.expired) {
           router.replace("/auth");
+          return;
         }
+
+        void resumeLiveRoundSession({ quiet: true });
       });
     });
 
     return () => {
       subscription.remove();
     };
-  }, [revalidateSession]);
+  }, [revalidateSession, resumeLiveRoundSession]);
 
   return (
     <CrashBoundary onReset={() => router.replace("/")}>

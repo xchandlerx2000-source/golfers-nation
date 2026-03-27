@@ -91,10 +91,13 @@ const DEFAULT_SOCIAL_STATE = normalizeSocialState({
   completedRounds: [],
 });
 const LIVE_SYNC_POLL_INTERVAL_MS = 12_000;
+const LIVE_PRESENCE_INTERVAL_MS = 25_000;
 const NATIVE_REALTIME_DEVICE_ID = `native-device-${Date.now()}`;
 
 let liveSyncTimer = null;
 let liveSyncInFlight = false;
+let livePresenceTimer = null;
+let livePresenceInFlight = false;
 
 function mergeUniqueCourseRecords(...groups) {
   const merged = [];
@@ -258,6 +261,13 @@ function stopLiveSyncLoop() {
   }
 }
 
+function stopLivePresenceLoop() {
+  if (livePresenceTimer) {
+    clearInterval(livePresenceTimer);
+    livePresenceTimer = null;
+  }
+}
+
 function shouldApplyIncomingRound(currentRound, incomingRound) {
   if (!incomingRound) {
     return false;
@@ -327,6 +337,47 @@ function detachRealtimeSession() {
   disconnectNativeRealtimeSession();
 }
 
+async function publishLivePresence(get, set, { quiet = true } = {}) {
+  const round = get().activeRound;
+  const currentUser = get().currentUser || DEMO_USER;
+  if (!round?.inviteCode || !currentUser?.id) {
+    return { status: "skipped" };
+  }
+
+  try {
+    const result = await broadcastLiveMemberStateNative({
+      round,
+      currentUser,
+      deviceId: NATIVE_REALTIME_DEVICE_ID,
+    });
+
+    if (result?.error) {
+      if (!quiet) {
+        set({
+          liveSyncStatus: "retry-needed",
+          liveSyncNotice: result.error.message || "Live presence will retry.",
+        });
+      }
+      return result;
+    }
+
+    set((state) => ({
+      liveSyncStatus: state.liveSyncStatus === "local-only" ? "local-only" : "connected",
+      liveSyncNotice: quiet ? state.liveSyncNotice : "Live room reattached.",
+      lastLiveSyncAt: Date.now(),
+    }));
+    return result || { status: "connected" };
+  } catch (error) {
+    if (!quiet) {
+      set({
+        liveSyncStatus: "retry-needed",
+        liveSyncNotice: error?.message || "Live presence will retry.",
+      });
+    }
+    return { error };
+  }
+}
+
 function startLiveSyncLoop(get, set) {
   stopLiveSyncLoop();
 
@@ -362,6 +413,29 @@ function startLiveSyncLoop(get, set) {
       liveSyncInFlight = false;
     }
   }, LIVE_SYNC_POLL_INTERVAL_MS);
+}
+
+function startLivePresenceLoop(get, set) {
+  stopLivePresenceLoop();
+
+  livePresenceTimer = setInterval(async () => {
+    if (livePresenceInFlight) {
+      return;
+    }
+
+    const round = get().activeRound;
+    if (!round?.inviteCode) {
+      stopLivePresenceLoop();
+      return;
+    }
+
+    livePresenceInFlight = true;
+    try {
+      await publishLivePresence(get, set, { quiet: true });
+    } finally {
+      livePresenceInFlight = false;
+    }
+  }, LIVE_PRESENCE_INTERVAL_MS);
 }
 
 export const useAppStore = create((set, get) => ({
@@ -750,6 +824,7 @@ export const useAppStore = create((set, get) => ({
 
     if (result.expired) {
       stopLiveSyncLoop();
+      stopLivePresenceLoop();
       detachRealtimeSession();
       set((state) => ({
         signedIn: false,
@@ -1201,6 +1276,8 @@ export const useAppStore = create((set, get) => ({
       });
       attachRealtimeSession(get, set, hostedRound);
       startLiveSyncLoop(get, set);
+      startLivePresenceLoop(get, set);
+      await publishLivePresence(get, set, { quiet: true });
       return hostedRound;
     }
 
@@ -1241,12 +1318,8 @@ export const useAppStore = create((set, get) => ({
       });
       attachRealtimeSession(get, set, round);
       startLiveSyncLoop(get, set);
-      await broadcastLiveMemberStateNative({
-        round,
-        group: remote.session.group,
-        currentUser: get().currentUser || DEMO_USER,
-        deviceId: NATIVE_REALTIME_DEVICE_ID,
-      });
+      startLivePresenceLoop(get, set);
+      await publishLivePresence(get, set, { quiet: false });
       return round;
     }
 
@@ -1275,17 +1348,42 @@ export const useAppStore = create((set, get) => ({
       return null;
     }
 
-    const remote = await fetchLiveRoundByCodeNative(round.inviteCode);
-    if (remote?.session?.round && (force || shouldApplyIncomingRound(get().activeRound, remote.session.round))) {
+    try {
+      const remote = await fetchLiveRoundByCodeNative(round.inviteCode);
+      if (remote?.session?.round && (force || shouldApplyIncomingRound(get().activeRound, remote.session.round))) {
+        set({
+          activeRound: remote.session.round,
+          liveSyncStatus: "connected",
+          liveSyncNotice: force ? "Live round refreshed." : "Live round updated from the shared session.",
+          lastLiveSyncAt: Date.now(),
+        });
+        return remote.session.round;
+      }
+    } catch (error) {
       set({
-        activeRound: remote.session.round,
-        liveSyncStatus: "connected",
-        liveSyncNotice: force ? "Live round refreshed." : "Live round updated from the shared session.",
-        lastLiveSyncAt: Date.now(),
+        liveSyncStatus: "retry-needed",
+        liveSyncNotice: error?.message || "Live round refresh will retry.",
       });
-      return remote.session.round;
     }
 
+    return get().activeRound;
+  },
+  resumeLiveRoundSession: async ({ quiet = true } = {}) => {
+    const round = get().activeRound;
+    if (!round?.inviteCode) {
+      return null;
+    }
+
+    set((state) => ({
+      liveSyncStatus: state.liveSyncStatus === "local-only" ? "local-only" : "connecting",
+      liveSyncNotice: quiet ? state.liveSyncNotice : "Reconnecting live room...",
+    }));
+
+    attachRealtimeSession(get, set, round);
+    startLiveSyncLoop(get, set);
+    startLivePresenceLoop(get, set);
+    await get().refreshLiveRound(true);
+    await publishLivePresence(get, set, { quiet });
     return get().activeRound;
   },
   submitHoleScore: (strokes) => {
@@ -1353,6 +1451,7 @@ export const useAppStore = create((set, get) => ({
   },
   leaveRound: () => {
     stopLiveSyncLoop();
+    stopLivePresenceLoop();
     detachRealtimeSession();
     set({
       activeRound: null,
@@ -1375,12 +1474,14 @@ export const useAppStore = create((set, get) => ({
       completedAt: Date.now(),
       updatedAt: Date.now(),
     };
+
     const completedRounds = normalizeCompletedRounds([
       completedRound,
       ...get().completedRounds.filter((entry) => entry.id !== completedRound.id),
     ]);
 
     stopLiveSyncLoop();
+    stopLivePresenceLoop();
     detachRealtimeSession();
     set({
       activeRound: null,

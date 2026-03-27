@@ -140,6 +140,22 @@ describe("native app store", () => {
     expect(["connecting", "connected", "local-only"]).toContain(useAppStore.getState().liveSyncStatus);
   });
 
+  it("restarts live sync infrastructure when resuming an active live round", async () => {
+    await useAppStore.getState().signInDemo();
+    const round = await useAppStore.getState().hostLiveRound();
+
+    useAppStore.setState({
+      activeRound: round,
+      liveSyncStatus: "retry-needed",
+      liveSyncNotice: "Realtime dropped.",
+    });
+
+    const resumedRound = await useAppStore.getState().resumeLiveRoundSession({ quiet: false });
+
+    expect(resumedRound?.inviteCode).toBe(round.inviteCode);
+    expect(["connecting", "connected", "local-only", "retry-needed"]).toContain(useAppStore.getState().liveSyncStatus);
+  });
+
   it("creates a local on-course service request for supported active-round courses", async () => {
     useAppStore.getState().setCourseQuery("Paiute");
     const results = await useAppStore.getState().refreshCourseSearch();
