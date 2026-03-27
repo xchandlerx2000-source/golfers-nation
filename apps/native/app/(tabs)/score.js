@@ -127,15 +127,33 @@ export default function ScoreScreen() {
       />
       {liveSyncNotice ? <Text style={styles.notice}>{liveSyncNotice}</Text> : null}
 
-      <Card>
+      <Card style={styles.heroCard}>
         <View style={styles.holeHeader}>
           <View>
-            <Text style={styles.holeLabel}>Hole {currentHole.number}</Text>
+            <View style={styles.holeBadge}>
+              <Text style={styles.holeBadgeText}>Hole {currentHole.number}</Text>
+            </View>
             <Text style={styles.meta}>Par {currentHole.par} / {currentHole.yards} yds</Text>
           </View>
           <View style={styles.scoreMeta}>
             <Text style={styles.scoreMetaLabel}>Card</Text>
             <Text style={styles.scoreMetaValue}>{scoreSummary}</Text>
+          </View>
+        </View>
+        <View style={styles.heroStats}>
+          <View style={styles.heroStat}>
+            <Text style={styles.heroStatLabel}>Players</Text>
+            <Text style={styles.heroStatValue}>{activeRound.players.length}</Text>
+          </View>
+          <View style={styles.heroStat}>
+            <Text style={styles.heroStatLabel}>Format</Text>
+            <Text style={styles.heroStatValue}>{GAME_MODES[activeRound.mode]?.label || "Strokes"}</Text>
+          </View>
+          <View style={styles.heroStat}>
+            <Text style={styles.heroStatLabel}>Sync</Text>
+            <Text style={styles.heroStatValue}>
+              {liveSyncStatus === "connected" ? "Live" : liveSyncStatus === "connecting" ? "Syncing" : "Local"}
+            </Text>
           </View>
         </View>
         <View style={styles.scoreRow}>
@@ -322,11 +340,31 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 13,
   },
+  heroCard: {
+    gap: spacing.lg,
+  },
   holeHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: spacing.md,
+  },
+  holeBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    marginBottom: spacing.xs,
+  },
+  holeBadgeText: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
   holeLabel: {
     color: colors.text,
@@ -334,7 +372,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   meta: {
-    color: colors.textMuted,
+    color: colors.textSoft,
     fontSize: 14,
   },
   scoreMeta: {
@@ -348,8 +386,33 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   scoreMetaValue: {
-    color: colors.primary,
-    fontSize: 16,
+    color: colors.accent,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+  heroStats: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  heroStat: {
+    flex: 1,
+    padding: spacing.md,
+    borderRadius: 18,
+    backgroundColor: colors.surfaceSoft,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 4,
+  },
+  heroStatLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  heroStatValue: {
+    color: colors.text,
+    fontSize: 14,
     fontWeight: "800",
   },
   scoreRow: {
@@ -358,10 +421,15 @@ const styles = StyleSheet.create({
   scorePad: {
     alignItems: "center",
     gap: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 22,
+    backgroundColor: colors.surfaceSoft,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   scoreValue: {
     color: colors.text,
-    fontSize: 56,
+    fontSize: 64,
     fontWeight: "900",
   },
   scoreAdjust: {
@@ -381,7 +449,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: colors.text,
-    fontWeight: "800",
+    fontWeight: "900",
     fontSize: 16,
   },
   sectionTitleDanger: {
