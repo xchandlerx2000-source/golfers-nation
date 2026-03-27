@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { normalizeCurrentUser } from "../apps/native/src/lib/account-state.js";
 import { normalizeCourseServiceRequests, normalizeTeeTimeRequests } from "../apps/native/src/lib/request-state.js";
+import {
+  mergeNativeAppSession,
+  mergeSupabaseAccountWithPersistedUser,
+} from "../apps/native/src/services/native-platform.js";
 import { buildCommunityFeed, buildDirectInbox, normalizeSocialState } from "../apps/native/src/lib/social-state.js";
 
 describe("native state normalizers", () => {
@@ -107,5 +111,64 @@ describe("native state normalizers", () => {
     expect(user.appearance.themeId).toBe("forest");
     expect(user.privacy.profileVisibility).toBe("friends");
     expect(user.subscription.tier).toBe("free");
+  });
+
+  it("keeps saved golfer appearance fields when cloud auth refreshes the account shell", () => {
+    const merged = mergeSupabaseAccountWithPersistedUser(
+      {
+        id: "user-1",
+        email: "casey@example.com",
+        user_metadata: {
+          display_name: "Casey",
+        },
+        app_metadata: {
+          provider: "email",
+        },
+      },
+      {
+        id: "user-1",
+        homeCourse: "Torrey Pines",
+        appearance: {
+          colorMode: "light",
+          themeId: "ocean",
+          textScale: "large",
+          compactMode: true,
+          contrastMode: "high",
+        },
+      }
+    );
+
+    expect(merged.homeCourse).toBe("Torrey Pines");
+    expect(merged.appearance.themeId).toBe("ocean");
+    expect(merged.appearance.colorMode).toBe("light");
+  });
+
+  it("preserves saved session collections when auth fields are refreshed", () => {
+    const merged = mergeNativeAppSession(
+      {
+        signedIn: true,
+        completedRounds: [{ id: "round-1" }],
+        socialPosts: [{ id: "post-1" }],
+        currentUser: {
+          id: "user-1",
+          appearance: {
+            themeId: "ocean",
+          },
+        },
+      },
+      {
+        signedIn: true,
+        authMode: "supabase",
+        currentUser: {
+          id: "user-1",
+          email: "casey@example.com",
+        },
+      }
+    );
+
+    expect(merged.completedRounds).toHaveLength(1);
+    expect(merged.socialPosts).toHaveLength(1);
+    expect(merged.currentUser.email).toBe("casey@example.com");
+    expect(merged.currentUser.appearance.themeId).toBe("ocean");
   });
 });

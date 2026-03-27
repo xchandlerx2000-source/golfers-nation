@@ -834,7 +834,10 @@ export const useAppStore = create((set, get) => ({
     });
 
     if (result.status === "active" && result.currentUser) {
-      const currentUser = normalizeCurrentUser(result.currentUser);
+      const currentUser = normalizeCurrentUser({
+        ...(get().currentUser || {}),
+        ...(result.currentUser || {}),
+      });
       const socialState = normalizeSocialState({
         currentUser,
         completedRounds: get().completedRounds,

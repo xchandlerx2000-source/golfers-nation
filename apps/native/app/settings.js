@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { APP_VERSION } from "@golfers-nation/core";
@@ -85,6 +85,28 @@ export default function SettingsScreen() {
     ...DEFAULT_APPEARANCE,
     ...(currentUser.appearance || {}),
   };
+  const [appearanceDraft, setAppearanceDraft] = useState(appearance);
+
+  useEffect(() => {
+    setAppearanceDraft({
+      ...DEFAULT_APPEARANCE,
+      ...(currentUser.appearance || {}),
+    });
+  }, [
+    currentUser.appearance?.colorMode,
+    currentUser.appearance?.compactMode,
+    currentUser.appearance?.contrastMode,
+    currentUser.appearance?.textScale,
+    currentUser.appearance?.themeId,
+  ]);
+
+  const hasAppearanceChanges = (
+    appearanceDraft.colorMode !== appearance.colorMode
+    || appearanceDraft.themeId !== appearance.themeId
+    || appearanceDraft.textScale !== appearance.textScale
+    || Boolean(appearanceDraft.compactMode) !== Boolean(appearance.compactMode)
+    || appearanceDraft.contrastMode !== appearance.contrastMode
+  );
 
   return (
     <Screen scroll>
@@ -92,39 +114,55 @@ export default function SettingsScreen() {
 
       <Card>
         <Text style={styles.sectionTitle}>Appearance</Text>
+        <Text style={styles.note}>Changes stay in this draft until you save them.</Text>
         <ChoiceGroup
           title="Color mode"
           options={APPEARANCE_MODE_OPTIONS}
-          selectedId={appearance.colorMode}
-          onSelect={(id) => updateCurrentUserAppearance({ colorMode: id })}
+          selectedId={appearanceDraft.colorMode}
+          onSelect={(id) => setAppearanceDraft((state) => ({ ...state, colorMode: id }))}
           styles={styles}
         />
         <ChoiceGroup
           title="Theme"
           options={THEME_PRESET_OPTIONS}
-          selectedId={appearance.themeId}
-          onSelect={(id) => updateCurrentUserAppearance({ themeId: id })}
+          selectedId={appearanceDraft.themeId}
+          onSelect={(id) => setAppearanceDraft((state) => ({ ...state, themeId: id }))}
           styles={styles}
         />
         <ChoiceGroup
           title="Text size"
           options={TEXT_SCALE_OPTIONS}
-          selectedId={appearance.textScale}
-          onSelect={(id) => updateCurrentUserAppearance({ textScale: id })}
+          selectedId={appearanceDraft.textScale}
+          onSelect={(id) => setAppearanceDraft((state) => ({ ...state, textScale: id }))}
           styles={styles}
         />
         <BinaryChoiceRow
           label="Compact score surfaces"
-          value={appearance.compactMode === true}
-          onValueChange={(value) => updateCurrentUserAppearance({ compactMode: value })}
+          value={appearanceDraft.compactMode === true}
+          onValueChange={(value) => setAppearanceDraft((state) => ({ ...state, compactMode: value }))}
           styles={styles}
         />
         <BinaryChoiceRow
           label="High contrast"
-          value={appearance.contrastMode === "high"}
-          onValueChange={(value) => updateCurrentUserAppearance({ contrastMode: value ? "high" : "standard" })}
+          value={appearanceDraft.contrastMode === "high"}
+          onValueChange={(value) => setAppearanceDraft((state) => ({ ...state, contrastMode: value ? "high" : "standard" }))}
           styles={styles}
         />
+        <View style={styles.inlineActions}>
+          <AppButton
+            label="Save Appearance"
+            size="compact"
+            onPress={() => updateCurrentUserAppearance(appearanceDraft)}
+            disabled={!hasAppearanceChanges}
+          />
+          <AppButton
+            label="Reset"
+            size="compact"
+            variant="secondary"
+            onPress={() => setAppearanceDraft(appearance)}
+            disabled={!hasAppearanceChanges}
+          />
+        </View>
       </Card>
 
       <Card>
@@ -201,6 +239,11 @@ const createStyles = (theme) => StyleSheet.create({
   },
   actions: {
     gap: spacing.md,
+  },
+  inlineActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
   },
   group: {
     gap: spacing.sm,

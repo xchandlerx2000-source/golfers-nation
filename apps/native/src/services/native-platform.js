@@ -47,24 +47,62 @@ function createSessionHealthResult({
   };
 }
 
-function mapSupabaseUserToAccount(user = {}) {
+function buildAvatarLabel(displayName = "") {
+  return String(displayName || "")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || "GN";
+}
+
+export function mergeSupabaseAccountWithPersistedUser(user = {}, persistedUser = null) {
   const metadata = user?.user_metadata || {};
-  const displayName = metadata.display_name || metadata.full_name || String(user.email || "").split("@")[0] || "Golfer";
+  const canReusePersistedUser = Boolean(
+    persistedUser
+    && typeof persistedUser === "object"
+    && (!persistedUser.id || persistedUser.id === user.id)
+  );
+  const previous = canReusePersistedUser ? persistedUser : {};
+  const displayName = metadata.display_name
+    || metadata.full_name
+    || previous.displayName
+    || previous.name
+    || String(user.email || "").split("@")[0]
+    || "Golfer";
+
   return {
-    id: user.id,
-    profileId: metadata.profile_id || user.id,
+    ...previous,
+    id: user.id || previous.id || "",
+    profileId: metadata.profile_id || previous.profileId || user.id || null,
     name: displayName,
     displayName,
-    username: metadata.username || String(user.email || "").split("@")[0] || "golfer",
-    avatarLabel: displayName
-      .split(" ")
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() || "")
-      .join("") || "GN",
-    email: user.email || "",
-    provider: user?.app_metadata?.provider || "email",
+    username: metadata.username || previous.username || String(user.email || "").split("@")[0] || "golfer",
+    avatarLabel: previous.avatarLabel || buildAvatarLabel(displayName),
+    email: user.email || previous.email || "",
+    provider: user?.app_metadata?.provider || previous.provider || "email",
   };
+}
+
+export function mergeNativeAppSession(currentSession = {}, patch = {}) {
+  const nextCurrentUser = patch.currentUser === undefined
+    ? currentSession.currentUser
+    : (patch.currentUser === null
+      ? null
+      : {
+          ...(currentSession.currentUser || {}),
+          ...(patch.currentUser || {}),
+        });
+
+  return {
+    ...currentSession,
+    ...patch,
+    currentUser: nextCurrentUser,
+  };
+}
+
+function mapSupabaseUserToAccount(user = {}, persistedUser = null) {
+  return mergeSupabaseAccountWithPersistedUser(user, persistedUser);
 }
 
 function normalizeComparable(value = "") {
@@ -284,10 +322,7 @@ export async function writeNativeAppSession(session) {
 
 export async function patchNativeAppSession(patch = {}) {
   const current = (await readNativeAppSession()) || {};
-  const nextSession = {
-    ...current,
-    ...patch,
-  };
+  const nextSession = mergeNativeAppSession(current, patch);
   await writeNativeAppSession(nextSession);
   return nextSession;
 }
@@ -347,6 +382,7 @@ export async function revalidateNativeAuthSession({
   }
 
   const active = await getActiveCloudSession();
+  const persisted = (await readNativeAppSession()) || {};
   if (active?.error || !active?.session?.access_token) {
     await clearNativeAppSession();
     return createSessionHealthResult({
@@ -369,20 +405,21 @@ export async function revalidateNativeAuthSession({
     });
   }
 
-  const session = {
+  const currentUser = mapSupabaseUserToAccount(current.user, persisted.currentUser);
+  const session = mergeNativeAppSession(persisted, {
     signedIn: true,
-    currentUser: mapSupabaseUserToAccount(current.user),
+    currentUser,
     authMode: "supabase",
     restoredFrom: "supabase",
     sessionExpiresAt: active.session.expires_at || null,
-  };
+  });
   await writeNativeAppSession(session);
 
   return createSessionHealthResult({
     status: "active",
     notice: "Cloud session active.",
     session: active.session,
-    currentUser: session.currentUser,
+    currentUser,
     authMode: "supabase",
     restoredFrom: "supabase",
     expired: false,
@@ -402,13 +439,18 @@ export async function signInWithEmailNative({ email, password }) {
     return current?.error ? current : { error: { message: "Session created but user profile was unavailable." } };
   }
 
-  const session = {
-    signedIn: true,
-    currentUser: mapSupabaseUserToAccount(current.user),
-    authMode: "supabase",
-    restoredFrom: "supabase",
-    sessionExpiresAt: result.session?.expires_at || current.session?.expires_at || null,
-  };
+  const persisted = (await readNativeAppSession()) || {};
+  const currentUser = mapSupabaseUserToAccount(current.user, persisted.currentUser);
+  const session = mergeNativeAppSession(
+    persisted?.currentUser?.id === current.user.id ? persisted : {},
+    {
+      signedIn: true,
+      currentUser,
+      authMode: "supabase",
+      restoredFrom: "supabase",
+      sessionExpiresAt: result.session?.expires_at || current.session?.expires_at || null,
+    }
+  );
   await writeNativeAppSession(session);
   return { session };
 }
@@ -429,13 +471,18 @@ export async function signUpWithEmailNative({ email, password, displayName }) {
     };
   }
 
-  const session = {
-    signedIn: true,
-    currentUser: mapSupabaseUserToAccount(current.user),
-    authMode: "supabase",
-    restoredFrom: "supabase",
-    sessionExpiresAt: result.session?.expires_at || current.session?.expires_at || null,
-  };
+  const persisted = (await readNativeAppSession()) || {};
+  const currentUser = mapSupabaseUserToAccount(current.user, persisted.currentUser);
+  const session = mergeNativeAppSession(
+    persisted?.currentUser?.id === current.user.id ? persisted : {},
+    {
+      signedIn: true,
+      currentUser,
+      authMode: "supabase",
+      restoredFrom: "supabase",
+      sessionExpiresAt: result.session?.expires_at || current.session?.expires_at || null,
+    }
+  );
   await writeNativeAppSession(session);
   return { session };
 }
